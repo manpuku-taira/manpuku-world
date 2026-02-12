@@ -1,30 +1,226 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manpuku World</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manpuku World</title>
+<style>
+body{
+margin:0;
+background:linear-gradient(180deg,#0a0f1c,#000);
+color:white;
+font-family:sans-serif;
+overflow:hidden;
+}
+
+#titleScreen{
+position:absolute;
+width:100%;
+height:100%;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+background:radial-gradient(circle,#111 0%,#000 80%);
+}
+
+#title{
+font-size:28px;
+font-weight:bold;
+letter-spacing:2px;
+background:linear-gradient(90deg,#0ff,#f0f);
+-webkit-background-clip:text;
+color:transparent;
+text-align:center;
+}
+
+.tap{
+margin-top:20px;
+opacity:0.7;
+animation:blink 1.2s infinite;
+}
+
+@keyframes blink{
+0%{opacity:0.2}
+50%{opacity:1}
+100%{opacity:0.2}
+}
+
+#game{
+display:none;
+padding:5px;
+}
+
+.zoneRow{
+display:flex;
+justify-content:space-around;
+margin:4px 0;
+}
+
+.card{
+width:70px;
+height:100px;
+background:linear-gradient(145deg,#222,#111);
+border:2px solid #0ff;
+border-radius:8px;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+font-size:11px;
+transition:0.2s;
+}
+
+.card.playable{
+box-shadow:0 0 15px #0ff;
+transform:translateY(-6px);
+}
+
+#hand{
+position:absolute;
+bottom:5px;
+width:100%;
+display:flex;
+justify-content:center;
+gap:8px;
+}
+
+#log{
+position:absolute;
+top:5px;
+left:5px;
+font-size:12px;
+}
+
+button{
+position:absolute;
+right:10px;
+top:10px;
+background:#f0f;
+border:none;
+padding:6px;
+color:white;
+border-radius:5px;
+}
+</style>
 </head>
 <body>
 
-<div id="titleScreen" class="screen">
-  <h1 class="title">Manpuku World<br><span>マンプクワールド</span></h1>
-  <p class="tapText">画面をタップして対戦開始</p>
+<div id="titleScreen">
+<div id="title">Manpuku World<br>マンプクワールド</div>
+<div class="tap">TAP TO START</div>
 </div>
 
-<div id="gameScreen" class="screen hidden">
-  <div class="topZone">OUTSIDE</div>
-  <div class="middleZone">WING</div>
-  <div class="bottomZone">DECK</div>
+<div id="game">
+<div id="log"></div>
+<button onclick="skipAnimation()">SKIP</button>
 
-  <div class="battleField">
-    <div class="grid"></div>
-  </div>
+<div class="zoneRow" id="enemyOutside"></div>
+<div class="zoneRow" id="enemyWing"></div>
+<div class="zoneRow" id="enemyDeck"></div>
 
-  <button id="attackBtn">ATTACK</button>
+<div class="zoneRow" id="playerOutside"></div>
+<div class="zoneRow" id="playerWing"></div>
+<div class="zoneRow" id="playerDeck"></div>
+
+<div id="hand"></div>
 </div>
 
-<script src="script.js"></script>
+<script>
+
+let deck=[];
+let playerHand=[];
+let enemyHand=[];
+let animationSkip=false;
+
+function createDeck(){
+let baseCards=[];
+for(let i=1;i<=20;i++){
+let rank=Math.ceil(Math.random()*5);
+let atk=rank*500 - Math.floor(Math.random()*400);
+baseCards.push({name:"Card No."+i,rank:rank,atk:atk});
+}
+let fullDeck=[];
+baseCards.forEach(card=>{
+fullDeck.push({...card});
+fullDeck.push({...card});
+});
+return fullDeck;
+}
+
+function shuffle(array){
+return array.sort(()=>Math.random()-0.5);
+}
+
+function startGame(){
+document.getElementById("titleScreen").style.display="none";
+document.getElementById("game").style.display="block";
+deck=shuffle(createDeck());
+drawInitial();
+renderHand();
+log("Battle Start! 40 Card Deck Ready");
+}
+
+function drawInitial(){
+playerHand=deck.splice(0,4);
+enemyHand=deck.splice(0,4);
+}
+
+function renderHand(){
+const handDiv=document.getElementById("hand");
+handDiv.innerHTML="";
+playerHand.forEach((card,i)=>{
+const div=document.createElement("div");
+div.className="card playable";
+div.innerHTML=`${card.name}<br>R${card.rank}<br>${card.atk}`;
+div.onclick=()=>playCard(i);
+handDiv.appendChild(div);
+});
+}
+
+function playCard(index){
+let card=playerHand.splice(index,1)[0];
+animateAttack(card,true);
+renderHand();
+setTimeout(enemyTurn,800);
+}
+
+function enemyTurn(){
+if(enemyHand.length===0)return;
+let card=enemyHand.shift();
+animateAttack(card,false);
+}
+
+function animateAttack(card,isPlayer){
+animationSkip=false;
+log(card.name+" ATTACK!");
+
+let flash=document.createElement("div");
+flash.style.position="absolute";
+flash.style.width="100%";
+flash.style.height="100%";
+flash.style.background="rgba(255,0,255,0.5)";
+flash.style.animation="fade 0.5s";
+document.body.appendChild(flash);
+
+setTimeout(()=>{
+if(!animationSkip && flash.parentNode){
+document.body.removeChild(flash);
+}
+},500);
+}
+
+function skipAnimation(){
+animationSkip=true;
+}
+
+function log(text){
+document.getElementById("log").innerText=text;
+}
+
+document.getElementById("titleScreen").onclick=startGame;
+
+</script>
+
 </body>
 </html>
