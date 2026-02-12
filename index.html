@@ -1,206 +1,38 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Manpuku World</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Title Screen -->
-  <div id="titleScreen" class="screen active">
-    <div class="titleWrap">
-      <div class="titleLogo">
-        <div class="titleMain">Manpuku World</div>
-        <div class="titleSub">マンプクワールド</div>
-      </div>
-      <div class="titleHint">画面タッチで開始</div>
-      <div class="titleMeta">縦持ち / 演出B（派手・スキップ可）</div>
-    </div>
+
+<div id="titleScreen" class="screen active">
+  <h1>Manpuku World<br>マンプクワールド</h1>
+  <p>画面をタッチして開始</p>
+</div>
+
+<div id="gameScreen" class="screen">
+  <div class="topbar">
+    <div id="turnChip"></div>
+    <div id="phaseChip"></div>
+    <button id="btnNextPhase">次のフェイズ</button>
+    <button id="btnEndTurn">ターン終了</button>
   </div>
 
-  <!-- Game Screen -->
-  <div id="gameScreen" class="screen">
-    <header class="topbar">
-      <div class="left">
-        <div class="chip" id="turnChip">TURN 1</div>
-        <div class="chip" id="phaseChip">DRAW</div>
-      </div>
-      <div class="center">
-        <div class="vs">P1 vs AI</div>
-      </div>
-      <div class="right">
-        <button class="btn ghost" id="btnSkipFx">演出スキップ</button>
-        <button class="btn ghost" id="btnRestart">リスタート</button>
-      </div>
-    </header>
-
-    <main class="board">
-      <div class="fieldBg" id="fieldBg"></div>
-
-      <!-- Arrow overlay -->
-      <svg id="arrowLayer" class="arrowLayer" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <defs>
-          <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L6,3 L0,6 Z"></path>
-          </marker>
-        </defs>
-        <path id="arrowPath" d="" marker-end="url(#arrowHead)"></path>
-      </svg>
-
-      <!-- Opponent side (top) -->
-      <section class="side enemy">
-        <div class="zoneRow">
-          <div class="zone triple" id="enemyChars">
-            <div class="zoneTitle">ENEMY / Character (3)</div>
-            <div class="slots" data-zone="enemyChars"></div>
-          </div>
-          <div class="zone single">
-            <div class="zoneTitle">Outside</div>
-            <div class="pile tapable" data-pile="enemyOutside" id="enemyOutsidePile"></div>
-          </div>
-        </div>
-
-        <div class="zoneRow">
-          <div class="zone triple" id="enemyEI">
-            <div class="zoneTitle">Effect / Item (3)</div>
-            <div class="slots" data-zone="enemyEI"></div>
-          </div>
-          <div class="zone single">
-            <div class="zoneTitle">Wing</div>
-            <div class="pile tapable" data-pile="enemyWing" id="enemyWingPile"></div>
-          </div>
-        </div>
-
-        <div class="zoneRow">
-          <div class="zone triple" id="enemyShield">
-            <div class="zoneTitle">Shield (3)</div>
-            <div class="slots" data-zone="enemyShield"></div>
-          </div>
-          <div class="zone single">
-            <div class="zoneTitle">Deck</div>
-            <div class="pile" data-pile="enemyDeck"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Center HUD -->
-      <section class="hud">
-        <div class="hudLeft">
-          <div class="hudBlock">
-            <div class="hudLabel">ログ</div>
-            <div class="log" id="log"></div>
-          </div>
-        </div>
-
-        <div class="hudCenter">
-          <div class="hudBlock">
-            <div class="hudLabel">操作</div>
-            <div class="controls">
-              <button class="btn" id="btnNextPhase">次のフェイズ</button>
-              <button class="btn" id="btnEndTurn">ターン終了</button>
-              <button class="btn ghost" id="btnCancelSelect">キャンセル</button>
-            </div>
-            <div class="tips" id="tips"></div>
-          </div>
-        </div>
-
-        <div class="hudRight">
-          <div class="hudBlock">
-            <div class="hudLabel">選択中</div>
-            <div class="focus" id="focus"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Player side (bottom) -->
-      <section class="side player">
-        <div class="zoneRow">
-          <div class="zone triple" id="playerChars">
-            <div class="zoneTitle">YOU / Character (3)</div>
-            <div class="slots" data-zone="playerChars"></div>
-          </div>
-          <div class="zone single">
-            <div class="zoneTitle">Outside</div>
-            <div class="pile tapable" data-pile="playerOutside" id="playerOutsidePile"></div>
-          </div>
-        </div>
-
-        <div class="zoneRow">
-          <div class="zone triple" id="playerEI">
-            <div class="zoneTitle">Effect / Item (3)</div>
-            <div class="slots" data-zone="playerEI"></div>
-          </div>
-          <div class="zone single">
-            <div class="zoneTitle">Wing</div>
-            <div class="pile tapable" data-pile="playerWing" id="playerWingPile"></div>
-          </div>
-        </div>
-
-        <div class="zoneRow">
-          <div class="zone triple" id="playerShield">
-            <div class="zoneTitle">Shield (3)</div>
-            <div class="slots" data-zone="playerShield"></div>
-          </div>
-          <div class="zone single">
-            <div class="zoneTitle">Deck</div>
-            <div class="pile" data-pile="playerDeck"></div>
-          </div>
-        </div>
-
-        <div class="handWrap">
-          <div class="handTitle">HAND（タップ：使用 / 長押し：拡大）</div>
-          <div class="hand" id="hand"></div>
-        </div>
-      </section>
-    </main>
-
-    <!-- FX Overlay -->
-    <div id="fxOverlay" class="fxOverlay hidden">
-      <div class="fxCard"></div>
-      <div class="fxText"></div>
-      <button class="btn fxSkip" id="btnFxSkip2">スキップ</button>
-    </div>
-
-    <!-- Viewer (Card Zoom) -->
-    <div id="viewer" class="viewer hidden">
-      <div class="viewerInner">
-        <div class="viewerTop">
-          <div class="viewerTitle" id="viewerTitle"></div>
-          <button class="btn ghost" id="viewerClose">閉じる</button>
-        </div>
-        <div class="viewerGrid">
-          <div class="viewerImg" id="viewerImg"></div>
-          <div class="viewerText">
-            <div class="viewerMeta" id="viewerMeta"></div>
-            <div class="viewerBody" id="viewerBody"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal (List / Confirm) -->
-    <div id="modal" class="modal hidden">
-      <div class="modalInner">
-        <div class="modalTitle" id="modalTitle"></div>
-        <div class="modalBody" id="modalBody"></div>
-        <div class="modalActions" id="modalActions">
-          <button class="btn ghost" id="modalClose">閉じる</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Win -->
-    <div id="win" class="win hidden">
-      <div class="winInner">
-        <div class="winCutin" id="winCutin"></div>
-        <div class="winTitle" id="winTitle">WIN</div>
-        <div class="winSub" id="winSub">フィニッシュ！</div>
-        <button class="btn" id="winRestart">もう一回</button>
-      </div>
-    </div>
+  <div class="board">
+    <div class="row" data-zone="enemyChars"></div>
+    <div class="row" data-zone="playerChars"></div>
   </div>
 
-  <script src="script.js"></script>
+  <div class="handArea">
+    <div id="hand"></div>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
