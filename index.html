@@ -1,226 +1,206 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Manpuku World</title>
-<style>
-body{
-margin:0;
-background:linear-gradient(180deg,#0a0f1c,#000);
-color:white;
-font-family:sans-serif;
-overflow:hidden;
-}
-
-#titleScreen{
-position:absolute;
-width:100%;
-height:100%;
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
-background:radial-gradient(circle,#111 0%,#000 80%);
-}
-
-#title{
-font-size:28px;
-font-weight:bold;
-letter-spacing:2px;
-background:linear-gradient(90deg,#0ff,#f0f);
--webkit-background-clip:text;
-color:transparent;
-text-align:center;
-}
-
-.tap{
-margin-top:20px;
-opacity:0.7;
-animation:blink 1.2s infinite;
-}
-
-@keyframes blink{
-0%{opacity:0.2}
-50%{opacity:1}
-100%{opacity:0.2}
-}
-
-#game{
-display:none;
-padding:5px;
-}
-
-.zoneRow{
-display:flex;
-justify-content:space-around;
-margin:4px 0;
-}
-
-.card{
-width:70px;
-height:100px;
-background:linear-gradient(145deg,#222,#111);
-border:2px solid #0ff;
-border-radius:8px;
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
-font-size:11px;
-transition:0.2s;
-}
-
-.card.playable{
-box-shadow:0 0 15px #0ff;
-transform:translateY(-6px);
-}
-
-#hand{
-position:absolute;
-bottom:5px;
-width:100%;
-display:flex;
-justify-content:center;
-gap:8px;
-}
-
-#log{
-position:absolute;
-top:5px;
-left:5px;
-font-size:12px;
-}
-
-button{
-position:absolute;
-right:10px;
-top:10px;
-background:#f0f;
-border:none;
-padding:6px;
-color:white;
-border-radius:5px;
-}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Manpuku World マンプクワールド</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Title Screen -->
+  <div id="titleScreen" class="screen active">
+    <div class="titleWrap">
+      <div class="titleLogo">
+        <div class="titleMain">Manpuku World</div>
+        <div class="titleSub">マンプクワールド</div>
+      </div>
+      <div class="titleHint">画面タッチで開始</div>
+      <div class="titleMeta">縦持ち / 演出B（派手・スキップ可）</div>
+    </div>
+  </div>
 
-<div id="titleScreen">
-<div id="title">Manpuku World<br>マンプクワールド</div>
-<div class="tap">TAP TO START</div>
-</div>
+  <!-- Game Screen -->
+  <div id="gameScreen" class="screen">
+    <header class="topbar">
+      <div class="left">
+        <div class="chip" id="turnChip">TURN 1</div>
+        <div class="chip" id="phaseChip">DRAW</div>
+      </div>
+      <div class="center">
+        <div class="vs">P1 vs AI</div>
+      </div>
+      <div class="right">
+        <button class="btn ghost" id="btnSkipFx">演出スキップ</button>
+        <button class="btn ghost" id="btnRestart">リスタート</button>
+      </div>
+    </header>
 
-<div id="game">
-<div id="log"></div>
-<button onclick="skipAnimation()">SKIP</button>
+    <main class="board">
+      <div class="fieldBg" id="fieldBg"></div>
 
-<div class="zoneRow" id="enemyOutside"></div>
-<div class="zoneRow" id="enemyWing"></div>
-<div class="zoneRow" id="enemyDeck"></div>
+      <!-- Arrow overlay -->
+      <svg id="arrowLayer" class="arrowLayer" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z"></path>
+          </marker>
+        </defs>
+        <path id="arrowPath" d="" marker-end="url(#arrowHead)"></path>
+      </svg>
 
-<div class="zoneRow" id="playerOutside"></div>
-<div class="zoneRow" id="playerWing"></div>
-<div class="zoneRow" id="playerDeck"></div>
+      <!-- Opponent side (top) -->
+      <section class="side enemy">
+        <div class="zoneRow">
+          <div class="zone triple" id="enemyChars">
+            <div class="zoneTitle">ENEMY / Character (3)</div>
+            <div class="slots" data-zone="enemyChars"></div>
+          </div>
+          <div class="zone single">
+            <div class="zoneTitle">Outside</div>
+            <div class="pile tapable" data-pile="enemyOutside" id="enemyOutsidePile"></div>
+          </div>
+        </div>
 
-<div id="hand"></div>
-</div>
+        <div class="zoneRow">
+          <div class="zone triple" id="enemyEI">
+            <div class="zoneTitle">Effect / Item (3)</div>
+            <div class="slots" data-zone="enemyEI"></div>
+          </div>
+          <div class="zone single">
+            <div class="zoneTitle">Wing</div>
+            <div class="pile tapable" data-pile="enemyWing" id="enemyWingPile"></div>
+          </div>
+        </div>
 
-<script>
+        <div class="zoneRow">
+          <div class="zone triple" id="enemyShield">
+            <div class="zoneTitle">Shield (3)</div>
+            <div class="slots" data-zone="enemyShield"></div>
+          </div>
+          <div class="zone single">
+            <div class="zoneTitle">Deck</div>
+            <div class="pile" data-pile="enemyDeck"></div>
+          </div>
+        </div>
+      </section>
 
-let deck=[];
-let playerHand=[];
-let enemyHand=[];
-let animationSkip=false;
+      <!-- Center HUD -->
+      <section class="hud">
+        <div class="hudLeft">
+          <div class="hudBlock">
+            <div class="hudLabel">ログ</div>
+            <div class="log" id="log"></div>
+          </div>
+        </div>
 
-function createDeck(){
-let baseCards=[];
-for(let i=1;i<=20;i++){
-let rank=Math.ceil(Math.random()*5);
-let atk=rank*500 - Math.floor(Math.random()*400);
-baseCards.push({name:"Card No."+i,rank:rank,atk:atk});
-}
-let fullDeck=[];
-baseCards.forEach(card=>{
-fullDeck.push({...card});
-fullDeck.push({...card});
-});
-return fullDeck;
-}
+        <div class="hudCenter">
+          <div class="hudBlock">
+            <div class="hudLabel">操作</div>
+            <div class="controls">
+              <button class="btn" id="btnNextPhase">次のフェイズ</button>
+              <button class="btn" id="btnEndTurn">ターン終了</button>
+              <button class="btn ghost" id="btnCancelSelect">キャンセル</button>
+            </div>
+            <div class="tips" id="tips"></div>
+          </div>
+        </div>
 
-function shuffle(array){
-return array.sort(()=>Math.random()-0.5);
-}
+        <div class="hudRight">
+          <div class="hudBlock">
+            <div class="hudLabel">選択中</div>
+            <div class="focus" id="focus"></div>
+          </div>
+        </div>
+      </section>
 
-function startGame(){
-document.getElementById("titleScreen").style.display="none";
-document.getElementById("game").style.display="block";
-deck=shuffle(createDeck());
-drawInitial();
-renderHand();
-log("Battle Start! 40 Card Deck Ready");
-}
+      <!-- Player side (bottom) -->
+      <section class="side player">
+        <div class="zoneRow">
+          <div class="zone triple" id="playerChars">
+            <div class="zoneTitle">YOU / Character (3)</div>
+            <div class="slots" data-zone="playerChars"></div>
+          </div>
+          <div class="zone single">
+            <div class="zoneTitle">Outside</div>
+            <div class="pile tapable" data-pile="playerOutside" id="playerOutsidePile"></div>
+          </div>
+        </div>
 
-function drawInitial(){
-playerHand=deck.splice(0,4);
-enemyHand=deck.splice(0,4);
-}
+        <div class="zoneRow">
+          <div class="zone triple" id="playerEI">
+            <div class="zoneTitle">Effect / Item (3)</div>
+            <div class="slots" data-zone="playerEI"></div>
+          </div>
+          <div class="zone single">
+            <div class="zoneTitle">Wing</div>
+            <div class="pile tapable" data-pile="playerWing" id="playerWingPile"></div>
+          </div>
+        </div>
 
-function renderHand(){
-const handDiv=document.getElementById("hand");
-handDiv.innerHTML="";
-playerHand.forEach((card,i)=>{
-const div=document.createElement("div");
-div.className="card playable";
-div.innerHTML=`${card.name}<br>R${card.rank}<br>${card.atk}`;
-div.onclick=()=>playCard(i);
-handDiv.appendChild(div);
-});
-}
+        <div class="zoneRow">
+          <div class="zone triple" id="playerShield">
+            <div class="zoneTitle">Shield (3)</div>
+            <div class="slots" data-zone="playerShield"></div>
+          </div>
+          <div class="zone single">
+            <div class="zoneTitle">Deck</div>
+            <div class="pile" data-pile="playerDeck"></div>
+          </div>
+        </div>
 
-function playCard(index){
-let card=playerHand.splice(index,1)[0];
-animateAttack(card,true);
-renderHand();
-setTimeout(enemyTurn,800);
-}
+        <div class="handWrap">
+          <div class="handTitle">HAND（タップ：使用 / 長押し：拡大）</div>
+          <div class="hand" id="hand"></div>
+        </div>
+      </section>
+    </main>
 
-function enemyTurn(){
-if(enemyHand.length===0)return;
-let card=enemyHand.shift();
-animateAttack(card,false);
-}
+    <!-- FX Overlay -->
+    <div id="fxOverlay" class="fxOverlay hidden">
+      <div class="fxCard"></div>
+      <div class="fxText"></div>
+      <button class="btn fxSkip" id="btnFxSkip2">スキップ</button>
+    </div>
 
-function animateAttack(card,isPlayer){
-animationSkip=false;
-log(card.name+" ATTACK!");
+    <!-- Viewer (Card Zoom) -->
+    <div id="viewer" class="viewer hidden">
+      <div class="viewerInner">
+        <div class="viewerTop">
+          <div class="viewerTitle" id="viewerTitle"></div>
+          <button class="btn ghost" id="viewerClose">閉じる</button>
+        </div>
+        <div class="viewerGrid">
+          <div class="viewerImg" id="viewerImg"></div>
+          <div class="viewerText">
+            <div class="viewerMeta" id="viewerMeta"></div>
+            <div class="viewerBody" id="viewerBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-let flash=document.createElement("div");
-flash.style.position="absolute";
-flash.style.width="100%";
-flash.style.height="100%";
-flash.style.background="rgba(255,0,255,0.5)";
-flash.style.animation="fade 0.5s";
-document.body.appendChild(flash);
+    <!-- Modal (List / Confirm) -->
+    <div id="modal" class="modal hidden">
+      <div class="modalInner">
+        <div class="modalTitle" id="modalTitle"></div>
+        <div class="modalBody" id="modalBody"></div>
+        <div class="modalActions" id="modalActions">
+          <button class="btn ghost" id="modalClose">閉じる</button>
+        </div>
+      </div>
+    </div>
 
-setTimeout(()=>{
-if(!animationSkip && flash.parentNode){
-document.body.removeChild(flash);
-}
-},500);
-}
+    <!-- Win -->
+    <div id="win" class="win hidden">
+      <div class="winInner">
+        <div class="winCutin" id="winCutin"></div>
+        <div class="winTitle" id="winTitle">WIN</div>
+        <div class="winSub" id="winSub">フィニッシュ！</div>
+        <button class="btn" id="winRestart">もう一回</button>
+      </div>
+    </div>
+  </div>
 
-function skipAnimation(){
-animationSkip=true;
-}
-
-function log(text){
-document.getElementById("log").innerText=text;
-}
-
-document.getElementById("titleScreen").onclick=startGame;
-
-</script>
-
+  <script src="script.js"></script>
 </body>
 </html>
