@@ -1,0 +1,108 @@
+body {
+  margin: 0;
+  font-family: 'Arial', sans-serif;
+  background: radial-gradient(circle at center, #111 0%, #000 100%);
+  color: white;
+  overflow: hidden;
+}
+
+.screen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.hidden {
+  display: none;
+}
+
+/* ===== タイトル画面 ===== */
+
+.title {
+  font-size: 3rem;
+  text-align: center;
+  background: linear-gradient(45deg, #00f0ff, #ff00c8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px rgba(0,255,255,0.5);
+}
+
+.title span {
+  font-size: 1.2rem;
+  display: block;
+  margin-top: 10px;
+  color: #aaa;
+}
+
+.tapText {
+  margin-top: 40px;
+  font-size: 1rem;
+  opacity: 0.8;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0% {opacity: 0.3;}
+  50% {opacity: 1;}
+  100% {opacity: 0.3;}
+}
+
+/* ===== ゲーム画面 ===== */
+
+.topZone, .middleZone, .bottomZone {
+  width: 90%;
+  height: 50px;
+  margin: 5px 0;
+  border: 1px solid #00f0ff;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,255,255,0.05);
+  box-shadow: 0 0 10px rgba(0,255,255,0.3);
+}
+
+.battleField {
+  width: 95%;
+  height: 50%;
+  border: 2px solid #ff00c8;
+  border-radius: 15px;
+  margin: 10px 0;
+  box-shadow: 0 0 20px rgba(255,0,200,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid {
+  width: 90%;
+  height: 90%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.grid div {
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+}
+
+#attackBtn {
+  padding: 15px 40px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 30px;
+  background: linear-gradient(45deg, #ff00c8, #00f0ff);
+  color: white;
+  box-shadow: 0 0 15px rgba(255,0,200,0.6);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+#attackBtn:active {
+  transform: scale(0.95);
+}
