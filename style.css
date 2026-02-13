@@ -28,6 +28,7 @@ body{
 .btn:active{ transform:translateY(1px); }
 .btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
 .btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
+.btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
 .btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
 
 .chip{
@@ -72,20 +73,20 @@ body{
 }
 .small{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-/* Layout：盤面を大きく、右を細く（全体把握優先） */
+/* Layout：盤面大きく、右パネル細め */
 .layout{
   flex:1;
   display:grid;
-  grid-template-columns: 1.75fr 0.25fr;
+  grid-template-columns: 1.72fr 0.28fr;
   gap:10px;
   padding:10px;
   min-height:0;
 }
 @media (max-width: 900px){
-  /* iPhone縦でも盤面が全体で見えるように、上下に積む */
   .layout{ grid-template-columns: 1fr; grid-template-rows: auto auto; }
 }
 
+/* Board */
 .board{
   position:relative; min-height:0;
   border:1px solid rgba(89,242,255,.12);
@@ -99,36 +100,34 @@ body{
   min-height:360px;
   display:flex; align-items:center; justify-content:center;
 }
-
-/* ★“引き”で全体表示：横画面前提の比率で固定 */
 .playmat::before{
   content:"";
   display:block;
   width:100%;
-  padding-top:56%;
+  padding-top:68%;
   pointer-events:none;
 }
-
-/* フィールド画像（タップ吸い込み防止） */
 .matImg{
   position:absolute; inset:0;
   background-repeat:no-repeat;
   background-position:center;
   background-size:contain;
   pointer-events:none;
+  filter:saturate(1.05) contrast(1.05);
 }
 
-/* ★盤面グリッド：縮小して全体俯瞰 */
-.matGrid{
+/* ★製品版 6×4 グリッド（康臣さんの配置） */
+.matGrid6{
   position:absolute; inset:0;
   display:grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-rows: repeat(6, 1fr);
   gap:10px;
   padding:10px;
 
-  transform: scale(0.86);
-  transform-origin: center;
+  /* 俯瞰（引き） */
+  transform: scale(0.92);
+  transform-origin:center;
 }
 
 .cell{
@@ -139,17 +138,11 @@ body{
   overflow:hidden;
   position:relative;
 }
-.cell.center{ display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, rgba(89,242,255,.12), rgba(179,91,255,.10)); }
-.centerText{ font-weight:1000; letter-spacing:.25em; color:rgba(233,236,255,.92); }
-
-.cell.hint{ padding:10px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
-.mini{ font-size:11px; color:var(--muted); line-height:1.25; }
-
-.cell.pile{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
-.zTitle{ font-size:10px; letter-spacing:.22em; color:var(--muted); }
+.cell.pile{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
+.zTitle{ font-size:11px; letter-spacing:.22em; color:var(--muted); }
 .zCount{ font-size:18px; font-weight:1000; }
 
-.cell.stage{ padding:10px; }
+.cell.stage{ padding:10px; display:flex; flex-direction:column; justify-content:center; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; }
 .slots{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
 
@@ -188,8 +181,19 @@ body{
 }
 .badge.atk{ left:auto; right:8px; }
 
-/* Right panel */
-.panel{ min-height:0; display:flex; flex-direction:column; gap:10px; }
+/* 相手側の“リアル卓上感”：盤面スロットを逆向き表示（上3行だけ） */
+.enemy .cardFace{ transform: rotate(180deg); }
+
+/* Panel */
+.panel{
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+
+  /* ★下端（ホームバー）対策 */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
 .handHeader,.logHeader{
   padding:10px;
   background:var(--panel);
@@ -198,7 +202,7 @@ body{
   box-shadow:var(--shadow);
 }
 .label{ font-weight:1000; letter-spacing:.18em; font-size:12px; }
-.sub{ font-size:11px; color:var(--muted); margin-top:4px; line-height:1.3; }
+.sub{ font-size:12px; color:var(--muted); margin-top:4px; line-height:1.3; }
 
 .hand{
   display:flex; gap:10px;
@@ -222,15 +226,17 @@ body{
 .handCard.selected{ outline:2px solid rgba(179,91,255,.55); transform:translateY(-2px); }
 
 .log{
-  flex:1; min-height:0;
+  flex:1; min-height:180px;
   overflow:auto;
   padding:10px;
   border:1px solid rgba(89,242,255,.12);
   border-radius:18px;
   background:rgba(0,0,0,.22);
   box-shadow:var(--shadow);
+
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
 }
-.logLine{ margin:6px 0; font-size:12px; color:rgba(233,236,255,.92); }
+.logLine{ margin:6px 0; font-size:13px; line-height:1.35; color:rgba(233,236,255,.92); }
 .logLine.muted{ color:rgba(167,176,217,.92); }
 .logLine.warn{ color:rgba(255,77,109,.95); }
 
@@ -249,7 +255,6 @@ body{
   box-shadow:var(--shadow);
   overflow:hidden;
 }
-.modalCard.smallCard{ width:min(520px,94vw); }
 .modalHeader{
   display:flex; align-items:center; justify-content:space-between;
   padding:12px;
@@ -261,5 +266,18 @@ body{
 .viewerText{ font-size:14px; line-height:1.6; white-space:pre-wrap; color:rgba(233,236,255,.92); }
 @media (max-width:720px){ .viewerBody{ grid-template-columns:1fr; } }
 
-.confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; }
-.confirmBtns{ display:flex; gap:10px; padding:0 12px 12px; justify-content:flex-end; }
+.settingsBody{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+.settingsBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
+.settingsTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
+.settingsHint{ font-size:12px; color:var(--muted); line-height:1.5; margin-top:8px; }
+.settingsRow{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.settingsRow.bottomRow{ justify-content:flex-end; }
+.input{
+  flex:1; width:100%;
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(167,176,217,.22);
+  background:rgba(0,0,0,.25);
+  color:rgba(233,236,255,.95);
+  outline:none;
+}
