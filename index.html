@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css?v=40001" />
+  <link rel="stylesheet" href="./style.css?v=40002" />
 </head>
 <body>
   <!-- TITLE -->
@@ -23,8 +23,8 @@
       <button id="btnStart" class="btn primary">画面をタップして対戦開始</button>
 
       <div class="hint">
-        <div>📌 画像自動検出：GitHubの <b>assets/cards</b> を読み取り、No.01〜20を自動で紐付けます。</div>
-        <div>📌 横画面推奨（盤面俯瞰）。縦でも動きます。</div>
+        <div>📌 画像は自動検出：<b>assets/cards</b> のファイル名一覧をGitHubから取得して No.01〜20へ自動紐付けします。</div>
+        <div>📌 日本語ファイル名・二重拡張子（.png.JPG 等）もOKです。</div>
       </div>
 
       <div class="mini" id="boot">JS: 未読み込み</div>
@@ -56,7 +56,7 @@
           <div class="field fieldTop" id="fieldTop"></div>
           <div class="field fieldBottom" id="fieldBottom"></div>
 
-          <!-- 6x4 layout (as requested) -->
+          <!-- 6x4 layout -->
           <div class="grid" id="grid">
             <!-- ENEMY row1 -->
             <div class="cell pile" data-click="aiDeck"><div class="z">D</div><div class="n" id="aiDeckN">0</div></div>
@@ -99,7 +99,7 @@
             <div class="cell pile" data-click="pDeck"><div class="z">D</div><div class="n" id="pDeckN">0</div></div>
           </div>
 
-          <!-- drag arrow overlay -->
+          <!-- Arrow overlay -->
           <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
               <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
@@ -111,12 +111,14 @@
         </div>
       </section>
 
-      <!-- SIDE -->
+      <!-- SIDE (mobileでは下部ドック化) -->
       <aside class="side">
         <div class="cardPanel">
           <div class="panelHead">
-            <div class="panelTitle">HAND</div>
-            <div class="panelSub">使えるカードは光ります／長押しで拡大</div>
+            <div>
+              <div class="panelTitle">HAND</div>
+              <div class="panelSub">手札は画像＋名前表示／長押しで拡大</div>
+            </div>
           </div>
           <div class="hand" id="hand"></div>
         </div>
@@ -192,8 +194,8 @@
             <button id="btnRepoSave" class="btn small primary">保存</button>
           </div>
           <div class="setHint">
-            ※通常は自動で <b>manpuku-taira/manpuku-world</b> を使います。<br>
-            ※画像が出ない場合だけ、ここが正しいか確認してください。
+            通常は自動で <b>manpuku-taira/manpuku-world</b> を使います。<br>
+            画像が出ない場合だけ確認してください。
           </div>
         </div>
 
@@ -204,8 +206,8 @@
             <button id="btnClearCache" class="btn ghost">キャッシュ消去</button>
           </div>
           <div class="setHint">
-            画像が追加された直後は「再取得」してください。<br>
-            Vercelのキャッシュ対策はURL末尾 <b>?v=数字</b> でも可能です。
+            画像をアップした直後は「再取得」を押してください。<br>
+            Vercelキャッシュ対策はURL末尾 <b>?v=数字</b> でもOKです。
           </div>
         </div>
       </div>
@@ -222,7 +224,7 @@
       </div>
       <div class="help">
         <div class="helpItem"><b>登場（通常召喚）</b>：MAINで「手札タップ」→「自分Cの空スロットをタップ」（ターン1回）</div>
-        <div class="helpItem"><b>見参（仮）</b>：MAINで「手札タップ」→「自分Cの空スロット長押し」→（仮コスト：手札1枚捨て）</div>
+        <div class="helpItem"><b>見参（仮）</b>：MAINで「手札タップ」→「自分Cの空スロット長押し」→（仮コスト：手札1枚をウイング）</div>
         <div class="helpItem"><b>攻撃</b>：BATTLEで「自分Cの攻撃者タップ」→「相手Cをタップ（いなければS）」→確認→解決</div>
         <div class="helpItem"><b>カード拡大</b>：カードを長押し</div>
         <div class="helpItem"><b>ウイング／アウトサイド</b>：W/Oをタップで一覧→タップで拡大</div>
@@ -230,6 +232,6 @@
     </div>
   </div>
 
-  <script src="./script.js?v=40001"></script>
+  <script src="./script.js?v=40002"></script>
 </body>
 </html>
