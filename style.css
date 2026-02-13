@@ -72,7 +72,7 @@ body{
 }
 .small{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-/* Layout（右パネルが細すぎるとカードがバー化するので最小幅を保証） */
+/* Layout */
 .layout{
   flex:1;
   display:grid;
@@ -98,127 +98,9 @@ body{
   width:100%;
   height:100%;
   min-height:520px;
-  display:block;
 }
 
-/* ★相手/自分フィールドを上下に同時表示 */
-.matImg{
-  position:absolute;
-  left:0; right:0;
-  background-repeat:no-repeat;
-  background-position:center;
-  background-size:contain;
-  pointer-events:none;
-  filter:saturate(1.05) contrast(1.05);
-}
-.matTop{
-  top:0;
-  height:50%;
-  transform: rotate(180deg);
-  transform-origin:center;
-  opacity:0.92;
-}
-.matBottom{
-  bottom:0;
-  height:50%;
-  opacity:0.92;
-}
-
-/* ★製品版 6×4 グリッド：行の高さ配分を調整して“バー化”を防止 */
-.matGrid6{
-  position:absolute; inset:0;
-  display:grid;
-  grid-template-columns: repeat(4, 1fr);
-  /* 上下の山札/シールド行は薄く、キャラ/エフェクト行は厚く */
-  grid-template-rows: 0.75fr 1.15fr 1.15fr 1.15fr 1.15fr 0.75fr;
-  gap:10px;
-  padding:12px;
-}
-
-.cell{
-  background: rgba(10,12,22,.62);
-  border: 1px solid rgba(89,242,255,.12);
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.30);
-  overflow:hidden;
-  position:relative;
-}
-
-.cell.pile{
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  gap:4px;
-}
-.zTitle{ font-size:11px; letter-spacing:.22em; color:var(--muted); }
-.zCount{ font-size:18px; font-weight:1000; }
-
-/* Stage cells */
-.cell.stage{
-  padding:10px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-}
-.rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; }
-
-/* Slots：高さを確実に確保（aspect-ratio保険） */
-.slots{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:space-between;
-  min-height:120px;          /* ★ここが超重要：潰れ防止 */
-}
-@media (max-width: 900px){
-  .slots{ min-height:110px; }
-}
-@media (max-width: 420px){
-  .slots{ min-height:96px; }
-}
-
-.slot{
-  width:calc((100% - 20px)/3);
-  border-radius:14px;
-  border:1px solid rgba(167,176,217,.20);
-  background:rgba(6,8,14,.55);
-  position:relative;
-  overflow:hidden;
-
-  aspect-ratio:2/3;
-  min-height:90px;           /* ★保険 */
-}
-.slot.selected{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-2px); }
-
-.cardFace{
-  position:absolute; inset:0;
-  display:flex; flex-direction:column; justify-content:flex-end;
-  padding:8px;
-  background-size:cover; background-position:center;
-}
-.cardFace.fallback{
-  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
-}
-.cardName{
-  font-size:11px;
-  font-weight:1000;
-  line-height:1.2;
-  text-shadow:0 2px 12px rgba(0,0,0,.92);
-}
-.badge{
-  position:absolute; top:8px; left:8px;
-  font-size:10px; font-weight:1000;
-  padding:4px 6px; border-radius:10px;
-  background:rgba(0,0,0,.55);
-  border:1px solid rgba(89,242,255,.18);
-}
-.badge.atk{ left:auto; right:8px; }
-
-/* ★相手側のカードは逆向き（卓上の向こう側感） */
-.enemyRow .cardFace{
-  transform: rotate(180deg);
-}
-
-/* Panel */
+/* Panel（ここが今回の修正の中心） */
 .panel{
   min-height:0;
   display:flex;
@@ -258,8 +140,13 @@ body{
 }
 .handCard.selected{ outline:2px solid rgba(179,91,255,.55); transform:translateY(-2px); }
 
+/* ✅ LOGを“半分のサイズ”に固定（可視変化が確実に出る） */
 .log{
-  flex:1; min-height:200px;
+  flex:0 0 35%;
+  height:35%;
+  min-height:140px;
+  max-height:35%;
+
   overflow:auto;
   padding:10px;
   border:1px solid rgba(89,242,255,.12);
@@ -272,44 +159,14 @@ body{
 .logLine.muted{ color:rgba(167,176,217,.92); }
 .logLine.warn{ color:rgba(255,77,109,.95); }
 
-/* Modals */
-.modal{ display:none; position:fixed; inset:0; z-index:50; }
-.modal.show{ display:block; }
-.modalBack{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
-.modalCard{
-  position:absolute; left:50%; top:50%;
-  transform:translate(-50%,-50%);
-  width:min(980px,94vw);
-  max-height:88vh;
-  background:rgba(10,12,22,.92);
-  border:1px solid rgba(89,242,255,.18);
-  border-radius:18px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
-}
-.modalHeader{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px;
-  border-bottom:1px solid rgba(89,242,255,.12);
-}
-.modalTitle{ font-weight:1000; letter-spacing:.12em; font-size:13px; color:rgba(233,236,255,.95); }
-.viewerBody{ display:grid; grid-template-columns: 0.95fr 1.05fr; gap:12px; padding:12px; }
-.viewerBody img{ width:100%; border-radius:16px; border:1px solid rgba(167,176,217,.18); background:rgba(6,8,14,.55); }
-.viewerText{ font-size:14px; line-height:1.6; white-space:pre-wrap; color:rgba(233,236,255,.92); }
-@media (max-width:720px){ .viewerBody{ grid-template-columns:1fr; } }
-
-.settingsBody{ padding:12px; display:flex; flex-direction:column; gap:12px; }
-.settingsBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
-.settingsTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
-.settingsHint{ font-size:12px; color:var(--muted); line-height:1.5; margin-top:8px; }
-.settingsRow{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.settingsRow.bottomRow{ justify-content:flex-end; }
-.input{
-  flex:1; width:100%;
-  padding:10px 12px;
-  border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
-  background:rgba(0,0,0,.25);
-  color:rgba(233,236,255,.95);
-  outline:none;
-}
+/* ===== 以下、最低限の枠だけ残しておきます（表示崩れ防止） ===== */
+.matGrid6{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(6,1fr); gap:10px; padding:12px; }
+.cell{ background: rgba(10,12,22,.62); border: 1px solid rgba(89,242,255,.12); border-radius: 16px; overflow:hidden; position:relative; }
+.cell.stage{ padding:10px; display:flex; flex-direction:column; justify-content:center; }
+.rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; }
+.slots{ display:flex; gap:10px; justify-content:space-between; min-height:120px; }
+.slot{ width:calc((100% - 20px)/3); aspect-ratio:2/3; min-height:90px; border-radius:14px; border:1px solid rgba(167,176,217,.20); background:rgba(6,8,14,.55); position:relative; overflow:hidden; }
+.cardFace{ position:absolute; inset:0; padding:8px; display:flex; flex-direction:column; justify-content:flex-end; background-size:cover; background-position:center; }
+.cardName{ font-size:11px; font-weight:1000; text-shadow:0 2px 12px rgba(0,0,0,.92); }
+.badge{ position:absolute; top:8px; left:8px; font-size:10px; font-weight:1000; padding:4px 6px; border-radius:10px; background:rgba(0,0,0,.55); border:1px solid rgba(89,242,255,.18); }
+.badge.atk{ left:auto; right:8px; }
