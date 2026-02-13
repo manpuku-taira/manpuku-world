@@ -29,7 +29,6 @@ body{
 .btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
 .btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
 .btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
-.btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
 
 .chip{
   padding:8px 10px; border-radius:999px;
@@ -48,6 +47,7 @@ body{
 .topbar .left{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .topbar .right{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
 
+/* Title */
 #titleScreen{ justify-content:center; align-items:center; padding:22px; text-align:center; }
 .titlePanel{
   width:min(680px,94vw);
@@ -72,15 +72,17 @@ body{
 }
 .small{ margin-top:10px; font-size:12px; color:var(--muted); }
 
+/* Layout：盤面を大きく、右を細く（全体把握優先） */
 .layout{
   flex:1;
   display:grid;
-  grid-template-columns: 1.45fr 0.55fr;
+  grid-template-columns: 1.75fr 0.25fr;
   gap:10px;
   padding:10px;
   min-height:0;
 }
 @media (max-width: 900px){
+  /* iPhone縦でも盤面が全体で見えるように、上下に積む */
   .layout{ grid-template-columns: 1fr; grid-template-rows: auto auto; }
 }
 
@@ -97,22 +99,26 @@ body{
   min-height:360px;
   display:flex; align-items:center; justify-content:center;
 }
-/* ★iOSでクリック吸い込みになることがあるので、疑わしい層は全部無効化 */
+
+/* ★“引き”で全体表示：横画面前提の比率で固定 */
 .playmat::before{
   content:"";
   display:block;
   width:100%;
-  padding-top:75%;
+  padding-top:56%;
   pointer-events:none;
 }
+
+/* フィールド画像（タップ吸い込み防止） */
 .matImg{
   position:absolute; inset:0;
   background-repeat:no-repeat;
   background-position:center;
   background-size:contain;
-  pointer-events:none; /* ★ここ超重要 */
+  pointer-events:none;
 }
 
+/* ★盤面グリッド：縮小して全体俯瞰 */
 .matGrid{
   position:absolute; inset:0;
   display:grid;
@@ -120,7 +126,11 @@ body{
   grid-template-rows: repeat(4, 1fr);
   gap:10px;
   padding:10px;
+
+  transform: scale(0.86);
+  transform-origin: center;
 }
+
 .cell{
   background: rgba(10,12,22,.62);
   border: 1px solid rgba(89,242,255,.12);
@@ -164,9 +174,9 @@ body{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
 }
 .cardName{
-  font-size:12px;
+  font-size:11px;
   font-weight:1000;
-  line-height:1.25;
+  line-height:1.2;
   text-shadow:0 2px 12px rgba(0,0,0,.92);
 }
 .badge{
@@ -178,6 +188,7 @@ body{
 }
 .badge.atk{ left:auto; right:8px; }
 
+/* Right panel */
 .panel{ min-height:0; display:flex; flex-direction:column; gap:10px; }
 .handHeader,.logHeader{
   padding:10px;
@@ -199,7 +210,7 @@ body{
   box-shadow:var(--shadow);
 }
 .handCard{
-  width:92px; flex:0 0 auto;
+  width:82px; flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(89,242,255,.18);
@@ -223,6 +234,7 @@ body{
 .logLine.muted{ color:rgba(167,176,217,.92); }
 .logLine.warn{ color:rgba(255,77,109,.95); }
 
+/* Modals */
 .modal{ display:none; position:fixed; inset:0; z-index:50; }
 .modal.show{ display:block; }
 .modalBack{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
