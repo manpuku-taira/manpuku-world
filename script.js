@@ -15,7 +15,8 @@ const el = {
   phaseChip: $("phaseChip"),
   whoChip: $("whoChip"),
 
-  matImg: $("matImg"),
+  matTop: $("matTop"),
+  matBottom: $("matBottom"),
 
   aiStage: $("aiStage"),
   p1Stage: $("p1Stage"),
@@ -57,13 +58,13 @@ function log(msg, kind="muted"){
   d.textContent = msg;
   el.log.prepend(d);
 }
-
 window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
 window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
 
 const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
+const pad2 = (n)=> String(n).padStart(2,"0");
 
-// ★いまは仮名。カード名確定後ここを差し替えます
+/* いまは仮データ（画像が出ることが目的）。カード確定後に置換 */
 const Cards = Array.from({length:20}, (_,i)=>({
   no:i+1,
   name:`カード${i+1}`,
@@ -82,22 +83,18 @@ const state = {
   selectedHand:null
 };
 
-const pad2 = (n)=> String(n).padStart(2,"0");
-
 function shuffle(a){
   for(let i=a.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
     [a[i],a[j]]=[a[j],a[i]];
   }
 }
-
 function buildDeck(){
   const d=[];
   for(const c of Cards){ d.push({...c}); d.push({...c}); }
   shuffle(d);
   return d;
 }
-
 function draw(side,n=1){
   const p = state[side];
   for(let i=0;i<n;i++){
@@ -106,12 +103,7 @@ function draw(side,n=1){
   }
 }
 
-/* =========================
-   画像解決（ここが今回の肝）
-   - field: 自動探索 + 任意指定
-   - cards: 標準名探索 + 一括登録（No=ファイル名）
-   ========================= */
-
+/* ===== 画像解決 ===== */
 const LS_FIELD = "mw_field_url";
 const LS_MAP = "mw_card_map_v1";
 
@@ -121,15 +113,11 @@ function getSavedMap(){
 function setSavedMap(map){
   localStorage.setItem(LS_MAP, JSON.stringify(map));
 }
-
 function normalizeCardPath(v){
   if(!v) return "";
-  // すでに /assets/ などフルならそのまま
   if(v.startsWith("/")) return v;
-  // cardsフォルダ想定
   return `/assets/cards/${v}`;
 }
-
 function tryLoadImage(url){
   return new Promise((resolve)=>{
     const img = new Image();
@@ -141,24 +129,25 @@ function tryLoadImage(url){
 
 async function resolveField(){
   const saved = localStorage.getItem(LS_FIELD);
-  if(saved){
-    const ok = await tryLoadImage(saved);
-    if(ok) return saved;
-  }
+  if(saved && await tryLoadImage(saved)) return saved;
+
   const cands = [
     "/assets/field.png",
     "/assets/field.jpg",
     "/assets/field.jpeg",
     "/assets/field.png.jpg",
+    "/assets/field.jpg.png",
     "/assets/Field.png",
     "/assets/Field.jpg",
     "/assets/Field.PNG",
     "/assets/Field.JPG",
+    "/assets/field.PNG",
+    "/assets/field.JPG",
   ];
   for(const u of cands){
     if(await tryLoadImage(u)) return u;
   }
-  return ""; // 見つからない
+  return "";
 }
 
 async function resolveCardUrl(card){
@@ -169,40 +158,56 @@ async function resolveCardUrl(card){
     if(await tryLoadImage(u)) return u;
   }
 
-  // 標準探索（これが当たれば “設定不要”）
-  const baseA = `/assets/cards/${pad2(card.no)}`;
-  const baseB = `/assets/cards/${card.no}`;
-  const exts = [".png",".jpg",".jpeg",".webp",".PNG",".JPG",".JPEG",".png.JPG",".png.jpg",".PNG.JPG",".PNG.jpg"];
-  const cands = [];
-  for(const b of [baseA, baseB]){
-    for(const e of exts) cands.push(b+e);
+  // 標準探索（Noだけで探す）
+  const bases = [
+    `/assets/cards/${pad2(card.no)}`,
+    `/assets/cards/${card.no}`,
+  ];
+  const exts = [
+    ".jpg",".png",".jpeg",".webp",
+    ".JPG",".PNG",".JPEG",".WEBP",
+    ".png.JPG",".PNG.JPG",".png.jpg",".PNG.jpg",
+    ".jpg.png",".JPG.PNG",
+  ];
+
+  for(const b of bases){
+    for(const e of exts){
+      const u = b + e;
+      if(await tryLoadImage(u)) return u;
+    }
   }
-  for(const u of cands){
-    if(await tryLoadImage(u)) return u;
-  }
-  return ""; // 見つからない
+  return "";
 }
 
 async function applyField(){
   const u = await resolveField();
   if(u){
-    el.matImg.style.backgroundImage = `url("${u}")`;
-    log(`OK フィールド画像：${u}`, "muted");
+    // ★上下2枚に同時適用（上＝逆向きはCSSで回転）
+    el.matTop.style.backgroundImage = `url("${u}")`;
+    el.matBottom.style.backgroundImage = `url("${u}")`;
+    log(`OK フィールド：${u}（上=相手/下=自分）`, "muted");
   }else{
-    log("NG フィールド画像が見つかりません（assets/field.jpg などに置いてください）", "warn");
+    log("NG フィールド画像が見つかりません（assets/field.jpg など）", "warn");
   }
 }
 
-/* =========================
-   表示
-   ========================= */
+/* ===== 描画 ===== */
+async function setCardFaceImage(faceEl, card){
+  const url = await resolveCardUrl(card);
+  if(url){
+    faceEl.style.backgroundImage = `url("${url}")`;
+    faceEl.classList.remove("fallback");
+  }else{
+    faceEl.classList.add("fallback");
+  }
+}
 
-function makeSlot(card, {enemy=false}={}){
+function makeSlot(card){
   const s = document.createElement("div");
   s.className = "slot";
   if(card){
     const face = document.createElement("div");
-    face.className = "cardFace fallback" + (enemy ? " enemy" : "");
+    face.className = "cardFace fallback";
 
     const nm = document.createElement("div");
     nm.className="cardName";
@@ -219,14 +224,11 @@ function makeSlot(card, {enemy=false}={}){
     face.appendChild(b1); face.appendChild(b2); face.appendChild(nm);
     s.appendChild(face);
 
-    // 長押しで詳細（iOS対策：touchstart/hold）
-    let holdTimer = null;
-    const open = ()=> openViewer(card);
-    const startHold = ()=>{
-      clearTimeout(holdTimer);
-      holdTimer = setTimeout(open, 420);
-    };
-    const endHold = ()=> clearTimeout(holdTimer);
+    // 長押しで詳細
+    let holdTimer=null;
+    const open=()=>openViewer(card);
+    const startHold=()=>{ clearTimeout(holdTimer); holdTimer=setTimeout(open,420); };
+    const endHold=()=>clearTimeout(holdTimer);
 
     s.addEventListener("mousedown", startHold);
     s.addEventListener("mouseup", endHold);
@@ -237,28 +239,15 @@ function makeSlot(card, {enemy=false}={}){
   return s;
 }
 
-async function setCardFaceImage(faceEl, card){
-  const url = await resolveCardUrl(card);
-  if(url){
-    faceEl.style.backgroundImage = `url("${url}")`;
-    faceEl.classList.remove("fallback");
-  }else{
-    // 画像なしでも遊べる
-    faceEl.classList.add("fallback");
-  }
-}
-
 async function renderStage(){
   // 相手E
   el.aiEff.innerHTML="";
   for(let i=0;i<3;i++){
     const c = state.AI.eff[i];
-    const slot = makeSlot(c, {enemy:true});
+    const slot = makeSlot(c);
     if(c){
       const face = slot.querySelector(".cardFace");
       await setCardFaceImage(face, c);
-      face.classList.add("enemy"); // 逆向き
-      face.style.transform = "rotate(180deg)";
     }
     el.aiEff.appendChild(slot);
   }
@@ -267,24 +256,23 @@ async function renderStage(){
   el.aiStage.innerHTML="";
   for(let i=0;i<3;i++){
     const c = state.AI.stage[i];
-    const slot = makeSlot(c, {enemy:true});
+    const slot = makeSlot(c);
     if(c){
       const face = slot.querySelector(".cardFace");
       await setCardFaceImage(face, c);
-      face.classList.add("enemy");
-      face.style.transform = "rotate(180deg)";
     }
     el.aiStage.appendChild(slot);
   }
 
-  // 自分C
+  // 自分C（登場）
   el.p1Stage.innerHTML="";
   for(let i=0;i<3;i++){
     const c = state.P1.stage[i];
-    const slot = makeSlot(c, {enemy:false});
+    const slot = makeSlot(c);
+
     slot.addEventListener("click", ()=>{
       if(state.phase!=="MAIN"){ log("MAINで登場できます", "muted"); return; }
-      if(c){ log("ここは埋まっています", "muted"); return; }
+      if(state.P1.stage[i]){ log("ここは埋まっています", "muted"); return; }
       if(state.selectedHand==null){ log("先に手札をタップしてください", "muted"); return; }
       const hc = state.P1.hand[state.selectedHand];
       state.P1.stage[i]=hc;
@@ -293,6 +281,7 @@ async function renderStage(){
       log(`登場：${hc.name}`, "muted");
       renderAll();
     }, {passive:true});
+
     if(c){
       const face = slot.querySelector(".cardFace");
       await setCardFaceImage(face, c);
@@ -304,7 +293,7 @@ async function renderStage(){
   el.p1Eff.innerHTML="";
   for(let i=0;i<3;i++){
     const c = state.P1.eff[i];
-    const slot = makeSlot(c, {enemy:false});
+    const slot = makeSlot(c);
     if(c){
       const face = slot.querySelector(".cardFace");
       await setCardFaceImage(face, c);
@@ -319,6 +308,7 @@ async function renderHand(){
     const c = state.P1.hand[idx];
     const h = document.createElement("div");
     h.className = "handCard" + (state.selectedHand===idx ? " selected":"");
+
     const face = document.createElement("div");
     face.className = "cardFace fallback";
 
@@ -376,11 +366,21 @@ async function renderAll(){
   await applyField();
   await renderStage();
   await renderHand();
+
+  // 画像が無いカード番号をログで一括提示（康臣さんの“手間最小”用）
+  const missing = [];
+  for(const c of Cards){
+    const u = await resolveCardUrl(c);
+    if(!u) missing.push(pad2(c.no));
+  }
+  if(missing.length){
+    log(`カード画像が未検出：${missing.join(", ")}（右上「画像設定」で一括貼り付けできます）`, "warn");
+  }else{
+    log("OK カード画像：20種すべて検出", "muted");
+  }
 }
 
-/* =========================
-   Viewer
-   ========================= */
+/* ===== Viewer ===== */
 async function openViewer(card){
   el.viewerTitle.textContent = `No.${card.no} ${card.name}`;
   el.viewerText.textContent = card.text || "";
@@ -390,9 +390,7 @@ async function openViewer(card){
 }
 function closeViewer(){ el.viewerModal.classList.remove("show"); }
 
-/* =========================
-   画像設定モーダル
-   ========================= */
+/* ===== 画像設定 ===== */
 function openImgModal(){
   el.imgModal.classList.add("show");
   el.fieldInput.value = localStorage.getItem(LS_FIELD) || "";
@@ -431,7 +429,6 @@ function saveBulkMap(){
   log(`保存：カード画像マップ ${Object.keys(map).length}件`, "muted");
   renderAll();
 }
-
 function clearMap(){
   localStorage.removeItem(LS_MAP);
   el.bulkMap.value = "";
@@ -439,9 +436,7 @@ function clearMap(){
   renderAll();
 }
 
-/* =========================
-   Game flow
-   ========================= */
+/* ===== Flow ===== */
 function startGame(){
   state.turn=1; state.phase="START";
   state.selectedHand=null;
@@ -506,11 +501,9 @@ function bindUI(){
   el.btnNextPhase.addEventListener("click", nextPhase, {passive:true});
   el.btnEndTurn.addEventListener("click", endTurn, {passive:true});
 
-  // Viewer
   el.viewerClose.addEventListener("click", closeViewer, {passive:true});
   el.viewerCloseBtn.addEventListener("click", closeViewer, {passive:true});
 
-  // Image modal
   el.btnImages.addEventListener("click", openImgModal, {passive:true});
   el.imgClose.addEventListener("click", closeImgModal, {passive:true});
   el.imgCloseBtn.addEventListener("click", closeImgModal, {passive:true});
