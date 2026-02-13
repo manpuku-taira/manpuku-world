@@ -20,10 +20,11 @@ body{
     radial-gradient(1100px 800px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
     radial-gradient(800px 600px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
     var(--bg);
+  overflow:hidden;
 }
 
 .screen{ display:none; height:100%; }
-.screen.active{ display:flex; flex-direction:column; }
+.screen.active{ display:flex; flex-direction:column; height:100%; }
 
 .btn{
   border:1px solid rgba(89,242,255,.22);
@@ -110,17 +111,14 @@ body{
 }
 .mini{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-/* MAIN */
+/* MAIN LAYOUT */
 .main{
   flex:1;
+  min-height:0;
   display:grid;
-  grid-template-columns: 1fr minmax(340px, 420px);
+  grid-template-columns: 1fr 420px;
   gap:10px;
   padding:10px;
-  min-height:0;
-}
-@media (max-width: 980px){
-  .main{ grid-template-columns: 1fr; grid-template-rows:auto auto; }
 }
 
 /* BOARD */
@@ -130,24 +128,24 @@ body{
   border:1px solid rgba(89,242,255,.12);
   border-radius:18px;
   overflow:hidden;
-  background:rgba(0,0,0,.22);
+  background:rgba(0,0,0,.18);
   box-shadow:var(--shadow);
 }
 .mat{
   position:relative;
   width:100%;
   height:100%;
-  min-height:560px;
+  min-height:600px;
 }
 
-/* field background */
+/* field background (上下同時) */
 .field{
   position:absolute;
   left:0; right:0;
   background-repeat:no-repeat;
   background-position:center;
   background-size:contain;
-  opacity:.94;
+  opacity:.98;
   filter:saturate(1.06) contrast(1.08);
   z-index:0;
   pointer-events:none;
@@ -161,17 +159,18 @@ body{
   inset:0;
   display:grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: 0.75fr 1.15fr 1.15fr 1.15fr 1.15fr 0.75fr;
+  grid-template-rows: 0.70fr 1.05fr 1.05fr 1.05fr 1.05fr 0.70fr;
   gap:10px;
   padding:12px;
   z-index:1;
 }
 
 .cell{
-  background: rgba(10,12,22,.40);
-  border: 1px solid rgba(89,242,255,.14);
+  /* フィールドが見えるように薄め */
+  background: rgba(10,12,22,.18);
+  border: 1px solid rgba(89,242,255,.16);
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.30);
+  box-shadow: 0 10px 30px rgba(0,0,0,.26);
   overflow:hidden;
   position:relative;
   backdrop-filter: blur(1px);
@@ -183,7 +182,7 @@ body{
   justify-content:center;
   gap:4px;
 }
-.cell.pile.shield{ border-color: rgba(179,91,255,.16); }
+.cell.pile.shield{ border-color: rgba(179,91,255,.18); }
 
 .z{ font-size:11px; letter-spacing:.22em; color:var(--muted); }
 .n{ font-size:18px; font-weight:1000; }
@@ -201,7 +200,6 @@ body{
   margin-bottom:8px;
 }
 
-/* slots (3) */
 .slots{
   display:flex;
   gap:10px;
@@ -209,17 +207,14 @@ body{
   align-items:center;
   min-height:120px;
 }
-@media (max-width: 420px){
-  .slots{ min-height:96px; }
-}
 
 .slot{
   width:calc((100% - 20px)/3);
   aspect-ratio: 2 / 3;
   min-height:90px;
   border-radius:14px;
-  border:1px solid rgba(167,176,217,.20);
-  background:rgba(6,8,14,.55);
+  border:1px solid rgba(167,176,217,.22);
+  background:rgba(6,8,14,.45);
   position:relative;
   overflow:hidden;
   transform:translateZ(0);
@@ -264,10 +259,8 @@ body{
   border:1px solid rgba(89,242,255,.18);
 }
 .badge.atk{ left:auto; right:8px; }
-
 .enemy .face{ transform:rotate(180deg); }
 
-/* Arrow */
 .arrow{
   position:absolute;
   inset:0;
@@ -283,7 +276,7 @@ body{
   display:flex;
   flex-direction:column;
   gap:10px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 
 .cardPanel, .logPanel{
@@ -306,6 +299,7 @@ body{
 .panelTitle{ font-weight:1000; letter-spacing:.18em; font-size:12px; }
 .panelSub{ font-size:12px; color:var(--muted); line-height:1.25; }
 
+/* HAND (画像＋名前の見える縮小カード) */
 .hand{
   display:flex;
   gap:10px;
@@ -314,7 +308,7 @@ body{
   background:var(--panel2);
 }
 .handCard{
-  width:92px;
+  width:108px;
   flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
@@ -324,17 +318,33 @@ body{
   overflow:hidden;
   box-shadow:var(--shadow);
 }
-.handCard.glow{
-  outline:2px solid rgba(89,242,255,.55);
-  transform:translateY(-2px);
+.handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform:translateY(-2px); }
+.handCard.sel{ outline:2px solid rgba(179,91,255,.58); transform:translateY(-2px); }
+.handName{
+  position:absolute;
+  left:8px; right:8px; bottom:8px;
+  font-size:11px;
+  font-weight:1000;
+  line-height:1.15;
+  text-shadow:0 2px 12px rgba(0,0,0,.92);
+  background:linear-gradient(180deg, transparent, rgba(0,0,0,.55));
+  border-radius:10px;
+  padding:6px 6px 4px;
 }
-.handCard.sel{
-  outline:2px solid rgba(179,91,255,.58);
-  transform:translateY(-2px);
+.handNo{
+  position:absolute;
+  top:8px; left:8px;
+  font-size:10px;
+  font-weight:1000;
+  padding:4px 6px;
+  border-radius:10px;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(89,242,255,.18);
 }
 
+/* LOG（見やすく小さめ） */
 .log{
-  height:160px;
+  height:120px;
   overflow:auto;
   padding:10px;
   background:rgba(0,0,0,.18);
@@ -481,4 +491,21 @@ body{
   border-radius:14px;
   border:1px solid rgba(89,242,255,.12);
   background:rgba(6,8,14,.55);
+}
+
+/* ===== スマホ対策：盤面を優先表示、手札＆ログを下部ドックへ ===== */
+@media (max-width: 980px){
+  body{ overflow:auto; }
+  .main{
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+    padding:8px;
+  }
+  .mat{ min-height: 520px; }
+  .side{
+    position:sticky;
+    bottom:0;
+    z-index:10;
+  }
+  .log{ height:92px; }
 }
