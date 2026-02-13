@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css?v=10001" />
+  <link rel="stylesheet" href="./style.css?v=20001" />
 </head>
 <body>
   <!-- Title -->
@@ -16,7 +16,7 @@
       </div>
       <div class="titleMeta">
         <div class="pill">長押し：カード拡大</div>
-        <div class="pill">画像なしでも動作確認OK</div>
+        <div class="pill">画像はあとから一括登録OK</div>
       </div>
       <button id="btnStart" class="btn primary">画面をタップして開始</button>
       <div class="small" id="bootStatus">JS: 未読み込み</div>
@@ -33,6 +33,7 @@
         <div class="chip subtle" id="jsChip">JS: ...</div>
       </div>
       <div class="right">
+        <button class="btn ghost" id="btnImages">画像設定</button>
         <button class="btn" id="btnNextPhase">次のフェイズ</button>
         <button class="btn" id="btnEndTurn">ターン終了</button>
       </div>
@@ -43,36 +44,43 @@
         <div class="playmat" id="playmat">
           <div class="matImg" id="matImg"></div>
 
-          <div class="matGrid">
-            <!-- 上段：OUTSIDE / WING / CENTER / DECK（相手） -->
-            <div class="cell pile" data-zone="AI_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="aiOutsideCount">0</div></div>
-            <div class="cell pile" data-zone="AI_wing"><div class="zTitle">WING</div><div class="zCount" id="aiWingCount">0</div></div>
-            <div class="cell center"><div class="centerText">MANPUKU</div></div>
-            <div class="cell pile" data-zone="AI_deck"><div class="zTitle">DECK</div><div class="zCount" id="aiDeckCount">0</div></div>
+          <!-- 製品版 6×4（康臣さん指定配置） -->
+          <div class="matGrid6">
+            <!-- 相手 -->
+            <div class="cell pile" data-zone="AI_deck"><div class="zTitle">D</div><div class="zCount" id="aiDeckCount">0</div></div>
+            <div class="cell pile shield" data-zone="AI_sh1"><div class="zTitle">S</div><div class="zCount" id="aiShieldCount">3</div></div>
+            <div class="cell pile shield" data-zone="AI_sh2"><div class="zTitle">S</div><div class="zCount"> </div></div>
+            <div class="cell pile shield" data-zone="AI_sh3"><div class="zTitle">S</div><div class="zCount"> </div></div>
 
-            <!-- 2段目：相手ステージ / 相手シールド -->
-            <div class="cell stage" style="grid-column:1 / span 3;">
-              <div class="rowTitle">ENEMY STAGE</div>
+            <div class="cell pile" data-zone="AI_wing"><div class="zTitle">W</div><div class="zCount" id="aiWingCount">0</div></div>
+            <div class="cell stage" data-zone="AI_eff" style="grid-column:2 / span 3;">
+              <div class="rowTitle">ENEMY E</div>
+              <div class="slots" id="aiEff"></div>
+            </div>
+
+            <div class="cell pile" data-zone="AI_outside"><div class="zTitle">O</div><div class="zCount" id="aiOutsideCount">0</div></div>
+            <div class="cell stage" data-zone="AI_stage" style="grid-column:2 / span 3;">
+              <div class="rowTitle">ENEMY C</div>
               <div class="slots" id="aiStage"></div>
             </div>
-            <div class="cell pile shield"><div class="zTitle">SHIELD</div><div class="zCount" id="aiShieldCount">3</div></div>
 
-            <!-- 3段目：自分ステージ / 自分シールド -->
-            <div class="cell stage" style="grid-column:1 / span 3;">
-              <div class="rowTitle">YOUR STAGE</div>
+            <!-- 自分 -->
+            <div class="cell stage" data-zone="P1_stage" style="grid-column:1 / span 3;">
+              <div class="rowTitle">YOUR C</div>
               <div class="slots" id="p1Stage"></div>
             </div>
-            <div class="cell pile shield"><div class="zTitle">SHIELD</div><div class="zCount" id="p1ShieldCount">3</div></div>
+            <div class="cell pile" data-zone="P1_outside"><div class="zTitle">O</div><div class="zCount" id="p1OutsideCount">0</div></div>
 
-            <!-- 下段：DECK / WING / OUTSIDE（自分） / HINT -->
-            <div class="cell pile" data-zone="P1_deck"><div class="zTitle">DECK</div><div class="zCount" id="p1DeckCount">0</div></div>
-            <div class="cell pile" data-zone="P1_wing"><div class="zTitle">WING</div><div class="zCount" id="p1WingCount">0</div></div>
-            <div class="cell pile" data-zone="P1_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="p1OutsideCount">0</div></div>
-            <div class="cell hint">
-              <div class="mini">MAIN：手札タップ→空枠タップで登場</div>
-              <div class="mini">BATTLE：自分キャラ→相手キャラで攻撃</div>
-              <div class="mini">長押し：詳細表示</div>
+            <div class="cell stage" data-zone="P1_eff" style="grid-column:1 / span 3;">
+              <div class="rowTitle">YOUR E</div>
+              <div class="slots" id="p1Eff"></div>
             </div>
+            <div class="cell pile" data-zone="P1_wing"><div class="zTitle">W</div><div class="zCount" id="p1WingCount">0</div></div>
+
+            <div class="cell pile shield" data-zone="P1_sh1"><div class="zTitle">S</div><div class="zCount" id="p1ShieldCount">3</div></div>
+            <div class="cell pile shield" data-zone="P1_sh2"><div class="zTitle">S</div><div class="zCount"> </div></div>
+            <div class="cell pile shield" data-zone="P1_sh3"><div class="zTitle">S</div><div class="zCount"> </div></div>
+            <div class="cell pile" data-zone="P1_deck"><div class="zTitle">D</div><div class="zCount" id="p1DeckCount">0</div></div>
           </div>
         </div>
       </section>
@@ -80,20 +88,20 @@
       <section class="panel">
         <div class="handHeader">
           <div class="label">HAND</div>
-          <div class="sub">カードは小さく表示（全体把握優先）</div>
+          <div class="sub">盤面は俯瞰優先／詳細は長押し</div>
         </div>
         <div class="hand" id="hand"></div>
 
         <div class="logHeader">
           <div class="label">LOG</div>
-          <div class="sub">ここに必ずログが出ます（出ない＝JS未動作）</div>
+          <div class="sub">画像探索結果もここに出します</div>
         </div>
         <div class="log" id="log"></div>
       </section>
     </main>
   </section>
 
-  <!-- Viewer（後で本カード情報に差し替え） -->
+  <!-- Viewer -->
   <div class="modal" id="viewerModal">
     <div class="modalBack" id="viewerClose"></div>
     <div class="modalCard">
@@ -108,20 +116,43 @@
     </div>
   </div>
 
-  <!-- Confirm -->
-  <div class="modal" id="confirmModal">
-    <div class="modalBack" id="confirmBack"></div>
-    <div class="modalCard smallCard">
-      <div class="modalHeader"><div class="modalTitle">確認</div></div>
-      <div class="confirmBody" id="confirmText">攻撃しますか？</div>
-      <div class="confirmBtns">
-        <button class="btn danger" id="confirmYes">YES</button>
-        <button class="btn" id="confirmNo">NO</button>
+  <!-- 画像設定（一括貼り付け） -->
+  <div class="modal" id="imgModal">
+    <div class="modalBack" id="imgClose"></div>
+    <div class="modalCard">
+      <div class="modalHeader">
+        <div class="modalTitle">画像設定（まとめて貼り付け）</div>
+        <button class="btn small" id="imgCloseBtn">閉じる</button>
+      </div>
+      <div class="settingsBody">
+        <div class="settingsBlock">
+          <div class="settingsTitle">フィールド画像</div>
+          <div class="settingsRow">
+            <input class="input" id="fieldInput" placeholder="例：/assets/field.jpg（空なら自動探索）" />
+            <button class="btn small" id="btnSaveField">保存</button>
+          </div>
+          <div class="settingsHint">
+            例：field.jpg / field.png / field.png.jpg など名前が違っても自動探索します。
+          </div>
+        </div>
+
+        <div class="settingsBlock">
+          <div class="settingsTitle">カード画像（一括）</div>
+          <div class="settingsHint">
+            下に20行まとめて貼れます（1枚ずつ入力しません）。<br>
+            書式：<b>01=01_カード名.jpg</b> または <b>01=/assets/cards/01_カード名.png.JPG</b><br>
+            ※拡張子は jpg/png どちらでもOK（.png.JPG もOK）
+          </div>
+          <textarea class="input" id="bulkMap" rows="12" placeholder="01=01_カード名.jpg&#10;02=02_カード名.png&#10;..."></textarea>
+          <div class="settingsRow bottomRow">
+            <button class="btn ghost" id="btnClearMap">全消し</button>
+            <button class="btn primary" id="btnSaveMap">保存して反映</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ★必ず読み込まれるように相対パス固定 -->
-  <script src="./script.js?v=10001"></script>
+  <script src="./script.js?v=20001"></script>
 </body>
 </html>
