@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css?v=40003" />
+  <link rel="stylesheet" href="./style.css?v=40004" />
 </head>
 <body>
   <!-- TITLE -->
@@ -15,8 +15,8 @@
         <div class="logoSub">マンプクワールド</div>
         <div class="logoTags">
           <span class="tag">Cyber Fantasy</span>
+          <span class="tag">Shield System</span>
           <span class="tag">AI Battle</span>
-          <span class="tag">Long-Press Zoom</span>
         </div>
       </div>
       <button id="btnStart" class="btn primary">画面をタップして対戦開始</button>
@@ -26,32 +26,47 @@
 
   <!-- GAME -->
   <section id="game" class="screen">
-    <!-- Minimal HUD (space-saving) -->
+    <!-- Minimal HUD -->
     <header class="hud">
       <div class="hudLeft">
         <div class="chip" id="chipTurn">TURN 1</div>
         <div class="chip" id="chipPhase">START</div>
+        <div class="chip chipActive" id="chipActive">YOUR TURN</div>
       </div>
+      <div class="hudCenter" id="firstInfo"></div>
       <div class="hudRight">
         <button class="iconBtn" id="btnHelp" title="操作">?</button>
         <button class="iconBtn" id="btnSettings" title="設定">⚙</button>
       </div>
     </header>
 
+    <!-- Enemy hand (backs only) -->
+    <div class="enemyHandDock">
+      <div class="enemyHandLabel">ENEMY HAND</div>
+      <div class="enemyHand" id="aiHand"></div>
+    </div>
+
     <!-- Fullscreen Board -->
     <main class="stage">
-      <div class="mat">
-        <!-- Field images: top enemy rotated, bottom player normal -->
+      <div class="mat" id="matRoot">
+        <!-- Field images -->
         <div class="field fieldTop" id="fieldTop"></div>
         <div class="field fieldBottom" id="fieldBottom"></div>
 
-        <!-- 6x4 layout (enemy top / player bottom) -->
+        <!-- 6x4 layout -->
         <div class="grid" id="grid">
           <!-- ENEMY row1 -->
           <div class="cell pile" data-click="aiDeck"><div class="z">D</div><div class="n" id="aiDeckN">0</div></div>
-          <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n" id="aiShieldN">3</div></div>
-          <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n"></div></div>
-          <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n"></div></div>
+
+          <div class="cell shieldSlot" data-side="AI" data-idx="0">
+            <div class="z sTag">S</div><div class="backCard"></div>
+          </div>
+          <div class="cell shieldSlot" data-side="AI" data-idx="1">
+            <div class="z sTag">S</div><div class="backCard"></div>
+          </div>
+          <div class="cell shieldSlot" data-side="AI" data-idx="2">
+            <div class="z sTag">S</div><div class="backCard"></div>
+          </div>
 
           <!-- ENEMY row2 -->
           <div class="cell pile" data-click="aiWing"><div class="z">W</div><div class="n" id="aiWingN">0</div></div>
@@ -82,9 +97,15 @@
           <div class="cell pile" data-click="pWing"><div class="z">W</div><div class="n" id="pWingN">0</div></div>
 
           <!-- YOU row6 -->
-          <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n" id="pShieldN">3</div></div>
-          <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n"></div></div>
-          <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n"></div></div>
+          <div class="cell shieldSlot" data-side="P1" data-idx="0">
+            <div class="z sTag">S</div><div class="backCard"></div>
+          </div>
+          <div class="cell shieldSlot" data-side="P1" data-idx="1">
+            <div class="z sTag">S</div><div class="backCard"></div>
+          </div>
+          <div class="cell shieldSlot" data-side="P1" data-idx="2">
+            <div class="z sTag">S</div><div class="backCard"></div>
+          </div>
           <div class="cell pile" data-click="pDeck"><div class="z">D</div><div class="n" id="pDeckN">0</div></div>
         </div>
 
@@ -99,12 +120,12 @@
         </svg>
       </div>
 
-      <!-- Bottom Hand Overlay (small thumbnails) -->
+      <!-- Bottom Hand Overlay -->
       <div class="handDock">
         <div class="hand" id="hand"></div>
       </div>
 
-      <!-- Floating controls (space-saving) -->
+      <!-- Floating controls -->
       <div class="fab">
         <button class="fabBtn ghost" id="btnLog" title="LOG（長押しで表示）">LOG</button>
         <button class="fabBtn" id="btnNext" title="次のフェイズ">NEXT</button>
@@ -113,7 +134,7 @@
     </main>
   </section>
 
-  <!-- CARD VIEWER (long-press) -->
+  <!-- CARD VIEWER -->
   <div class="modal" id="viewerM">
     <div class="back" data-close="viewer"></div>
     <div class="box">
@@ -140,7 +161,7 @@
     </div>
   </div>
 
-  <!-- LOG VIEW (open by long-press LOG button) -->
+  <!-- LOG VIEW -->
   <div class="modal" id="logM">
     <div class="back" data-close="log"></div>
     <div class="box smallBox">
@@ -193,7 +214,10 @@
             <button id="btnRescan" class="btn primary">GitHubから画像を再取得</button>
             <button id="btnClearCache" class="btn ghost">キャッシュ消去</button>
           </div>
-          <div class="setHint">アップロード直後は「再取得」を押してください。URL末尾 ?v=数字 でも更新できます。</div>
+          <div class="setHint">
+            ✅ カード裏面を入れる場合：assets に「card_back.png（またはjpg）」を置くだけで自動認識します。<br/>
+            例：assets/card_back.png / assets/card_back.jpg
+          </div>
         </div>
       </div>
     </div>
@@ -210,13 +234,13 @@
       <div class="help">
         <div class="helpItem"><b>登場</b>：MAINで「手札タップ」→「自分Cの空スロットをタップ」（ターン1回）</div>
         <div class="helpItem"><b>見参（仮）</b>：MAINで「手札タップ」→「自分Cの空スロット長押し」（仮コスト：手札1枚をウイング）</div>
-        <div class="helpItem"><b>攻撃</b>：BATTLEで「自分Cの攻撃者タップ」→「相手Cタップ（いなければS）」→確認</div>
+        <div class="helpItem"><b>攻撃</b>：BATTLEで「自分Cの攻撃者タップ」→「相手Cタップ（いなければ相手S）」→確認</div>
         <div class="helpItem"><b>拡大表示</b>：カードを長押し（手札/盤面/ウイング/アウトサイド）</div>
         <div class="helpItem"><b>LOG</b>：右下の LOG を長押しで表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40003"></script>
+  <script src="./script.js?v=40004"></script>
 </body>
 </html>
