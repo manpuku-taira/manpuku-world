@@ -1,8 +1,5 @@
 /* =========================================================
-   Manpuku World クリック無反応対策版
-   - JS起動表示（JS: OK）
-   - 例外が起きたらLOGに表示（画面真っ黒で沈黙しない）
-   - iOSで反応が死ぬ系の原因を潰す（イベント強制バインド）
+   Manpuku World 強制ログ版（ここでログが出ない＝script未読み込み確定）
    ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -20,7 +17,6 @@ const el = {
   btnNextPhase: $("btnNextPhase"),
   btnEndTurn: $("btnEndTurn"),
 
-  matImg: $("matImg"),
   aiStage: $("aiStage"),
   p1Stage: $("p1Stage"),
   hand: $("hand"),
@@ -49,29 +45,27 @@ const el = {
   confirmNo: $("confirmNo"),
 };
 
-function log(msg, kind="") {
+function log(msg, kind="muted"){
   if(!el.log) return;
   const d = document.createElement("div");
-  d.className = "logLine" + (kind ? ` ${kind}` : "");
+  d.className = "logLine " + kind;
   d.textContent = msg;
   el.log.prepend(d);
 }
 
+// 例外を必ずログに
 window.addEventListener("error", (e)=>{
-  const msg = `JSエラー: ${e.message || e.type}`;
-  log(msg, "warn");
+  log(`JSエラー: ${e.message || e.type}`, "warn");
 });
 window.addEventListener("unhandledrejection", (e)=>{
-  const msg = `Promiseエラー: ${String(e.reason || "")}`;
-  log(msg, "warn");
+  log(`Promiseエラー: ${String(e.reason || "")}`, "warn");
 });
 
-// --- 最小ゲーム状態（画像不要で動く） ---
 const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
 const Cards = Array.from({length:20}, (_,i)=>({
   no:i+1,
   name:`カード${i+1}`,
-  rank: (i%5)+1,
+  rank: ((i%5)+1),
   atk: ((i%5)+1)*500,
   type:"character",
   text:"（テキストは後で確定）"
@@ -83,8 +77,7 @@ const state = {
   phase:"START",
   P1:{ deck:[], hand:[], stage:[null,null,null], wing:[], outside:[], shield:[] },
   AI:{ deck:[], hand:[], stage:[null,null,null], wing:[], outside:[], shield:[] },
-  selectedHand:null,
-  selectedAttacker:null
+  selectedHand:null
 };
 
 function shuffle(a){
@@ -99,32 +92,19 @@ function buildDeck(){
   shuffle(d);
   return d;
 }
-function draw(side, n=1){
+function draw(side,n=1){
   const p = state[side];
   for(let i=0;i<n;i++){
-    if(p.deck.length<=0){ log(`${side==="P1"?"あなた":"AI"}：デッキ切れ`,"warn"); return; }
+    if(p.deck.length<=0){ log(`${side==="P1"?"あなた":"AI"}：デッキ切れ`, "warn"); return; }
     p.hand.push(p.deck.shift());
   }
-}
-function startGame(){
-  state.turn=1; state.phase="START";
-  state.selectedHand=null; state.selectedAttacker=null;
-  state.P1.deck = buildDeck();
-  state.AI.deck = buildDeck();
-  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
-  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
-  state.P1.hand=[]; state.AI.hand=[];
-  draw("P1",4); draw("AI",4);
-  state.P1.stage=[null,null,null];
-  state.AI.stage=[null,null,null];
-  log("ゲーム開始：シールド3 / 初手4", "muted");
-  renderAll();
 }
 
 function renderCounts(){
   el.turnChip.textContent = `TURN ${state.turn}`;
   el.phaseChip.textContent = state.phase;
   el.whoChip.textContent = "YOU";
+
   el.aiDeckCount.textContent = state.AI.deck.length;
   el.p1DeckCount.textContent = state.P1.deck.length;
   el.aiShieldCount.textContent = state.AI.shield.length;
@@ -135,23 +115,32 @@ function renderCounts(){
   el.p1OutsideCount.textContent = state.P1.outside.length;
 }
 
-function makeSlot(card, selected=false){
+function makeSlot(card){
   const s = document.createElement("div");
-  s.className = "slot" + (selected ? " selected":"");
+  s.className = "slot";
   if(card){
     const face = document.createElement("div");
     face.className = "cardFace fallback";
-    const nm = document.createElement("div");
-    nm.className="cardName";
-    nm.textContent = card.name;
+
     const b1 = document.createElement("div");
     b1.className="badge";
     b1.textContent=`R${card.rank}`;
+
     const b2 = document.createElement("div");
     b2.className="badge atk";
     b2.textContent=`ATK ${card.atk}`;
+
+    const nm = document.createElement("div");
+    nm.className="cardName";
+    nm.textContent = card.name;
+
     face.appendChild(b1); face.appendChild(b2); face.appendChild(nm);
     s.appendChild(face);
+
+    // 長押し簡易（今はクリックでOK）
+    s.addEventListener("click", ()=>{
+      log(`カード確認：${card.name}`, "muted");
+    }, {passive:true});
   }
   return s;
 }
@@ -159,32 +148,21 @@ function makeSlot(card, selected=false){
 function renderStage(){
   el.aiStage.innerHTML="";
   for(let i=0;i<3;i++){
-    const c = state.AI.stage[i];
-    const slot = makeSlot(c,false);
-    slot.addEventListener("click", ()=>{
-      log(`相手スロット${i+1} タップ`, "muted");
-    }, {passive:true});
+    const slot = makeSlot(state.AI.stage[i]);
+    slot.addEventListener("click", ()=>log(`相手スロット${i+1} タップ`, "muted"), {passive:true});
     el.aiStage.appendChild(slot);
   }
 
   el.p1Stage.innerHTML="";
   for(let i=0;i<3;i++){
     const c = state.P1.stage[i];
-    const slot = makeSlot(c, false);
+    const slot = makeSlot(c);
 
     slot.addEventListener("click", ()=>{
-      if(state.phase!=="MAIN"){
-        log("MAINで登場できます", "muted");
-        return;
-      }
-      if(c){
-        log("ここは埋まっています", "muted");
-        return;
-      }
-      if(state.selectedHand==null){
-        log("先に手札をタップしてください", "muted");
-        return;
-      }
+      log(`自分スロット${i+1} タップ`, "muted");
+      if(state.phase!=="MAIN"){ log("MAINで登場できます", "muted"); return; }
+      if(c){ log("ここは埋まっています", "muted"); return; }
+      if(state.selectedHand==null){ log("先に手札をタップしてください", "muted"); return; }
       const hc = state.P1.hand[state.selectedHand];
       state.P1.stage[i]=hc;
       state.P1.hand.splice(state.selectedHand,1);
@@ -204,12 +182,15 @@ function renderHand(){
     h.className = "handCard" + (state.selectedHand===idx ? " selected":"");
     const face = document.createElement("div");
     face.className = "cardFace fallback";
-    const nm = document.createElement("div");
-    nm.className="cardName";
-    nm.textContent = c.name;
+
     const b = document.createElement("div");
     b.className="badge";
     b.textContent=`No.${c.no}`;
+
+    const nm = document.createElement("div");
+    nm.className="cardName";
+    nm.textContent = c.name;
+
     face.appendChild(b); face.appendChild(nm);
     h.appendChild(face);
 
@@ -229,9 +210,27 @@ function renderAll(){
   renderHand();
 }
 
+function startGame(){
+  state.turn=1; state.phase="START";
+  state.selectedHand=null;
+
+  state.P1.deck = buildDeck();
+  state.AI.deck = buildDeck();
+  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
+  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
+  state.P1.hand=[]; state.AI.hand=[];
+  draw("P1",4); draw("AI",4);
+  state.P1.stage=[null,null,null];
+  state.AI.stage=[null,null,null];
+
+  log("ゲーム開始：シールド3 / 初手4", "muted");
+  renderAll();
+}
+
 function nextPhase(){
   const i = PHASES.indexOf(state.phase);
   state.phase = PHASES[(i+1)%PHASES.length];
+  log(`フェイズ：${state.phase}`, "muted");
   if(state.phase==="DRAW"){
     draw("P1",1); draw("AI",1);
     log("ドロー +1", "muted");
@@ -253,36 +252,28 @@ function startToGame(){
 }
 
 function bindUI(){
-  // 起動確認表示
-  if(el.bootStatus) el.bootStatus.textContent = "JS: OK";
+  // ここが出ない＝script.js未読み込み
+  if(el.bootStatus) el.bootStatus.textContent = "JS: OK（読み込み成功）";
   if(el.jsChip) el.jsChip.textContent = "JS: OK";
+  log("JS起動OK：ログ表示テスト成功", "muted");
 
   const start = ()=>{
     if(state.started) return;
     state.started=true;
+    log("タイトルタップ：開始", "muted");
     startToGame();
   };
 
-  // タイトル側（iOS対策：click & touchend 両方）
+  // iOS対策：click / touchend 両方
   el.btnStart.addEventListener("click", start, {passive:true});
   el.btnStart.addEventListener("touchend", start, {passive:true});
   el.titleScreen.addEventListener("click", start, {passive:true});
   el.titleScreen.addEventListener("touchend", start, {passive:true});
 
-  // 対戦ボタン
-  el.btnNextPhase.addEventListener("click", ()=>{
-    log("次のフェイズ ボタン", "muted");
-    nextPhase();
-  }, {passive:true});
-  el.btnEndTurn.addEventListener("click", ()=>{
-    log("ターン終了 ボタン", "muted");
-    endTurn();
-  }, {passive:true});
+  el.btnNextPhase.addEventListener("click", nextPhase, {passive:true});
+  el.btnEndTurn.addEventListener("click", endTurn, {passive:true});
 
-  // もし何かがタップを吸ってても、ここが反応すれば「吸い込み」ではないと判定できる
-  document.body.addEventListener("click", ()=>{}, {passive:true});
-
-  log("バインド完了（タップテスト可）","muted");
+  log("バインド完了（ボタンでログが増えるはず）", "muted");
 }
 
 document.addEventListener("DOMContentLoaded", bindUI);
