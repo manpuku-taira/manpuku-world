@@ -1,206 +1,441 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="style.css?v=1000" />
-</head>
-<body>
+:root{
+  --bg:#05060a;
+  --text:#e9ecff;
+  --muted:#a7b0d9;
+  --danger:#ff4d6d;
+  --accent:#59f2ff;
+  --accent2:#b35bff;
+  --shadow: 0 12px 40px rgba(0,0,0,.45);
+  --panel: rgba(10,12,22,.86);
+  --panel2: rgba(6,8,14,.68);
+}
 
-<!-- ========== TITLE ========== -->
-<section id="titleScreen" class="screen active">
-  <div class="titlePanel">
-    <div class="logo">
-      <div class="logoMain">Manpuku World</div>
-      <div class="logoSub">マンプクワールド</div>
-    </div>
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  background: radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
+              radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
+              var(--bg);
+  color:var(--text);
+}
 
-    <div class="titleMeta">
-      <div class="pill">縦持ちでも動きますが、横持ち推奨</div>
-      <div class="pill">演出：派手（スキップ可）</div>
-      <div class="pill">カード：長押しで拡大</div>
-    </div>
+.screen{ display:none; height:100%; }
+.screen.active{ display:flex; flex-direction:column; }
 
-    <button id="btnStart" class="btn primary">画面をタップして開始</button>
-    <div class="small">（ロード後、自動でフィールド＆カード画像を探索します）</div>
-  </div>
-</section>
+.btn{
+  border:1px solid rgba(89,242,255,.22);
+  background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:14px;
+  font-weight:900;
+  font-size:13px;
+  letter-spacing:.06em;
+  box-shadow:0 10px 24px rgba(0,0,0,.35);
+}
+.btn:active{ transform:translateY(1px); }
+.btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
+.btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
+.btn.primary{
+  border:1px solid rgba(89,242,255,.35);
+  background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14));
+}
+.btn.danger{
+  border:1px solid rgba(255,77,109,.35);
+  background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92));
+}
 
-<!-- ========== GAME ========== -->
-<section id="gameScreen" class="screen">
-  <header class="topbar">
-    <div class="left">
-      <div class="chip" id="turnChip">TURN 1</div>
-      <div class="chip" id="phaseChip">START</div>
-      <div class="chip subtle" id="whoChip">YOU</div>
-    </div>
+.chip{
+  padding:8px 10px; border-radius:999px;
+  background:linear-gradient(180deg, rgba(16,20,38,.9), rgba(6,8,14,.9));
+  border:1px solid rgba(89,242,255,.18);
+  font-weight:900; font-size:12px; letter-spacing:.08em;
+}
+.chip.subtle{ border:1px solid rgba(167,176,217,.18); color:var(--muted); }
 
-    <div class="right">
-      <button class="btn" id="btnNextPhase">次のフェイズ</button>
-      <button class="btn" id="btnEndTurn">ターン終了</button>
-      <button class="btn ghost" id="btnSkipFx">演出スキップ: OFF</button>
-      <button class="btn ghost" id="btnSettings">画像設定</button>
-    </div>
-  </header>
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px; gap:10px;
+  border-bottom:1px solid rgba(89,242,255,.12);
+  background:rgba(0,0,0,.18);
+}
+.topbar .left{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.topbar .right{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
 
-  <main class="layout">
-    <!-- PLAYMAT AREA -->
-    <section class="board">
-      <div class="rotateHint" id="rotateHint">
-        <div class="rotateBox">
-          <div class="rotateTitle">横向き推奨</div>
-          <div class="rotateText">iPhoneを横向きにするとフィールド全体が見やすくなります。</div>
-          <button class="btn small" id="btnCloseRotateHint">このまま続ける</button>
-        </div>
-      </div>
+/* ===== Title ===== */
+#titleScreen{ justify-content:center; align-items:center; padding:22px; text-align:center; }
+.titlePanel{
+  width:min(680px,94vw);
+  background:linear-gradient(180deg, rgba(16,20,38,.78), rgba(8,10,18,.78));
+  border:1px solid rgba(89,242,255,.22);
+  border-radius:22px;
+  padding:24px 18px;
+  box-shadow:var(--shadow);
+}
+.logo{
+  border-radius:18px;
+  padding:18px 14px;
+  background:linear-gradient(135deg, rgba(89,242,255,.14), rgba(179,91,255,.10));
+  border:1px solid rgba(179,91,255,.18);
+}
+.logoMain{ font-size:34px; font-weight:1000; letter-spacing:.02em; }
+.logoSub{ margin-top:6px; font-size:14px; color:var(--muted); letter-spacing:.22em; }
+.titleMeta{ margin:14px 0 18px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+.pill{
+  font-size:12px; color:var(--muted);
+  padding:8px 10px; border-radius:999px;
+  border:1px solid rgba(167,176,217,.18);
+  background:rgba(16,20,38,.35);
+}
+.small{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-      <!-- Playmat keeps aspect ratio, overlays 4x3 interactive grid -->
-      <div class="playmat" id="playmat">
-        <div class="matImg" id="matImg"></div>
+/* ===== Main Layout: BOARD + PANEL (Landscape first) ===== */
+.layout{
+  flex:1;
+  display:grid;
+  grid-template-columns: 1.45fr 0.55fr;  /* board larger */
+  gap:10px;
+  padding:10px;
+  min-height:0;
+}
 
-        <!-- 4 x 3 overlay -->
-        <div class="matGrid" id="matGrid">
-          <!-- Row1: enemy piles (OUTSIDE/WING/LOGO/DECK) -->
-          <div class="cell pile" data-zone="AI_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="aiOutsideCount">0</div></div>
-          <div class="cell pile" data-zone="AI_wing"><div class="zTitle">WING</div><div class="zCount" id="aiWingCount">0</div></div>
-          <div class="cell center"><div class="centerText">MANPUKU</div></div>
-          <div class="cell pile" data-zone="AI_deck"><div class="zTitle">DECK</div><div class="zCount" id="aiDeckCount">0</div></div>
+/* On portrait: still works but shows rotate hint and stacks */
+@media (max-width: 900px){
+  .layout{
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+}
 
-          <!-- Row2: enemy stage (3 slots) + enemy shield -->
-          <div class="cell stage" data-zone="AI_stage" style="grid-column:1 / span 3;">
-            <div class="rowTitle">ENEMY STAGE</div>
-            <div class="slots" id="aiStage"></div>
-          </div>
-          <div class="cell pile shield" data-zone="AI_shield"><div class="zTitle">SHIELD</div><div class="zCount" id="aiShieldCount">3</div></div>
+/* ===== Board ===== */
+.board{
+  position:relative;
+  min-height:0;
+  border:1px solid rgba(89,242,255,.12);
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow:var(--shadow);
+  background:rgba(0,0,0,.22);
+}
 
-          <!-- Row3: player stage (3 slots) + player shield -->
-          <div class="cell stage" data-zone="P1_stage" style="grid-column:1 / span 3;">
-            <div class="rowTitle">YOUR STAGE</div>
-            <div class="slots" id="p1Stage"></div>
-          </div>
-          <div class="cell pile shield" data-zone="P1_shield"><div class="zTitle">SHIELD</div><div class="zCount" id="p1ShieldCount">3</div></div>
+.playmat{
+  position:relative;
+  width:100%;
+  height:100%;
+  min-height:360px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 
-          <!-- Row4: player piles (DECK/WING/OUTSIDE/HINT) -->
-          <div class="cell pile" data-zone="P1_deck"><div class="zTitle">DECK</div><div class="zCount" id="p1DeckCount">0</div></div>
-          <div class="cell pile" data-zone="P1_wing"><div class="zTitle">WING</div><div class="zCount" id="p1WingCount">0</div></div>
-          <div class="cell pile" data-zone="P1_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="p1OutsideCount">0</div></div>
-          <div class="cell hint">
-            <div class="mini">カード長押し：拡大</div>
-            <div class="mini">攻撃：攻撃側→相手をタップ→確認</div>
-            <div class="mini">WING/OUTSIDE：タップで一覧</div>
-          </div>
-        </div>
+/* keep playmat aspect ratio close to 4:3 of zones (actually 4x3 grid) */
+.playmat::before{
+  content:"";
+  display:block;
+  width:100%;
+  padding-top:75%; /* 4:3 */
+}
 
-        <!-- Attack arrow overlay -->
-        <svg class="arrowLayer" id="arrowLayer" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <defs>
-            <marker id="arrowHead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-              <polygon points="0 0, 6 3, 0 6"></polygon>
-            </marker>
-          </defs>
-          <line id="attackLine" x1="0" y1="0" x2="0" y2="0" stroke-width="1.5" marker-end="url(#arrowHead)" />
-        </svg>
+.matImg{
+  position:absolute;
+  inset:0;
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:contain; /* IMPORTANT: keeps grid alignment */
+  filter:saturate(1.05) contrast(1.05);
+}
 
-      </div>
-    </section>
+/* overlay grid exactly on the same box */
+.matGrid{
+  position:absolute;
+  inset:0;
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap:10px;
+  padding:10px;
+}
 
-    <!-- RIGHT PANEL -->
-    <section class="panel">
-      <div class="handHeader">
-        <div class="label">HAND</div>
-        <div class="sub">（登場：MAINでキャラを空枠タップ）</div>
-      </div>
-      <div class="hand" id="hand"></div>
+.cell{
+  background: rgba(10,12,22,.62);
+  border: 1px solid rgba(89,242,255,.12);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.30);
+  overflow:hidden;
+  position:relative;
+}
 
-      <div class="logHeader">
-        <div class="label">LOG</div>
-        <div class="sub">（画像NGが出たら「画像設定」で紐付け）</div>
-      </div>
-      <div class="log" id="log"></div>
-    </section>
-  </main>
-</section>
+.cell.center{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(135deg, rgba(89,242,255,.12), rgba(179,91,255,.10));
+}
+.centerText{ font-weight:1000; letter-spacing:.25em; color:rgba(233,236,255,.92); }
 
-<!-- ========== CARD VIEWER ========== -->
-<div class="modal" id="viewerModal">
-  <div class="modalBack" id="viewerClose"></div>
-  <div class="modalCard">
-    <div class="modalHeader">
-      <div class="modalTitle" id="viewerTitle">CARD</div>
-      <button class="btn small" id="viewerCloseBtn">閉じる</button>
-    </div>
-    <div class="viewerBody">
-      <img id="viewerImg" alt="card" />
-      <div class="viewerText" id="viewerText"></div>
-    </div>
-  </div>
-</div>
+.cell.hint{
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:6px;
+}
+.mini{ font-size:11px; color:var(--muted); line-height:1.25; }
 
-<!-- ========== ZONE LIST ========== -->
-<div class="modal" id="zoneModal">
-  <div class="modalBack" id="zoneClose"></div>
-  <div class="modalCard">
-    <div class="modalHeader">
-      <div class="modalTitle" id="zoneTitle">ZONE</div>
-      <button class="btn small" id="zoneCloseBtn">閉じる</button>
-    </div>
-    <div class="zoneList" id="zoneList"></div>
-  </div>
-</div>
+.cell.pile{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+}
+.zTitle{ font-size:10px; letter-spacing:.22em; color:var(--muted); }
+.zCount{ font-size:18px; font-weight:1000; }
 
-<!-- ========== CONFIRM ========== -->
-<div class="modal" id="confirmModal">
-  <div class="modalBack"></div>
-  <div class="modalCard smallCard">
-    <div class="modalHeader">
-      <div class="modalTitle">確認</div>
-    </div>
-    <div class="confirmBody" id="confirmText">攻撃しますか？</div>
-    <div class="confirmBtns">
-      <button class="btn danger" id="confirmYes">YES</button>
-      <button class="btn" id="confirmNo">NO</button>
-    </div>
-  </div>
-</div>
+.cell.stage{ padding:10px; }
+.rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; }
 
-<!-- ========== SETTINGS (IMAGE MAPPING) ========== -->
-<div class="modal" id="settingsModal">
-  <div class="modalBack" id="settingsClose"></div>
-  <div class="modalCard">
-    <div class="modalHeader">
-      <div class="modalTitle">画像設定（ここで紐付ければ、以後ずっと保存されます）</div>
-      <button class="btn small" id="settingsCloseBtn">閉じる</button>
-    </div>
+.slots{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
+.slot{
+  width:calc((100% - 20px)/3);
+  aspect-ratio:2/3;
+  border-radius:14px;
+  border:1px solid rgba(167,176,217,.20);
+  background:rgba(6,8,14,.55);
+  position:relative;
+  overflow:hidden;
+}
+.slot.selected{
+  outline:2px solid rgba(89,242,255,.55);
+  transform: translateY(-2px);
+}
+.cardFace{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; justify-content:flex-end;
+  padding:8px;
+  background-size:cover;
+  background-position:center;
+}
+.cardName{
+  font-size:10px; font-weight:1000; line-height:1.2;
+  text-shadow:0 2px 12px rgba(0,0,0,.92);
+}
+.badge{
+  position:absolute; top:8px; left:8px;
+  font-size:10px; font-weight:1000;
+  padding:4px 6px; border-radius:10px;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(89,242,255,.18);
+}
+.badge.atk{ left:auto; right:8px; }
 
-    <div class="settingsBody">
-      <div class="settingsBlock">
-        <div class="settingsTitle">フィールド画像URL</div>
-        <div class="settingsRow">
-          <input id="fieldUrlInput" class="input" placeholder="例：/field.png  または  /assets/field.png.jpg など" />
-          <button id="btnSaveFieldUrl" class="btn">保存</button>
-          <button id="btnAutoField" class="btn ghost">自動探索</button>
-        </div>
-        <div class="settingsHint">※ ここに正しいURLを入れるだけで枠ズレの土台（表示）は安定します。</div>
-      </div>
+/* Arrow overlay */
+.arrowLayer{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+.arrowLayer line{ stroke: rgba(89,242,255,.85); }
+.arrowLayer polygon{ fill: rgba(89,242,255,.85); }
 
-      <div class="settingsBlock">
-        <div class="settingsTitle">カード画像URL（Noごと）</div>
-        <div class="settingsHint">
-          画像が出ないカードだけ、右の欄に「その画像のURL」を入れて保存してください。<br/>
-          例：<code>/cards/01_黒の魔法使いクルエラ.png</code> や <code>/assets/cards/01_黒の魔法使いクルエラ.png</code>
-        </div>
-        <div id="cardMapList" class="cardMapList"></div>
-        <div class="settingsRow bottomRow">
-          <button id="btnAutoCards" class="btn ghost">カード画像を自動探索</button>
-          <button id="btnClearMap" class="btn ghost">保存した紐付けを全消去</button>
-        </div>
-      </div>
-    </div>
+/* Rotate hint */
+.rotateHint{
+  display:none;
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.72);
+  z-index:20;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+}
+.rotateHint.show{ display:flex; }
+.rotateBox{
+  width:min(560px,94vw);
+  background:linear-gradient(180deg, rgba(16,20,38,.92), rgba(8,10,18,.92));
+  border:1px solid rgba(89,242,255,.22);
+  border-radius:18px;
+  padding:16px;
+  box-shadow:var(--shadow);
+}
+.rotateTitle{ font-size:16px; font-weight:1000; letter-spacing:.12em; }
+.rotateText{ margin:8px 0 12px; font-size:13px; color:var(--muted); line-height:1.5; }
 
-  </div>
-</div>
+/* ===== Right Panel ===== */
+.panel{
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.handHeader,.logHeader{
+  padding:10px;
+  background:var(--panel);
+  border:1px solid rgba(89,242,255,.12);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+}
+.label{ font-weight:1000; letter-spacing:.18em; font-size:12px; }
+.sub{ font-size:11px; color:var(--muted); margin-top:4px; line-height:1.3; }
 
-<script src="script.js?v=1000"></script>
-</body>
-</html>
+.hand{
+  flex:0 0 auto;
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding:10px;
+  border:1px solid rgba(89,242,255,.12);
+  border-radius:18px;
+  background:var(--panel2);
+  box-shadow:var(--shadow);
+}
+.handCard{
+  width:92px; flex:0 0 auto;
+  aspect-ratio:2/3;
+  border-radius:14px;
+  border:1px solid rgba(89,242,255,.18);
+  background:rgba(6,8,14,.55);
+  position:relative;
+  overflow:hidden;
+  box-shadow:var(--shadow);
+}
+.handCard.playable{ outline:2px solid rgba(89,242,255,.55); transform:translateY(-2px); }
+.handCard.selected{ outline:2px solid rgba(179,91,255,.55); transform:translateY(-2px); }
+.handCard.missing{ outline:2px dashed rgba(255,77,109,.55); }
+
+.log{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+  padding:10px;
+  border:1px solid rgba(89,242,255,.12);
+  border-radius:18px;
+  background:rgba(0,0,0,.22);
+  box-shadow:var(--shadow);
+}
+.logLine{ margin:6px 0; font-size:12px; color:rgba(233,236,255,.92); }
+.logLine.muted{ color:rgba(167,176,217,.92); }
+.logLine.warn{ color:rgba(255,77,109,.95); }
+
+/* ===== Modals ===== */
+.modal{ display:none; position:fixed; inset:0; z-index:50; }
+.modal.show{ display:block; }
+.modalBack{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
+.modalCard{
+  position:absolute; left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  width:min(980px,94vw);
+  max-height:88vh;
+  background:rgba(10,12,22,.92);
+  border:1px solid rgba(89,242,255,.18);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.modalCard.smallCard{ width:min(520px,94vw); }
+.modalHeader{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px;
+  border-bottom:1px solid rgba(89,242,255,.12);
+}
+.modalTitle{ font-weight:1000; letter-spacing:.12em; font-size:13px; color:rgba(233,236,255,.95); }
+
+.viewerBody{
+  display:grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap:12px;
+  padding:12px;
+}
+.viewerBody img{
+  width:100%;
+  border-radius:16px;
+  border:1px solid rgba(167,176,217,.18);
+  background:rgba(6,8,14,.55);
+}
+.viewerText{
+  font-size:14px;
+  line-height:1.6;
+  white-space:pre-wrap;
+  color:rgba(233,236,255,.92);
+}
+
+@media (max-width:720px){
+  .viewerBody{ grid-template-columns:1fr; }
+}
+
+/* Zone list */
+.zoneList{
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:74vh;
+  overflow:auto;
+}
+.zoneItem{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:10px;
+  border-radius:14px;
+  border:1px solid rgba(89,242,255,.12);
+  background:rgba(6,8,14,.55);
+}
+.zoneThumb{
+  width:54px; aspect-ratio:2/3;
+  border-radius:10px;
+  border:1px solid rgba(167,176,217,.18);
+  background-size:cover;
+  background-position:center;
+}
+.zoneMeta{ display:flex; flex-direction:column; gap:2px; }
+.zoneMeta .n{ font-weight:1000; font-size:13px; }
+.zoneMeta .s{ color:var(--muted); font-size:11px; }
+
+/* Confirm */
+.confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; }
+.confirmBtns{ display:flex; gap:10px; padding:0 12px 12px; justify-content:flex-end; }
+
+/* Settings */
+.settingsBody{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+.settingsBlock{
+  padding:12px;
+  border-radius:16px;
+  border:1px solid rgba(89,242,255,.12);
+  background:rgba(6,8,14,.55);
+}
+.settingsTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
+.settingsHint{ font-size:12px; color:var(--muted); line-height:1.5; margin-top:8px; }
+.settingsRow{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.settingsRow.bottomRow{ justify-content:flex-end; }
+.input{
+  flex:1;
+  min-width:240px;
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(167,176,217,.22);
+  background:rgba(0,0,0,.25);
+  color:rgba(233,236,255,.95);
+  outline:none;
+}
+.cardMapList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:10px;
+}
+.cardMapRow{
+  display:grid;
+  grid-template-columns: 80px 1fr 120px;
+  gap:8px;
+  align-items:center;
+}
+.cardMapRow .no{ font-weight:1000; color:rgba(233,236,255,.92); }
+.cardMapRow .name{ font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cardMapRow .miniBtn{ justify-self:end; }
+@media (max-width:720px){
+  .cardMapRow{ grid-template-columns: 70px 1fr; }
+  .cardMapRow .miniBtn{ grid-column: 1 / span 2; justify-self:stretch; }
+}
