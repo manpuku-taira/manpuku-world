@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css?v=40002" />
+  <link rel="stylesheet" href="./style.css?v=40003" />
 </head>
 <body>
   <!-- TITLE -->
@@ -19,122 +19,101 @@
           <span class="tag">Long-Press Zoom</span>
         </div>
       </div>
-
       <button id="btnStart" class="btn primary">画面をタップして対戦開始</button>
-
-      <div class="hint">
-        <div>📌 画像は自動検出：<b>assets/cards</b> のファイル名一覧をGitHubから取得して No.01〜20へ自動紐付けします。</div>
-        <div>📌 日本語ファイル名・二重拡張子（.png.JPG 等）もOKです。</div>
-      </div>
-
       <div class="mini" id="boot">JS: 未読み込み</div>
     </div>
   </section>
 
   <!-- GAME -->
   <section id="game" class="screen">
-    <header class="topbar">
-      <div class="topL">
+    <!-- Minimal HUD (space-saving) -->
+    <header class="hud">
+      <div class="hudLeft">
         <div class="chip" id="chipTurn">TURN 1</div>
         <div class="chip" id="chipPhase">START</div>
-        <div class="chip subtle" id="chipWho">YOU</div>
-        <div class="chip subtle" id="chipNet">IMG: ...</div>
       </div>
-      <div class="topR">
-        <button class="btn ghost" id="btnHelp">操作</button>
-        <button class="btn ghost" id="btnSettings">設定</button>
-        <button class="btn" id="btnNext">次のフェイズ</button>
-        <button class="btn danger" id="btnEnd">ターン終了</button>
+      <div class="hudRight">
+        <button class="iconBtn" id="btnHelp" title="操作">?</button>
+        <button class="iconBtn" id="btnSettings" title="設定">⚙</button>
       </div>
     </header>
 
-    <main class="main">
-      <!-- BOARD -->
-      <section class="board">
-        <div class="mat">
-          <!-- Field images (top enemy rotated, bottom player normal) -->
-          <div class="field fieldTop" id="fieldTop"></div>
-          <div class="field fieldBottom" id="fieldBottom"></div>
+    <!-- Fullscreen Board -->
+    <main class="stage">
+      <div class="mat">
+        <!-- Field images: top enemy rotated, bottom player normal -->
+        <div class="field fieldTop" id="fieldTop"></div>
+        <div class="field fieldBottom" id="fieldBottom"></div>
 
-          <!-- 6x4 layout -->
-          <div class="grid" id="grid">
-            <!-- ENEMY row1 -->
-            <div class="cell pile" data-click="aiDeck"><div class="z">D</div><div class="n" id="aiDeckN">0</div></div>
-            <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n" id="aiShieldN">3</div></div>
-            <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n"></div></div>
-            <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n"></div></div>
+        <!-- 6x4 layout (enemy top / player bottom) -->
+        <div class="grid" id="grid">
+          <!-- ENEMY row1 -->
+          <div class="cell pile" data-click="aiDeck"><div class="z">D</div><div class="n" id="aiDeckN">0</div></div>
+          <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n" id="aiShieldN">3</div></div>
+          <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n"></div></div>
+          <div class="cell pile shield" data-click="aiShield"><div class="z">S</div><div class="n"></div></div>
 
-            <!-- ENEMY row2 -->
-            <div class="cell pile" data-click="aiWing"><div class="z">W</div><div class="n" id="aiWingN">0</div></div>
-            <div class="cell stage enemy" style="grid-column:2 / span 3;">
-              <div class="rowTitle">ENEMY E</div>
-              <div class="slots" id="aiE"></div>
-            </div>
-
-            <!-- ENEMY row3 -->
-            <div class="cell pile" data-click="aiOutside"><div class="z">O</div><div class="n" id="aiOutN">0</div></div>
-            <div class="cell stage enemy" style="grid-column:2 / span 3;">
-              <div class="rowTitle">ENEMY C</div>
-              <div class="slots" id="aiC"></div>
-            </div>
-
-            <!-- YOU row4 -->
-            <div class="cell stage you" style="grid-column:1 / span 3;">
-              <div class="rowTitle">YOUR C</div>
-              <div class="slots" id="pC"></div>
-            </div>
-            <div class="cell pile" data-click="pOutside"><div class="z">O</div><div class="n" id="pOutN">0</div></div>
-
-            <!-- YOU row5 -->
-            <div class="cell stage you" style="grid-column:1 / span 3;">
-              <div class="rowTitle">YOUR E</div>
-              <div class="slots" id="pE"></div>
-            </div>
-            <div class="cell pile" data-click="pWing"><div class="z">W</div><div class="n" id="pWingN">0</div></div>
-
-            <!-- YOU row6 -->
-            <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n" id="pShieldN">3</div></div>
-            <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n"></div></div>
-            <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n"></div></div>
-            <div class="cell pile" data-click="pDeck"><div class="z">D</div><div class="n" id="pDeckN">0</div></div>
+          <!-- ENEMY row2 -->
+          <div class="cell pile" data-click="aiWing"><div class="z">W</div><div class="n" id="aiWingN">0</div></div>
+          <div class="cell stageRow enemy" style="grid-column:2 / span 3;">
+            <div class="rowTitle">ENEMY E</div>
+            <div class="slots" id="aiE"></div>
           </div>
 
-          <!-- Arrow overlay -->
-          <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <defs>
-              <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                <polygon points="0 0, 6 3, 0 6"></polygon>
-              </marker>
-            </defs>
-            <line id="arrowLine" x1="0" y1="0" x2="0" y2="0" marker-end="url(#arrowHead)"></line>
-          </svg>
-        </div>
-      </section>
-
-      <!-- SIDE (mobileでは下部ドック化) -->
-      <aside class="side">
-        <div class="cardPanel">
-          <div class="panelHead">
-            <div>
-              <div class="panelTitle">HAND</div>
-              <div class="panelSub">手札は画像＋名前表示／長押しで拡大</div>
-            </div>
+          <!-- ENEMY row3 -->
+          <div class="cell pile" data-click="aiOutside"><div class="z">O</div><div class="n" id="aiOutN">0</div></div>
+          <div class="cell stageRow enemy" style="grid-column:2 / span 3;">
+            <div class="rowTitle">ENEMY C</div>
+            <div class="slots" id="aiC"></div>
           </div>
-          <div class="hand" id="hand"></div>
+
+          <!-- YOU row4 -->
+          <div class="cell stageRow you" style="grid-column:1 / span 3;">
+            <div class="rowTitle">YOUR C</div>
+            <div class="slots" id="pC"></div>
+          </div>
+          <div class="cell pile" data-click="pOutside"><div class="z">O</div><div class="n" id="pOutN">0</div></div>
+
+          <!-- YOU row5 -->
+          <div class="cell stageRow you" style="grid-column:1 / span 3;">
+            <div class="rowTitle">YOUR E</div>
+            <div class="slots" id="pE"></div>
+          </div>
+          <div class="cell pile" data-click="pWing"><div class="z">W</div><div class="n" id="pWingN">0</div></div>
+
+          <!-- YOU row6 -->
+          <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n" id="pShieldN">3</div></div>
+          <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n"></div></div>
+          <div class="cell pile shield" data-click="pShield"><div class="z">S</div><div class="n"></div></div>
+          <div class="cell pile" data-click="pDeck"><div class="z">D</div><div class="n" id="pDeckN">0</div></div>
         </div>
 
-        <div class="logPanel">
-          <div class="panelHead">
-            <div class="panelTitle">LOG</div>
-            <button class="btn small ghost" id="btnLog">開閉</button>
-          </div>
-          <div class="log" id="log"></div>
-        </div>
-      </aside>
+        <!-- Arrow overlay -->
+        <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <polygon points="0 0, 6 3, 0 6"></polygon>
+            </marker>
+          </defs>
+          <line id="arrowLine" x1="0" y1="0" x2="0" y2="0" marker-end="url(#arrowHead)"></line>
+        </svg>
+      </div>
+
+      <!-- Bottom Hand Overlay (small thumbnails) -->
+      <div class="handDock">
+        <div class="hand" id="hand"></div>
+      </div>
+
+      <!-- Floating controls (space-saving) -->
+      <div class="fab">
+        <button class="fabBtn ghost" id="btnLog" title="LOG（長押しで表示）">LOG</button>
+        <button class="fabBtn" id="btnNext" title="次のフェイズ">NEXT</button>
+        <button class="fabBtn danger" id="btnEnd" title="ターン終了">END</button>
+      </div>
     </main>
   </section>
 
-  <!-- CARD VIEWER -->
+  <!-- CARD VIEWER (long-press) -->
   <div class="modal" id="viewerM">
     <div class="back" data-close="viewer"></div>
     <div class="box">
@@ -158,6 +137,18 @@
         <button class="btn small" data-close="zone">閉じる</button>
       </div>
       <div class="zoneList" id="zoneList"></div>
+    </div>
+  </div>
+
+  <!-- LOG VIEW (open by long-press LOG button) -->
+  <div class="modal" id="logM">
+    <div class="back" data-close="log"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">LOG</div>
+        <button class="btn small" data-close="log">閉じる</button>
+      </div>
+      <div class="logBody" id="logBody"></div>
     </div>
   </div>
 
@@ -193,10 +184,7 @@
             <input id="repoInput" class="input" placeholder="例：manpuku-taira/manpuku-world" />
             <button id="btnRepoSave" class="btn small primary">保存</button>
           </div>
-          <div class="setHint">
-            通常は自動で <b>manpuku-taira/manpuku-world</b> を使います。<br>
-            画像が出ない場合だけ確認してください。
-          </div>
+          <div class="setHint">通常は自動で設定済みです。画像が出ない場合のみ確認してください。</div>
         </div>
 
         <div class="setBlock">
@@ -205,10 +193,7 @@
             <button id="btnRescan" class="btn primary">GitHubから画像を再取得</button>
             <button id="btnClearCache" class="btn ghost">キャッシュ消去</button>
           </div>
-          <div class="setHint">
-            画像をアップした直後は「再取得」を押してください。<br>
-            Vercelキャッシュ対策はURL末尾 <b>?v=数字</b> でもOKです。
-          </div>
+          <div class="setHint">アップロード直後は「再取得」を押してください。URL末尾 ?v=数字 でも更新できます。</div>
         </div>
       </div>
     </div>
@@ -217,21 +202,21 @@
   <!-- HELP -->
   <div class="modal" id="helpM">
     <div class="back" data-close="help"></div>
-    <div class="box">
+    <div class="box smallBox">
       <div class="boxHead">
         <div class="boxTitle">操作</div>
         <button class="btn small" data-close="help">閉じる</button>
       </div>
       <div class="help">
-        <div class="helpItem"><b>登場（通常召喚）</b>：MAINで「手札タップ」→「自分Cの空スロットをタップ」（ターン1回）</div>
-        <div class="helpItem"><b>見参（仮）</b>：MAINで「手札タップ」→「自分Cの空スロット長押し」→（仮コスト：手札1枚をウイング）</div>
-        <div class="helpItem"><b>攻撃</b>：BATTLEで「自分Cの攻撃者タップ」→「相手Cをタップ（いなければS）」→確認→解決</div>
-        <div class="helpItem"><b>カード拡大</b>：カードを長押し</div>
-        <div class="helpItem"><b>ウイング／アウトサイド</b>：W/Oをタップで一覧→タップで拡大</div>
+        <div class="helpItem"><b>登場</b>：MAINで「手札タップ」→「自分Cの空スロットをタップ」（ターン1回）</div>
+        <div class="helpItem"><b>見参（仮）</b>：MAINで「手札タップ」→「自分Cの空スロット長押し」（仮コスト：手札1枚をウイング）</div>
+        <div class="helpItem"><b>攻撃</b>：BATTLEで「自分Cの攻撃者タップ」→「相手Cタップ（いなければS）」→確認</div>
+        <div class="helpItem"><b>拡大表示</b>：カードを長押し（手札/盤面/ウイング/アウトサイド）</div>
+        <div class="helpItem"><b>LOG</b>：右下の LOG を長押しで表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40002"></script>
+  <script src="./script.js?v=40003"></script>
 </body>
 </html>
