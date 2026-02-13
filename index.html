@@ -1,36 +1,135 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Manpuku World</title>
-<link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Manpuku World</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<div id="titleScreen" class="screen active">
-  <h1>Manpuku World<br>マンプクワールド</h1>
-  <p>画面をタッチして開始</p>
+<section id="titleScreen" class="screen active">
+  <div class="titleWrap">
+    <div class="logo">
+      <div class="logoMain">Manpuku World</div>
+      <div class="logoSub">マンプクワールド</div>
+    </div>
+    <div class="tapHint">画面をタッチして開始</div>
+    <div class="smallHint">（演出は派手・スキップ可能）</div>
+  </div>
+</section>
+
+<section id="gameScreen" class="screen">
+  <header class="topbar">
+    <div class="chip" id="turnChip">TURN 1</div>
+    <div class="chip" id="phaseChip">START</div>
+    <div class="topBtns">
+      <button class="btn" id="btnNextPhase">次のフェイズ</button>
+      <button class="btn" id="btnEndTurn">ターン終了</button>
+      <button class="btn ghost" id="btnSkipFx">演出スキップ: OFF</button>
+    </div>
+  </header>
+
+  <main class="field" id="fieldBg">
+    <div class="grid">
+      <div class="cell zonePile" id="enemyOutsidePile">
+        <div class="zTitle">OUTSIDE</div>
+        <div class="zCount" id="enemyOutsideCount">0</div>
+      </div>
+      <div class="cell zonePile" id="enemyWingPile">
+        <div class="zTitle">WING</div>
+        <div class="zCount" id="enemyWingCount">0</div>
+      </div>
+      <div class="cell centerLogo">
+        <div class="centerText">MANPUKU</div>
+      </div>
+      <div class="cell zonePile" id="enemyDeckPile">
+        <div class="zTitle">DECK</div>
+        <div class="zCount" id="enemyDeckCount">0</div>
+      </div>
+
+      <div class="cell stageRow" style="grid-column: 1 / span 3;">
+        <div class="rowTitle">ENEMY STAGE</div>
+        <div class="slots" id="enemyStage"></div>
+      </div>
+      <div class="cell zonePile" id="enemyShieldPile">
+        <div class="zTitle">SHIELD</div>
+        <div class="zCount" id="enemyShieldCount">3</div>
+      </div>
+
+      <div class="cell stageRow" style="grid-column: 1 / span 3;">
+        <div class="rowTitle">YOUR STAGE</div>
+        <div class="slots" id="playerStage"></div>
+      </div>
+      <div class="cell zonePile" id="playerShieldPile">
+        <div class="zTitle">SHIELD</div>
+        <div class="zCount" id="playerShieldCount">3</div>
+      </div>
+
+      <div class="cell zonePile" id="playerDeckPile">
+        <div class="zTitle">DECK</div>
+        <div class="zCount" id="playerDeckCount">0</div>
+      </div>
+      <div class="cell zonePile" id="playerWingPile">
+        <div class="zTitle">WING</div>
+        <div class="zCount" id="playerWingCount">0</div>
+      </div>
+      <div class="cell zonePile" id="playerOutsidePile">
+        <div class="zTitle">OUTSIDE</div>
+        <div class="zCount" id="playerOutsideCount">0</div>
+      </div>
+      <div class="cell centerHint">
+        <div class="mini">カード長押しで拡大</div>
+        <div class="mini">攻撃は「攻撃者→相手タップ→YES/NO」</div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="handWrap">
+    <div class="handTitle">HAND</div>
+    <div class="hand" id="hand"></div>
+  </footer>
+
+  <aside class="log" id="log"></aside>
+</section>
+
+<div class="modal" id="viewerModal">
+  <div class="modalBack" id="viewerClose"></div>
+  <div class="modalCard">
+    <div class="modalHeader">
+      <div class="modalTitle" id="viewerTitle">CARD</div>
+      <button class="btn small" id="viewerCloseBtn">閉じる</button>
+    </div>
+    <div class="viewerBody">
+      <img id="viewerImg" alt="card" />
+      <div class="viewerText" id="viewerText"></div>
+    </div>
+  </div>
 </div>
 
-<div id="gameScreen" class="screen">
-  <div class="topbar">
-    <div id="turnChip"></div>
-    <div id="phaseChip"></div>
-    <button id="btnNextPhase">次のフェイズ</button>
-    <button id="btnEndTurn">ターン終了</button>
+<div class="modal" id="zoneModal">
+  <div class="modalBack" id="zoneClose"></div>
+  <div class="modalCard">
+    <div class="modalHeader">
+      <div class="modalTitle" id="zoneTitle">ZONE</div>
+      <button class="btn small" id="zoneCloseBtn">閉じる</button>
+    </div>
+    <div class="zoneList" id="zoneList"></div>
   </div>
+</div>
 
-  <div class="board">
-    <div class="row" data-zone="enemyChars"></div>
-    <div class="row" data-zone="playerChars"></div>
+<div class="modal" id="confirmModal">
+  <div class="modalBack"></div>
+  <div class="modalCard">
+    <div class="modalHeader">
+      <div class="modalTitle">確認</div>
+    </div>
+    <div class="confirmBody" id="confirmText">攻撃しますか？</div>
+    <div class="confirmBtns">
+      <button class="btn danger" id="confirmYes">YES</button>
+      <button class="btn" id="confirmNo">NO</button>
+    </div>
   </div>
-
-  <div class="handArea">
-    <div id="hand"></div>
-  </div>
-
-  <div id="log"></div>
 </div>
 
 <script src="script.js"></script>
