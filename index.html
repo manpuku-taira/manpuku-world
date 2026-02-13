@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css?v=4002" />
+  <link rel="stylesheet" href="./style.css?v=10001" />
 </head>
 <body>
   <!-- Title -->
@@ -14,14 +14,12 @@
         <div class="logoMain">Manpuku World</div>
         <div class="logoSub">マンプクワールド</div>
       </div>
-
       <div class="titleMeta">
-        <div class="pill">カード：長押しで拡大</div>
-        <div class="pill">画像が無くてもプレイ確認OK</div>
+        <div class="pill">長押し：カード拡大</div>
+        <div class="pill">画像なしでも動作確認OK</div>
       </div>
-
       <button id="btnStart" class="btn primary">画面をタップして開始</button>
-      <div class="small" id="bootStatus">JS: 未確認</div>
+      <div class="small" id="bootStatus">JS: 未読み込み</div>
     </div>
   </section>
 
@@ -46,34 +44,34 @@
           <div class="matImg" id="matImg"></div>
 
           <div class="matGrid">
-            <!-- 上段：アウトサイド/ウイング/中央/デッキ（相手） -->
+            <!-- 上段：OUTSIDE / WING / CENTER / DECK（相手） -->
             <div class="cell pile" data-zone="AI_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="aiOutsideCount">0</div></div>
             <div class="cell pile" data-zone="AI_wing"><div class="zTitle">WING</div><div class="zCount" id="aiWingCount">0</div></div>
             <div class="cell center"><div class="centerText">MANPUKU</div></div>
             <div class="cell pile" data-zone="AI_deck"><div class="zTitle">DECK</div><div class="zCount" id="aiDeckCount">0</div></div>
 
-            <!-- 2段目：相手ステージ/相手シールド -->
+            <!-- 2段目：相手ステージ / 相手シールド -->
             <div class="cell stage" style="grid-column:1 / span 3;">
               <div class="rowTitle">ENEMY STAGE</div>
               <div class="slots" id="aiStage"></div>
             </div>
             <div class="cell pile shield"><div class="zTitle">SHIELD</div><div class="zCount" id="aiShieldCount">3</div></div>
 
-            <!-- 3段目：自分ステージ/自分シールド -->
+            <!-- 3段目：自分ステージ / 自分シールド -->
             <div class="cell stage" style="grid-column:1 / span 3;">
               <div class="rowTitle">YOUR STAGE</div>
               <div class="slots" id="p1Stage"></div>
             </div>
             <div class="cell pile shield"><div class="zTitle">SHIELD</div><div class="zCount" id="p1ShieldCount">3</div></div>
 
-            <!-- 下段：デッキ/ウイング/アウトサイド（自分）+ ヒント -->
+            <!-- 下段：DECK / WING / OUTSIDE（自分） / HINT -->
             <div class="cell pile" data-zone="P1_deck"><div class="zTitle">DECK</div><div class="zCount" id="p1DeckCount">0</div></div>
             <div class="cell pile" data-zone="P1_wing"><div class="zTitle">WING</div><div class="zCount" id="p1WingCount">0</div></div>
             <div class="cell pile" data-zone="P1_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="p1OutsideCount">0</div></div>
             <div class="cell hint">
-              <div class="mini">MAIN：手札をタップ → 空枠をタップで登場</div>
-              <div class="mini">BATTLE：自分キャラ → 相手キャラで攻撃</div>
-              <div class="mini">長押し：カード拡大</div>
+              <div class="mini">MAIN：手札タップ→空枠タップで登場</div>
+              <div class="mini">BATTLE：自分キャラ→相手キャラで攻撃</div>
+              <div class="mini">長押し：詳細表示</div>
             </div>
           </div>
         </div>
@@ -82,20 +80,20 @@
       <section class="panel">
         <div class="handHeader">
           <div class="label">HAND</div>
-          <div class="sub">画像が無くても名前でプレイできます</div>
+          <div class="sub">カードは小さく表示（全体把握優先）</div>
         </div>
         <div class="hand" id="hand"></div>
 
         <div class="logHeader">
           <div class="label">LOG</div>
-          <div class="sub">ここに状況が出ます（エラーも表示します）</div>
+          <div class="sub">ここに必ずログが出ます（出ない＝JS未動作）</div>
         </div>
         <div class="log" id="log"></div>
       </section>
     </main>
   </section>
 
-  <!-- Viewer -->
+  <!-- Viewer（後で本カード情報に差し替え） -->
   <div class="modal" id="viewerModal">
     <div class="modalBack" id="viewerClose"></div>
     <div class="modalCard">
@@ -123,6 +121,7 @@
     </div>
   </div>
 
-  <script src="./script.js?v=4002"></script>
+  <!-- ★必ず読み込まれるように相対パス固定 -->
+  <script src="./script.js?v=10001"></script>
 </body>
 </html>
