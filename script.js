@@ -1,13 +1,10 @@
 /* =========================================================
-  Manpuku World - UI Full Board v40003
-  Goals:
-   - Field always full screen (enemy+you)
-   - Hand as small overlay dock
-   - No No./name on cards in board/hand (clean look)
-   - Long-press opens viewer with BIG text (name/effect), NO No displayed
-   - Log hidden: long-press LOG button opens log modal
-   - Buttons space-saving: floating NEXT/END
-   - Keep image loading robust (Japanese filenames / .png.JPG)
+  Manpuku World - Shield/Turn Visibility v40004
+  - Random first/second displayed
+  - Active turn clearly shown (HUD + board glow)
+  - Shield displayed as facedown 3 cards (black back)
+  - Enemy hand hidden: backs only + count
+  - Back image optional: assets/card_back.png(jpg) auto-detect
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +18,8 @@ const el = {
 
   chipTurn: $("chipTurn"),
   chipPhase: $("chipPhase"),
+  chipActive: $("chipActive"),
+  firstInfo: $("firstInfo"),
 
   btnHelp: $("btnHelp"),
   btnSettings: $("btnSettings"),
@@ -28,6 +27,7 @@ const el = {
   btnEnd: $("btnEnd"),
   btnLog: $("btnLog"),
 
+  matRoot: $("matRoot"),
   fieldTop: $("fieldTop"),
   fieldBottom: $("fieldBottom"),
 
@@ -36,17 +36,14 @@ const el = {
   pC: $("pC"),
   pE: $("pE"),
   hand: $("hand"),
+  aiHand: $("aiHand"),
 
   aiDeckN: $("aiDeckN"),
-  aiShieldN: $("aiShieldN"),
   aiWingN: $("aiWingN"),
   aiOutN: $("aiOutN"),
   pDeckN: $("pDeckN"),
-  pShieldN: $("pShieldN"),
   pWingN: $("pWingN"),
   pOutN: $("pOutN"),
-
-  arrowLine: $("arrowLine"),
 
   viewerM: $("viewerM"),
   viewerTitle: $("viewerTitle"),
@@ -75,14 +72,11 @@ const el = {
   helpM: $("helpM"),
 };
 
-/* ---------- Logs (stored, not shown on board) ---------- */
+/* ---------- Logs ---------- */
 const LOGS = [];
 function log(msg, kind="muted"){
   LOGS.unshift({msg, kind, t: Date.now()});
-  // also push into modal body if open
-  if(el.logM.classList.contains("show")){
-    renderLogModal();
-  }
+  if(el.logM.classList.contains("show")) renderLogModal();
 }
 window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
 window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
@@ -96,7 +90,7 @@ function renderLogModal(){
     el.logBody.appendChild(d);
     return;
   }
-  for(const it of LOGS.slice(0, 120)){
+  for(const it of LOGS.slice(0, 160)){
     const d = document.createElement("div");
     d.className = `logLine ${it.kind}`;
     d.textContent = it.msg;
@@ -106,7 +100,7 @@ function renderLogModal(){
 
 /* ---------- Storage Keys ---------- */
 const LS_REPO = "mw_repo";
-const LS_IMG_CACHE = "mw_img_cache_v3";
+const LS_IMG_CACHE = "mw_img_cache_v4";
 
 /* ---------- Rules ---------- */
 const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
@@ -125,7 +119,7 @@ const CardRegistry = Array.from({length:20}, (_,i)=> {
   const atk = atkMax; // placeholder
   return {
     no,
-    name: `カード${no}`, // overwritten by filename-derived name if available
+    name: `カード${no}`, // filename-based if available
     rank,
     atk,
     type: "character",
@@ -154,6 +148,10 @@ const state = {
   started:false,
   turn:1,
   phase:"START",
+
+  // active turn side
+  activeSide: "P1",         // "P1" or "AI"
+  firstSide: "P1",          // start side
   normalSummonUsed:false,
 
   selectedHandIndex:null,
@@ -164,24 +162,42 @@ const state = {
 
   img: {
     fieldUrl:"",
-    cardUrlByNo:{},      // "01" -> "/assets/cards/<encoded>"
-    cardFileByNo:{},     // "01" -> original filename
+    backUrl:"",             // optional card back image
+    cardUrlByNo:{},
+    cardFileByNo:{},
     ready:false,
-  }
+  },
+
+  busyAI:false,
 };
+
+function setActiveUI(){
+  const you = (state.activeSide==="P1");
+  el.chipActive.textContent = you ? "YOUR TURN" : "ENEMY TURN";
+  el.chipActive.classList.toggle("enemy", !you);
+
+  el.matRoot.classList.toggle("youTurn", you);
+  el.matRoot.classList.toggle("enemyTurn", !you);
+
+  // buttons: during AI turn, prevent accidental taps
+  el.btnNext.disabled = !you;
+  el.btnEnd.disabled  = !you;
+  el.btnNext.style.opacity = you ? "1" : ".45";
+  el.btnEnd.style.opacity  = you ? "1" : ".45";
+}
 
 function updateHUD(){
   el.chipTurn.textContent = `TURN ${state.turn}`;
   el.chipPhase.textContent = state.phase;
+  setActiveUI();
 }
+
 function updateCounts(){
   el.aiDeckN.textContent = state.AI.deck.length;
-  el.aiShieldN.textContent = state.AI.shield.length;
   el.aiWingN.textContent = state.AI.wing.length;
   el.aiOutN.textContent = state.AI.outside.length;
 
   el.pDeckN.textContent = state.P1.deck.length;
-  el.pShieldN.textContent = state.P1.shield.length;
   el.pWingN.textContent = state.P1.wing.length;
   el.pOutN.textContent = state.P1.outside.length;
 }
@@ -190,18 +206,12 @@ function updateCounts(){
 function getRepo(){
   return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world";
 }
-function setRepo(v){
-  localStorage.setItem(LS_REPO, v);
-}
+function setRepo(v){ localStorage.setItem(LS_REPO, v); }
 function getCache(){
   try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE) || "{}"); }catch{ return {}; }
 }
-function setCache(obj){
-  localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj));
-}
-function clearCache(){
-  localStorage.removeItem(LS_IMG_CACHE);
-}
+function setCache(obj){ localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj)); }
+function clearCache(){ localStorage.removeItem(LS_IMG_CACHE); }
 
 async function ghList(path){
   const repo = getRepo();
@@ -213,16 +223,9 @@ async function ghList(path){
   return data.filter(x=>x && x.type === "file").map(x=>x.name);
 }
 
-/* IMPORTANT: encode filenames so Japanese names work */
-function encFile(name){
-  return encodeURIComponent(name);
-}
-function vercelPathCards(filename){
-  return `/assets/cards/${encFile(filename)}`;
-}
-function vercelPathAssets(filename){
-  return `/assets/${encFile(filename)}`;
-}
+function encFile(name){ return encodeURIComponent(name); }
+function vercelPathCards(filename){ return `/assets/cards/${encFile(filename)}`; }
+function vercelPathAssets(filename){ return `/assets/${encFile(filename)}`; }
 
 function pickFieldFile(assetFiles){
   const lowers = assetFiles.map(n=>n.toLowerCase());
@@ -237,45 +240,50 @@ function pickFieldFile(assetFiles){
   return "";
 }
 
+// NEW: card back autodetect: card_back.* or back.*
+function pickBackFile(assetFiles){
+  const lowers = assetFiles.map(n=>n.toLowerCase());
+  const pri = ["card_back.png","card_back.jpg","card_back.jpeg","cardback.png","cardback.jpg","back.png","back.jpg","back.jpeg"];
+  for(const p of pri){
+    const i = lowers.findIndex(n=>n === p);
+    if(i>=0) return assetFiles[i];
+  }
+  const idx = lowers.findIndex(n=>n.startsWith("card_back."));
+  if(idx>=0) return assetFiles[idx];
+  const idx2 = lowers.findIndex(n=>n.startsWith("back."));
+  if(idx2>=0) return assetFiles[idx2];
+  return "";
+}
+
 function scoreCardFilename(name, no){
   const s = name.toLowerCase();
   const p2 = pad2(no).toLowerCase();
   const p1 = String(no).toLowerCase();
-
   let score = 0;
   if(s.startsWith(`${p2}_`)) score += 100;
   if(s.startsWith(`${p1}_`)) score += 80;
   if(s.startsWith(`${p2}.`)) score += 70;
   if(s.startsWith(`${p1}.`)) score += 60;
-
   if(s.includes(`${p2}_`)) score += 30;
   if(s.includes(`${p1}_`)) score += 20;
-
   if(s.includes(".jpg")) score += 5;
   if(s.includes(".png")) score += 5;
   if(s.includes(".jpeg")) score += 4;
   if(s.includes(".png.jpg") || s.includes(".png.jpeg")) score += 6;
-
   return score;
 }
-
 function buildCardMapFromFileList(cardFiles){
   const map = {};
   for(let no=1; no<=20; no++){
     let best = {name:"", score:-1};
     for(const f of cardFiles){
       const sc = scoreCardFilename(f, no);
-      if(sc > best.score){
-        best = {name:f, score:sc};
-      }
+      if(sc > best.score) best = {name:f, score:sc};
     }
-    if(best.score >= 60){
-      map[pad2(no)] = best.name;
-    }
+    if(best.score >= 60) map[pad2(no)] = best.name;
   }
   return map;
 }
-
 async function validateImage(url){
   return new Promise((resolve)=>{
     const img = new Image();
@@ -285,7 +293,6 @@ async function validateImage(url){
   });
 }
 
-/* filename -> card display name (used only in viewer / zones) */
 function stripExtAll(name){
   let base = name;
   for(let i=0;i<3;i++){
@@ -309,9 +316,7 @@ function applyNamesFromMap(cardMap){
   for(let no=1; no<=20; no++){
     const k = pad2(no);
     const fn = cardMap[k];
-    if(fn){
-      CardRegistry[no-1].name = nameFromFilename(fn, no);
-    }
+    if(fn) CardRegistry[no-1].name = nameFromFilename(fn, no);
   }
 }
 
@@ -334,12 +339,16 @@ async function rescanImages(){
     cache.scannedAt = Date.now();
 
     cache.fieldFile = pickFieldFile(assetFiles) || "";
-    cache.cardMap = buildCardMapFromFileList(cardFiles);
+    cache.backFile  = pickBackFile(assetFiles) || "";
+    cache.cardMap   = buildCardMapFromFileList(cardFiles);
 
     setCache(cache);
 
     if(cache.fieldFile) log(`OK フィールド検出: ${cache.fieldFile}`, "muted");
     else log("NG フィールド未検出（assets/field.* を確認）", "warn");
+
+    if(cache.backFile) log(`OK 裏面検出: ${cache.backFile}`, "muted");
+    else log("裏面：未設定（黒い裏面で動作）", "muted");
 
     const mapped = Object.keys(cache.cardMap || {}).length;
     if(mapped >= 20) log("OK カード画像：No.01〜20を自動紐付け", "muted");
@@ -379,6 +388,19 @@ async function applyImagesFromCache(){
     el.fieldBottom.style.backgroundImage = "";
   }
 
+  // Back
+  state.img.backUrl = "";
+  if(cache.backFile){
+    const b = vercelPathAssets(cache.backFile);
+    if(await validateImage(b)){
+      state.img.backUrl = b;
+      log("OK 裏面読込：適用", "muted");
+    }else{
+      log(`NG 裏面読込失敗: ${b}（黒で継続）`, "warn");
+      state.img.backUrl = "";
+    }
+  }
+
   // Cards
   state.img.cardUrlByNo = {};
   state.img.cardFileByNo = {};
@@ -398,16 +420,13 @@ async function applyImagesFromCache(){
     const key = pad2(no);
     if(!state.img.cardUrlByNo[key]) miss.push(key);
   }
-  if(miss.length){
-    log(`カード画像未検出：${miss.join(", ")}`, "warn");
-  }else{
-    log("カード画像：20種すべて検出", "muted");
-  }
+  if(miss.length) log(`カード画像未検出：${miss.join(", ")}`, "warn");
+  else log("カード画像：20種すべて検出", "muted");
 
   renderAll();
 }
 
-/* ---------- Rendering ---------- */
+/* ---------- Rendering helpers ---------- */
 function bindLongPress(node, fn, ms=420){
   let t = null;
   const start = ()=> { clearTimeout(t); t = setTimeout(fn, ms); };
@@ -428,9 +447,7 @@ function faceForCard(card, isEnemy=false){
   }else{
     face.classList.add("fallback");
   }
-  if(isEnemy){
-    face.style.transform = "rotate(180deg)";
-  }
+  if(isEnemy) face.style.transform = "rotate(180deg)";
   return face;
 }
 
@@ -439,81 +456,11 @@ function makeSlot(card, opts={}){
   slot.className = "slot";
   if(opts.glow) slot.classList.add("glow");
   if(opts.sel) slot.classList.add("sel");
-
   if(card){
     slot.appendChild(faceForCard(card, !!opts.enemy));
     bindLongPress(slot, ()=> openViewer(card));
   }
   return slot;
-}
-
-function renderZones(){
-  el.aiE.innerHTML = "";
-  for(let i=0;i<3;i++){
-    el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
-  }
-
-  el.aiC.innerHTML = "";
-  for(let i=0;i<3;i++){
-    const c = state.AI.C[i];
-    const slot = makeSlot(c, {enemy:true});
-    slot.addEventListener("click", ()=> onClickEnemyCard(i), {passive:true});
-    el.aiC.appendChild(slot);
-  }
-
-  el.pC.innerHTML = "";
-  for(let i=0;i<3;i++){
-    const c = state.P1.C[i];
-    const glow = (state.phase==="MAIN" && !state.normalSummonUsed && state.selectedHandIndex!=null && !c);
-    const sel = (state.selectedAttackerPos===i);
-    const slot = makeSlot(c, {glow, sel});
-    slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
-    if(!c){
-      bindLongPress(slot, ()=> onLongPressEmptySlotForKenSan(i));
-    }
-    el.pC.appendChild(slot);
-  }
-
-  el.pE.innerHTML = "";
-  for(let i=0;i<3;i++){
-    el.pE.appendChild(makeSlot(state.P1.E[i]));
-  }
-}
-
-function renderHand(){
-  el.hand.innerHTML = "";
-  for(let i=0;i<state.P1.hand.length;i++){
-    const c = state.P1.hand[i];
-    const h = document.createElement("div");
-    h.className = "handCard";
-
-    const playable = (state.phase==="MAIN" && !state.normalSummonUsed);
-    if(playable) h.classList.add("glow");
-    if(state.selectedHandIndex===i) h.classList.add("sel");
-
-    const url = state.img.cardUrlByNo[pad2(c.no)];
-    if(url){
-      h.style.backgroundImage = `url("${url}")`;
-      h.style.backgroundSize = "cover";
-      h.style.backgroundPosition = "center";
-    }
-
-    h.addEventListener("click", ()=>{
-      state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
-      state.selectedAttackerPos = null;
-      renderAll();
-    }, {passive:true});
-
-    bindLongPress(h, ()=> openViewer(c));
-    el.hand.appendChild(h);
-  }
-}
-
-function renderAll(){
-  updateHUD();
-  updateCounts();
-  renderZones();
-  renderHand();
 }
 
 /* ---------- Modals ---------- */
@@ -533,7 +480,6 @@ document.addEventListener("click", (e)=>{
 });
 
 function openViewer(card){
-  // NO No in title (as requested)
   el.viewerTitle.textContent = `${card.name}`;
   el.viewerText.textContent = (card.text || "");
   const url = state.img.cardUrlByNo[pad2(card.no)];
@@ -564,7 +510,7 @@ function openZone(title, cards){
       meta.className = "zMeta";
       const t = document.createElement("div");
       t.className = "t";
-      t.textContent = `${c.name}`; // NO No
+      t.textContent = `${c.name}`;
       const s = document.createElement("div");
       s.className = "s";
       s.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
@@ -593,50 +539,10 @@ el.btnYes.addEventListener("click", ()=>{
   if(confirmYes){ const fn = confirmYes; confirmYes=null; fn(); }
 }, {passive:true});
 
-/* ---------- Gameplay Core ---------- */
-function startGame(){
-  state.turn = 1;
-  state.phase = "START";
-  state.normalSummonUsed = false;
-  state.selectedHandIndex = null;
-  state.selectedAttackerPos = null;
-
-  state.P1.deck = buildDeck();
-  state.AI.deck = buildDeck();
-
-  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
-  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
-
-  state.P1.hand = [];
-  state.AI.hand = [];
-
-  draw("P1", 4);
-  draw("AI", 4);
-
-  state.P1.C = [null,null,null];
-  state.AI.C = [null,null,null];
-  state.P1.E = [null,null,null];
-  state.AI.E = [null,null,null];
-  state.P1.wing = [];
-  state.AI.wing = [];
-  state.P1.outside = [];
-  state.AI.outside = [];
-
-  log("ゲーム開始：シールド3 / 初手4", "muted");
-  renderAll();
-}
-
-function draw(side, n=1){
-  const p = state[side];
-  for(let i=0;i<n;i++){
-    if(p.deck.length<=0){
-      log(`${side==="P1"?"あなた":"AI"}：デッキ切れ（ドロー不能）`, "warn");
-      if(side==="P1") log("敗北：デッキ切れ", "warn");
-      else log("勝利：相手デッキ切れ", "muted");
-      return;
-    }
-    p.hand.push(p.deck.shift());
-  }
+/* ---------- Turn / Phase ---------- */
+function setActiveSide(side){
+  state.activeSide = side;
+  setActiveUI();
 }
 
 function nextPhase(){
@@ -650,35 +556,98 @@ function nextPhase(){
   }
 
   if(state.phase==="DRAW"){
-    draw("P1",1);
-    draw("AI",1);
-    log("ドロー +1", "muted");
+    draw(state.activeSide, 1);
+    log(`${state.activeSide==="P1"?"あなた":"AI"}：ドロー +1`, "muted");
   }
 
   if(state.phase==="MAIN"){
-    aiMain();
+    if(state.activeSide==="AI") aiMain();
   }
 
   if(state.phase==="BATTLE"){
     state.selectedAttackerPos = null;
+    if(state.activeSide==="AI") aiBattle();
   }
 
   if(state.phase==="END"){
-    enforceHandLimit("P1");
-    enforceHandLimit("AI");
+    enforceHandLimit(state.activeSide);
   }
 
+  updateHUD();
   renderAll();
+
+  // If AI turn, auto-advance to keepテンポ
+  if(state.activeSide==="AI") autoAdvanceAI();
 }
 
 function endTurn(){
-  state.turn++;
-  state.phase = "START";
-  state.normalSummonUsed = false;
-  state.selectedHandIndex = null;
-  state.selectedAttackerPos = null;
-  log(`TURN ${state.turn} 開始`, "muted");
-  renderAll();
+  // finish end phase effects already handled by NEXT (but allow END anytime)
+  state.phase = "END";
+  enforceHandLimit(state.activeSide);
+
+  if(state.activeSide==="P1"){
+    // switch to AI
+    setActiveSide("AI");
+    state.phase = "START";
+    log("相手のターン開始", "warn");
+    updateHUD(); renderAll();
+    autoAdvanceAI(true);
+  }else{
+    // switch to you, increment turn count (1ターン=両者が動くのではなく、ここでは便宜上「あなたのターン開始」をTURN+1扱い）
+    setActiveSide("P1");
+    state.turn++;
+    state.phase = "START";
+    log(`TURN ${state.turn} あなたのターン開始`, "muted");
+    updateHUD(); renderAll();
+  }
+}
+
+/* AI auto flow (START→DRAW→MAIN→BATTLE→END→endTurn) */
+function autoAdvanceAI(forceStart=false){
+  if(state.busyAI) return;
+  if(state.activeSide!=="AI") return;
+
+  state.busyAI = true;
+
+  const step = ()=>{
+    if(state.activeSide!=="AI"){ state.busyAI=false; return; }
+
+    // ensure start
+    if(forceStart){
+      forceStart=false;
+      state.phase = "START";
+      updateHUD(); renderAll();
+    }
+
+    // advance until END then endTurn
+    if(state.phase !== "END"){
+      nextPhase();
+      setTimeout(step, 320);
+      return;
+    }
+
+    // END reached -> switch to you
+    setTimeout(()=>{
+      state.busyAI=false;
+      endTurn();
+    }, 420);
+  };
+
+  setTimeout(step, 260);
+}
+
+/* ---------- Deck / Hand / Shield ---------- */
+function draw(side, n=1){
+  const p = state[side];
+  for(let i=0;i<n;i++){
+    if(p.deck.length<=0){
+      log(`${side==="P1"?"あなた":"AI"}：デッキ切れ（ドロー不能）`, "warn");
+      if(side==="P1") log("敗北：デッキ切れ", "warn");
+      else log("勝利：相手デッキ切れ", "muted");
+      return;
+    }
+    p.hand.push(p.deck.shift());
+  }
 }
 
 function enforceHandLimit(side){
@@ -690,8 +659,183 @@ function enforceHandLimit(side){
   }
 }
 
-/* ---------- Summon ---------- */
+/* ---------- Game start ---------- */
+function startGame(){
+  state.turn = 1;
+  state.phase = "START";
+  state.normalSummonUsed = false;
+  state.selectedHandIndex = null;
+  state.selectedAttackerPos = null;
+  state.busyAI = false;
+
+  state.P1.deck = buildDeck();
+  state.AI.deck = buildDeck();
+
+  // shield: top3
+  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
+  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
+
+  // hand 4
+  state.P1.hand = [];
+  state.AI.hand = [];
+  draw("P1", 4);
+  draw("AI", 4);
+
+  state.P1.C = [null,null,null];
+  state.AI.C = [null,null,null];
+  state.P1.E = [null,null,null];
+  state.AI.E = [null,null,null];
+  state.P1.wing = [];
+  state.AI.wing = [];
+  state.P1.outside = [];
+  state.AI.outside = [];
+
+  // random first/second
+  state.firstSide = (Math.random() < 0.5) ? "P1" : "AI";
+  setActiveSide(state.firstSide);
+
+  // show who goes first
+  if(state.firstSide==="P1"){
+    el.firstInfo.textContent = "先攻：あなた";
+    log("先攻：あなた", "muted");
+  }else{
+    el.firstInfo.textContent = "先攻：相手";
+    log("先攻：相手", "warn");
+  }
+
+  log("ゲーム開始：シールド3（裏向き）/ 初手4", "muted");
+
+  updateHUD();
+  renderAll();
+
+  // If AI is first, auto start
+  if(state.activeSide==="AI"){
+    log("相手のターン開始", "warn");
+    autoAdvanceAI(true);
+  }else{
+    log("あなたのターン開始", "muted");
+  }
+}
+
+/* ---------- Rendering ---------- */
+function renderZones(){
+  el.aiE.innerHTML = "";
+  for(let i=0;i<3;i++) el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
+
+  el.aiC.innerHTML = "";
+  for(let i=0;i<3;i++){
+    const c = state.AI.C[i];
+    const slot = makeSlot(c, {enemy:true});
+    slot.addEventListener("click", ()=> onClickEnemyCard(i), {passive:true});
+    el.aiC.appendChild(slot);
+  }
+
+  el.pC.innerHTML = "";
+  for(let i=0;i<3;i++){
+    const c = state.P1.C[i];
+    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed && state.selectedHandIndex!=null && !c);
+    const sel = (state.selectedAttackerPos===i);
+    const slot = makeSlot(c, {glow, sel});
+    slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
+    if(!c) bindLongPress(slot, ()=> onLongPressEmptySlotForKenSan(i));
+    el.pC.appendChild(slot);
+  }
+
+  el.pE.innerHTML = "";
+  for(let i=0;i<3;i++) el.pE.appendChild(makeSlot(state.P1.E[i]));
+}
+
+function renderHand(){
+  el.hand.innerHTML = "";
+  for(let i=0;i<state.P1.hand.length;i++){
+    const c = state.P1.hand[i];
+    const h = document.createElement("div");
+    h.className = "handCard";
+
+    const playable = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed);
+    if(playable) h.classList.add("glow");
+    if(state.selectedHandIndex===i) h.classList.add("sel");
+
+    const url = state.img.cardUrlByNo[pad2(c.no)];
+    if(url){
+      h.style.backgroundImage = `url("${url}")`;
+      h.style.backgroundSize = "cover";
+      h.style.backgroundPosition = "center";
+    }
+
+    h.addEventListener("click", ()=>{
+      if(state.activeSide!=="P1") return;
+      state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
+      state.selectedAttackerPos = null;
+      renderAll();
+    }, {passive:true});
+
+    bindLongPress(h, ()=> openViewer(c));
+    el.hand.appendChild(h);
+  }
+}
+
+// Enemy hand: backs only (count visible, content hidden)
+function renderEnemyHand(){
+  el.aiHand.innerHTML = "";
+  const n = state.AI.hand.length;
+  const show = Math.min(n, 12);
+  for(let i=0;i<show;i++){
+    const b = document.createElement("div");
+    b.className = "handBack";
+    if(state.img.backUrl){
+      b.style.backgroundImage = `url("${state.img.backUrl}")`;
+    }
+    el.aiHand.appendChild(b);
+  }
+  if(n > show){
+    const more = document.createElement("div");
+    more.className = "handBack";
+    more.textContent = `+${n-show}`;
+    more.style.display = "flex";
+    more.style.alignItems = "center";
+    more.style.justifyContent = "center";
+    more.style.fontWeight = "1000";
+    more.style.color = "rgba(233,236,255,.92)";
+    el.aiHand.appendChild(more);
+  }
+}
+
+// Shield slots: show back if shield exists else dim
+function renderShields(){
+  const nodes = document.querySelectorAll(".shieldSlot");
+  nodes.forEach((cell)=>{
+    const side = cell.getAttribute("data-side");
+    const idx = Number(cell.getAttribute("data-idx") || "0");
+    const back = cell.querySelector(".backCard");
+    const exists = !!state[side].shield[idx];
+    back.classList.toggle("empty", !exists);
+
+    if(state.img.backUrl){
+      back.style.backgroundImage = exists ? `url("${state.img.backUrl}")` : "";
+    }else{
+      back.style.backgroundImage = "";
+    }
+
+    // click to attack shield only when it is enemy shield and player is attacking and enemy has no chars
+    cell.onclick = ()=>{
+      if(side==="AI") onClickEnemyShield(idx);
+    };
+  });
+}
+
+function renderAll(){
+  updateCounts();
+  renderZones();
+  renderHand();
+  renderEnemyHand();
+  renderShields();
+}
+
+/* ---------- Battle / Summon ---------- */
 function onClickYourC(pos){
+  if(state.activeSide!=="P1") return;
+
   if(state.phase === "MAIN"){
     if(state.selectedHandIndex==null) return;
     if(state.P1.C[pos]) return;
@@ -703,9 +847,10 @@ function onClickYourC(pos){
       return;
     }
     if(card.rank >= 5){
-      log("RANK5以上は見参（空スロット長押し）で仮実装です", "warn");
+      log("RANK5以上は見参（空スロット長押し）です", "warn");
       return;
     }
+
     state.P1.C[pos] = card;
     state.P1.hand.splice(state.selectedHandIndex,1);
     state.selectedHandIndex = null;
@@ -724,16 +869,19 @@ function onClickYourC(pos){
 }
 
 function onLongPressEmptySlotForKenSan(pos){
+  if(state.activeSide!=="P1") return;
   if(state.phase!=="MAIN") return;
   if(state.selectedHandIndex==null) return;
   if(state.P1.C[pos]) return;
 
   const card = state.P1.hand[state.selectedHandIndex];
   if(card.rank < 5) return;
+
   if(state.P1.hand.length < 2){
     log("見参：仮コスト（手札1枚）が足りません", "warn");
     return;
   }
+
   askConfirm("見参（仮）", `${card.name} を見参しますか？\n仮コスト：手札を1枚ウイングへ送ります`, ()=>{
     const discIdx = (state.selectedHandIndex===state.P1.hand.length-1) ? 0 : state.P1.hand.length-1;
     const disc = state.P1.hand.splice(discIdx,1)[0];
@@ -748,15 +896,14 @@ function onLongPressEmptySlotForKenSan(pos){
   });
 }
 
-/* ---------- Battle ---------- */
 function onClickEnemyCard(enemyPos){
+  if(state.activeSide!=="P1") return;
   if(state.phase!=="BATTLE") return;
   if(state.selectedAttackerPos==null) return;
-  const atkCard = state.P1.C[state.selectedAttackerPos];
-  if(!atkCard){ state.selectedAttackerPos=null; renderAll(); return; }
 
+  const atkCard = state.P1.C[state.selectedAttackerPos];
   const defCard = state.AI.C[enemyPos];
-  if(!defCard) return;
+  if(!atkCard || !defCard) return;
 
   askConfirm("攻撃確認", `${atkCard.name} → ${defCard.name}\n攻撃しますか？`, ()=>{
     resolveBattle_CvC("P1", state.selectedAttackerPos, "AI", enemyPos);
@@ -792,11 +939,14 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
   }
 }
 
-function attackShieldOrDirect(){
+// Player attacks shield (if no enemy characters)
+function onClickEnemyShield(idx){
+  if(state.activeSide!=="P1") return;
   if(state.phase!=="BATTLE") return;
   if(state.selectedAttackerPos==null) return;
+
   const atkCard = state.P1.C[state.selectedAttackerPos];
-  if(!atkCard){ state.selectedAttackerPos=null; renderAll(); return; }
+  if(!atkCard) return;
 
   const enemyHasC = state.AI.C.some(Boolean);
   if(enemyHasC){
@@ -804,30 +954,28 @@ function attackShieldOrDirect(){
     return;
   }
 
-  if(state.AI.shield.length>0){
-    askConfirm("攻撃確認", `${atkCard.name} がシールドを攻撃します。\nシールドを1枚破壊（→相手手札）しますか？`, ()=>{
-      const sh = state.AI.shield.shift();
-      state.AI.hand.push(sh);
-      log(`シールド破壊：相手手札へ → ${sh.name}`, "muted");
-      state.selectedAttackerPos=null;
-      renderAll();
-    });
-  }else{
-    askConfirm("フィニッシュ確認", `${atkCard.name} がダイレクトアタックします。\n勝利しますか？`, ()=>{
-      log("勝利：ダイレクトアタック成功！", "muted");
-      state.selectedAttackerPos=null;
-      renderAll();
-    });
+  if(!state.AI.shield[idx]){
+    log("そのシールドは既にありません", "warn");
+    return;
   }
+
+  askConfirm("攻撃確認", `${atkCard.name} がシールドを攻撃します。\nシールドを破壊（→相手手札）しますか？`, ()=>{
+    const sh = state.AI.shield[idx];
+    state.AI.shield[idx] = null;
+    state.AI.hand.push(sh);
+    log(`シールド破壊：相手手札へ → ${sh.name}`, "muted");
+
+    // victory check: all shields gone and direct attack
+    if(state.AI.shield.every(x=>!x)){
+      log("相手シールド全破壊：次の攻撃でダイレクト可能", "muted");
+    }
+
+    state.selectedAttackerPos = null;
+    renderAll();
+  });
 }
 
-function onClickShieldCell(side){
-  if(side==="AI"){
-    attackShieldOrDirect();
-  }
-}
-
-/* ---------- AI (simple) ---------- */
+/* ---------- AI ---------- */
 function aiMain(){
   const empty = state.AI.C.findIndex(x=>!x);
   if(empty>=0){
@@ -852,6 +1000,7 @@ function aiMain(){
 }
 
 function aiBattle(){
+  // each AI character attacks once
   for(let i=0;i<3;i++){
     const atk = state.AI.C[i];
     if(!atk) continue;
@@ -861,8 +1010,11 @@ function aiBattle(){
       const t = playerIdxs[Math.floor(Math.random()*playerIdxs.length)];
       resolveBattle_CvC("AI", i, "P1", t);
     }else{
-      if(state.P1.shield.length>0){
-        const sh = state.P1.shield.shift();
+      // attack shields if any, else direct
+      const sidx = state.P1.shield.findIndex(x=>!!x);
+      if(sidx>=0){
+        const sh = state.P1.shield[sidx];
+        state.P1.shield[sidx] = null;
         state.P1.hand.push(sh);
         log(`AI：シールド破壊 → あなた手札へ ${sh.name}`, "warn");
       }else{
@@ -883,7 +1035,6 @@ function bindBoardClicks(){
 
     if(act==="aiWing") openZone("ENEMY WING", state.AI.wing.slice().reverse());
     if(act==="aiOutside") openZone("ENEMY OUTSIDE", state.AI.outside.slice().reverse());
-    if(act==="aiShield") onClickShieldCell("AI");
 
     if(act==="pWing") openZone("YOUR WING", state.P1.wing.slice().reverse());
     if(act==="pOutside") openZone("YOUR OUTSIDE", state.P1.outside.slice().reverse());
@@ -891,19 +1042,15 @@ function bindBoardClicks(){
 }
 
 /* ---------- UI binds ---------- */
-function startToGame(){
-  el.title.classList.remove("active");
-  el.game.classList.add("active");
-  log("対戦画面：表示OK", "muted");
-  startGame();
-}
-
 function bindStart(){
   el.boot.textContent = "JS: OK（読み込み成功）";
   const go = ()=>{
     if(state.started) return;
     state.started=true;
-    startToGame();
+    el.title.classList.remove("active");
+    el.game.classList.add("active");
+    log("対戦画面：表示OK", "muted");
+    startGame();
   };
   el.btnStart.addEventListener("click", go, {passive:true});
   el.title.addEventListener("click", go, {passive:true});
@@ -940,18 +1087,19 @@ function bindSettings(){
     el.fieldBottom.style.backgroundImage = "";
     state.img.cardUrlByNo = {};
     state.img.cardFileByNo = {};
+    state.img.backUrl = "";
     renderAll();
   }, {passive:true});
 }
 
 function bindPhaseButtons(){
   el.btnNext.addEventListener("click", ()=>{
-    if(state.phase==="BATTLE") aiBattle();
+    if(state.activeSide!=="P1") return;
     nextPhase();
   }, {passive:true});
 
   el.btnEnd.addEventListener("click", ()=>{
-    if(state.phase==="BATTLE") aiBattle();
+    if(state.activeSide!=="P1") return;
     endTurn();
   }, {passive:true});
 }
@@ -962,13 +1110,6 @@ function bindLogButton(){
     renderLogModal();
     showModal("logM");
   }, 360);
-
-  // short tap: show last one quickly (optional)
-  el.btnLog.addEventListener("click", ()=>{
-    if(LOGS[0]) {
-      // do nothing heavy; keep silent to save UX
-    }
-  }, {passive:true});
 }
 
 /* ---------- Init ---------- */
@@ -992,7 +1133,7 @@ async function init(){
   }
 
   el.boot.textContent = "JS: OK（準備完了）";
-  log("操作：盤面は常時フル表示／詳細は長押し", "muted");
+  log("盤面は常時フル表示／詳細は長押し／シールドは裏向きで表示", "muted");
 }
 
 document.addEventListener("DOMContentLoaded", init);
