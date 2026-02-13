@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css?v=20001" />
+  <link rel="stylesheet" href="./style.css?v=30001" />
 </head>
 <body>
   <!-- Title -->
@@ -16,7 +16,7 @@
       </div>
       <div class="titleMeta">
         <div class="pill">長押し：カード拡大</div>
-        <div class="pill">画像はあとから一括登録OK</div>
+        <div class="pill">画像はjpg/png両対応</div>
       </div>
       <button id="btnStart" class="btn primary">画面をタップして開始</button>
       <div class="small" id="bootStatus">JS: 未読み込み</div>
@@ -42,24 +42,26 @@
     <main class="layout">
       <section class="board">
         <div class="playmat" id="playmat">
-          <div class="matImg" id="matImg"></div>
+          <!-- ★相手/自分の“2枚フィールド”を同時表示 -->
+          <div class="matImg matTop" id="matTop"></div>
+          <div class="matImg matBottom" id="matBottom"></div>
 
           <!-- 製品版 6×4（康臣さん指定配置） -->
           <div class="matGrid6">
             <!-- 相手 -->
             <div class="cell pile" data-zone="AI_deck"><div class="zTitle">D</div><div class="zCount" id="aiDeckCount">0</div></div>
             <div class="cell pile shield" data-zone="AI_sh1"><div class="zTitle">S</div><div class="zCount" id="aiShieldCount">3</div></div>
-            <div class="cell pile shield" data-zone="AI_sh2"><div class="zTitle">S</div><div class="zCount"> </div></div>
-            <div class="cell pile shield" data-zone="AI_sh3"><div class="zTitle">S</div><div class="zCount"> </div></div>
+            <div class="cell pile shield" data-zone="AI_sh2"><div class="zTitle">S</div><div class="zCount"></div></div>
+            <div class="cell pile shield" data-zone="AI_sh3"><div class="zTitle">S</div><div class="zCount"></div></div>
 
             <div class="cell pile" data-zone="AI_wing"><div class="zTitle">W</div><div class="zCount" id="aiWingCount">0</div></div>
-            <div class="cell stage" data-zone="AI_eff" style="grid-column:2 / span 3;">
+            <div class="cell stage enemyRow" data-zone="AI_eff" style="grid-column:2 / span 3;">
               <div class="rowTitle">ENEMY E</div>
               <div class="slots" id="aiEff"></div>
             </div>
 
             <div class="cell pile" data-zone="AI_outside"><div class="zTitle">O</div><div class="zCount" id="aiOutsideCount">0</div></div>
-            <div class="cell stage" data-zone="AI_stage" style="grid-column:2 / span 3;">
+            <div class="cell stage enemyRow" data-zone="AI_stage" style="grid-column:2 / span 3;">
               <div class="rowTitle">ENEMY C</div>
               <div class="slots" id="aiStage"></div>
             </div>
@@ -78,8 +80,8 @@
             <div class="cell pile" data-zone="P1_wing"><div class="zTitle">W</div><div class="zCount" id="p1WingCount">0</div></div>
 
             <div class="cell pile shield" data-zone="P1_sh1"><div class="zTitle">S</div><div class="zCount" id="p1ShieldCount">3</div></div>
-            <div class="cell pile shield" data-zone="P1_sh2"><div class="zTitle">S</div><div class="zCount"> </div></div>
-            <div class="cell pile shield" data-zone="P1_sh3"><div class="zTitle">S</div><div class="zCount"> </div></div>
+            <div class="cell pile shield" data-zone="P1_sh2"><div class="zTitle">S</div><div class="zCount"></div></div>
+            <div class="cell pile shield" data-zone="P1_sh3"><div class="zTitle">S</div><div class="zCount"></div></div>
             <div class="cell pile" data-zone="P1_deck"><div class="zTitle">D</div><div class="zCount" id="p1DeckCount">0</div></div>
           </div>
         </div>
@@ -116,7 +118,7 @@
     </div>
   </div>
 
-  <!-- 画像設定（一括貼り付け） -->
+  <!-- 画像設定 -->
   <div class="modal" id="imgModal">
     <div class="modalBack" id="imgClose"></div>
     <div class="modalCard">
@@ -131,17 +133,14 @@
             <input class="input" id="fieldInput" placeholder="例：/assets/field.jpg（空なら自動探索）" />
             <button class="btn small" id="btnSaveField">保存</button>
           </div>
-          <div class="settingsHint">
-            例：field.jpg / field.png / field.png.jpg など名前が違っても自動探索します。
-          </div>
+          <div class="settingsHint">上半分＝相手（逆向き）／下半分＝自分（正向き）で同時表示します。</div>
         </div>
 
         <div class="settingsBlock">
           <div class="settingsTitle">カード画像（一括）</div>
           <div class="settingsHint">
-            下に20行まとめて貼れます（1枚ずつ入力しません）。<br>
             書式：<b>01=01_カード名.jpg</b> または <b>01=/assets/cards/01_カード名.png.JPG</b><br>
-            ※拡張子は jpg/png どちらでもOK（.png.JPG もOK）
+            ※jpg/png、二重拡張子（.png.JPG）もOK
           </div>
           <textarea class="input" id="bulkMap" rows="12" placeholder="01=01_カード名.jpg&#10;02=02_カード名.png&#10;..."></textarea>
           <div class="settingsRow bottomRow">
@@ -153,6 +152,6 @@
     </div>
   </div>
 
-  <script src="./script.js?v=20001"></script>
+  <script src="./script.js?v=30001"></script>
 </body>
 </html>
