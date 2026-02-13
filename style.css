@@ -29,7 +29,6 @@ body{
 .btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
 .btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
 .btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
-.btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
 
 .chip{
   padding:8px 10px; border-radius:999px;
@@ -73,11 +72,11 @@ body{
 }
 .small{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-/* Layout：盤面大きく、右パネル細め */
+/* Layout（右パネルが細すぎるとカードがバー化するので最小幅を保証） */
 .layout{
   flex:1;
   display:grid;
-  grid-template-columns: 1.72fr 0.28fr;
+  grid-template-columns: 1fr minmax(320px, 420px);
   gap:10px;
   padding:10px;
   min-height:0;
@@ -96,38 +95,44 @@ body{
 }
 .playmat{
   position:relative;
-  width:100%; height:100%;
-  min-height:360px;
-  display:flex; align-items:center; justify-content:center;
-}
-.playmat::before{
-  content:"";
-  display:block;
   width:100%;
-  padding-top:68%;
-  pointer-events:none;
+  height:100%;
+  min-height:520px;
+  display:block;
 }
+
+/* ★相手/自分フィールドを上下に同時表示 */
 .matImg{
-  position:absolute; inset:0;
+  position:absolute;
+  left:0; right:0;
   background-repeat:no-repeat;
   background-position:center;
   background-size:contain;
   pointer-events:none;
   filter:saturate(1.05) contrast(1.05);
 }
+.matTop{
+  top:0;
+  height:50%;
+  transform: rotate(180deg);
+  transform-origin:center;
+  opacity:0.92;
+}
+.matBottom{
+  bottom:0;
+  height:50%;
+  opacity:0.92;
+}
 
-/* ★製品版 6×4 グリッド（康臣さんの配置） */
+/* ★製品版 6×4 グリッド：行の高さ配分を調整して“バー化”を防止 */
 .matGrid6{
   position:absolute; inset:0;
   display:grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(6, 1fr);
+  /* 上下の山札/シールド行は薄く、キャラ/エフェクト行は厚く */
+  grid-template-rows: 0.75fr 1.15fr 1.15fr 1.15fr 1.15fr 0.75fr;
   gap:10px;
-  padding:10px;
-
-  /* 俯瞰（引き） */
-  transform: scale(0.92);
-  transform-origin:center;
+  padding:12px;
 }
 
 .cell{
@@ -138,22 +143,49 @@ body{
   overflow:hidden;
   position:relative;
 }
-.cell.pile{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
+
+.cell.pile{
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:4px;
+}
 .zTitle{ font-size:11px; letter-spacing:.22em; color:var(--muted); }
 .zCount{ font-size:18px; font-weight:1000; }
 
-.cell.stage{ padding:10px; display:flex; flex-direction:column; justify-content:center; }
+/* Stage cells */
+.cell.stage{
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; }
-.slots{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
+
+/* Slots：高さを確実に確保（aspect-ratio保険） */
+.slots{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+  min-height:120px;          /* ★ここが超重要：潰れ防止 */
+}
+@media (max-width: 900px){
+  .slots{ min-height:110px; }
+}
+@media (max-width: 420px){
+  .slots{ min-height:96px; }
+}
 
 .slot{
   width:calc((100% - 20px)/3);
-  aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(167,176,217,.20);
   background:rgba(6,8,14,.55);
   position:relative;
   overflow:hidden;
+
+  aspect-ratio:2/3;
+  min-height:90px;           /* ★保険 */
 }
 .slot.selected{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-2px); }
 
@@ -181,8 +213,10 @@ body{
 }
 .badge.atk{ left:auto; right:8px; }
 
-/* 相手側の“リアル卓上感”：盤面スロットを逆向き表示（上3行だけ） */
-.enemy .cardFace{ transform: rotate(180deg); }
+/* ★相手側のカードは逆向き（卓上の向こう側感） */
+.enemyRow .cardFace{
+  transform: rotate(180deg);
+}
 
 /* Panel */
 .panel{
@@ -191,7 +225,6 @@ body{
   flex-direction:column;
   gap:10px;
 
-  /* ★下端（ホームバー）対策 */
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
 .handHeader,.logHeader{
@@ -214,7 +247,7 @@ body{
   box-shadow:var(--shadow);
 }
 .handCard{
-  width:82px; flex:0 0 auto;
+  width:92px; flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(89,242,255,.18);
@@ -226,14 +259,13 @@ body{
 .handCard.selected{ outline:2px solid rgba(179,91,255,.55); transform:translateY(-2px); }
 
 .log{
-  flex:1; min-height:180px;
+  flex:1; min-height:200px;
   overflow:auto;
   padding:10px;
   border:1px solid rgba(89,242,255,.12);
   border-radius:18px;
   background:rgba(0,0,0,.22);
   box-shadow:var(--shadow);
-
   padding-bottom: calc(14px + env(safe-area-inset-bottom));
 }
 .logLine{ margin:6px 0; font-size:13px; line-height:1.35; color:rgba(233,236,255,.92); }
