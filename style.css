@@ -26,6 +26,7 @@ body{
 .screen{ display:none; height:100%; }
 .screen.active{ display:flex; flex-direction:column; height:100%; }
 
+/* Buttons */
 .btn{
   border:1px solid rgba(89,242,255,.22);
   background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
@@ -54,7 +55,7 @@ body{
 }
 
 .chip{
-  padding:8px 10px;
+  padding:7px 9px;
   border-radius:999px;
   background:linear-gradient(180deg, rgba(16,20,38,.9), rgba(6,8,14,.9));
   border:1px solid rgba(89,242,255,.18);
@@ -62,19 +63,8 @@ body{
   font-size:12px;
   letter-spacing:.08em;
 }
-.chip.subtle{ border:1px solid rgba(167,176,217,.18); color:var(--muted); }
 
-.topbar{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:10px;
-  gap:10px;
-  border-bottom:1px solid rgba(89,242,255,.12);
-  background:rgba(0,0,0,.18);
-}
-.topL{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.topR{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
-
-/* TITLE */
+/* Title */
 .titleWrap{
   margin:auto;
   width:min(820px,94vw);
@@ -99,46 +89,52 @@ body{
   background:rgba(16,20,38,.35);
   color:var(--muted);
 }
-.hint{
-  margin-top:14px;
-  text-align:left;
-  border-radius:18px;
-  padding:12px 14px;
-  border:1px solid rgba(89,242,255,.12);
-  background:rgba(0,0,0,.18);
-  line-height:1.55;
-  color:rgba(233,236,255,.92);
-}
 .mini{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-/* MAIN LAYOUT */
-.main{
+/* Minimal HUD */
+.hud{
+  position:fixed;
+  top:0; left:0; right:0;
+  z-index:30;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 10px calc(8px + env(safe-area-inset-top));
+  gap:10px;
+  pointer-events:none;
+}
+.hudLeft, .hudRight{ display:flex; gap:8px; align-items:center; }
+.hudLeft{ pointer-events:none; }
+.hudRight{ pointer-events:auto; }
+
+.iconBtn{
+  width:36px; height:36px;
+  border-radius:12px;
+  border:1px solid rgba(89,242,255,.18);
+  background:rgba(0,0,0,.30);
+  color:rgba(233,236,255,.92);
+  font-weight:1000;
+  box-shadow:0 10px 22px rgba(0,0,0,.35);
+}
+.iconBtn:active{ transform:translateY(1px); }
+
+/* Fullscreen Stage */
+.stage{
   flex:1;
   min-height:0;
-  display:grid;
-  grid-template-columns: 1fr 420px;
-  gap:10px;
-  padding:10px;
+  position:relative;
+  padding-top:64px; /* space for HUD */
+  padding-bottom: calc(92px + env(safe-area-inset-bottom)); /* space for hand dock */
 }
 
-/* BOARD */
-.board{
-  position:relative;
-  min-height:0;
-  border:1px solid rgba(89,242,255,.12);
-  border-radius:18px;
-  overflow:hidden;
-  background:rgba(0,0,0,.18);
-  box-shadow:var(--shadow);
-}
 .mat{
   position:relative;
   width:100%;
   height:100%;
-  min-height:600px;
+  min-height:0;
 }
 
-/* field background (上下同時) */
+/* Field background (top enemy rotated / bottom player normal) */
 .field{
   position:absolute;
   left:0; right:0;
@@ -153,28 +149,27 @@ body{
 .fieldTop{ top:0; height:50%; transform:rotate(180deg); transform-origin:center; }
 .fieldBottom{ bottom:0; height:50%; }
 
-/* GRID (6x4) */
+/* GRID 6x4 */
 .grid{
   position:absolute;
-  inset:0;
+  inset:8px;
   display:grid;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: 0.70fr 1.05fr 1.05fr 1.05fr 1.05fr 0.70fr;
   gap:10px;
-  padding:12px;
   z-index:1;
 }
 
 .cell{
-  /* フィールドが見えるように薄め */
-  background: rgba(10,12,22,.18);
+  background: rgba(10,12,22,.12); /* keep field visible */
   border: 1px solid rgba(89,242,255,.16);
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.26);
+  box-shadow: 0 10px 30px rgba(0,0,0,.22);
   overflow:hidden;
   position:relative;
   backdrop-filter: blur(1px);
 }
+
 .cell.pile{
   display:flex;
   flex-direction:column;
@@ -187,7 +182,7 @@ body{
 .z{ font-size:11px; letter-spacing:.22em; color:var(--muted); }
 .n{ font-size:18px; font-weight:1000; }
 
-.cell.stage{
+.cell.stageRow{
   padding:10px;
   display:flex;
   flex-direction:column;
@@ -214,53 +209,33 @@ body{
   min-height:90px;
   border-radius:14px;
   border:1px solid rgba(167,176,217,.22);
-  background:rgba(6,8,14,.45);
+  background:rgba(6,8,14,.42);
   position:relative;
   overflow:hidden;
   transform:translateZ(0);
 }
 .slot.glow{
   outline:2px solid rgba(89,242,255,.55);
-  box-shadow:0 0 0 2px rgba(89,242,255,.15), 0 10px 24px rgba(0,0,0,.38);
   transform:translateY(-2px);
 }
 .slot.sel{
   outline:2px solid rgba(179,91,255,.58);
-  box-shadow:0 0 0 2px rgba(179,91,255,.15), 0 10px 24px rgba(0,0,0,.38);
   transform:translateY(-2px);
 }
 
+/* Card face - NO text / NO number */
 .face{
   position:absolute; inset:0;
-  display:flex;
-  flex-direction:column;
-  justify-content:flex-end;
-  padding:8px;
   background-size:cover;
   background-position:center;
+  background-repeat:no-repeat;
 }
 .face.fallback{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
 }
-.name{
-  font-size:11px;
-  font-weight:1000;
-  line-height:1.2;
-  text-shadow:0 2px 12px rgba(0,0,0,.92);
-}
-.badge{
-  position:absolute;
-  top:8px; left:8px;
-  font-size:10px;
-  font-weight:1000;
-  padding:4px 6px;
-  border-radius:10px;
-  background:rgba(0,0,0,.55);
-  border:1px solid rgba(89,242,255,.18);
-}
-.badge.atk{ left:auto; right:8px; }
 .enemy .face{ transform:rotate(180deg); }
 
+/* Arrow overlay */
 .arrow{
   position:absolute;
   inset:0;
@@ -270,92 +245,74 @@ body{
 .arrow line{ stroke: rgba(89,242,255,.88); stroke-width:1.6; }
 .arrow polygon{ fill: rgba(89,242,255,.88); }
 
-/* SIDE */
-.side{
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+/* Hand dock overlay (small thumbnails) */
+.handDock{
+  position:fixed;
+  left:0; right:0;
+  bottom:0;
+  z-index:25;
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.55) 40%, rgba(0,0,0,.68));
+  pointer-events:none; /* allow board taps except on hand cards */
 }
-
-.cardPanel, .logPanel{
-  border:1px solid rgba(89,242,255,.12);
-  border-radius:18px;
-  background:rgba(0,0,0,.22);
-  box-shadow:var(--shadow);
-  overflow:hidden;
-}
-
-.panelHead{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:10px;
-  background:var(--panel);
-  border-bottom:1px solid rgba(89,242,255,.10);
-}
-.panelTitle{ font-weight:1000; letter-spacing:.18em; font-size:12px; }
-.panelSub{ font-size:12px; color:var(--muted); line-height:1.25; }
-
-/* HAND (画像＋名前の見える縮小カード) */
 .hand{
   display:flex;
   gap:10px;
   overflow-x:auto;
   padding:10px;
-  background:var(--panel2);
+  border-radius:18px;
+  border:1px solid rgba(89,242,255,.12);
+  background:rgba(10,12,22,.55);
+  box-shadow:var(--shadow);
+  pointer-events:auto; /* enable interactions */
 }
 .handCard{
-  width:108px;
+  width:74px;
   flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(89,242,255,.18);
   background:rgba(6,8,14,.55);
-  position:relative;
   overflow:hidden;
-  box-shadow:var(--shadow);
+  box-shadow:0 10px 24px rgba(0,0,0,.35);
+  position:relative;
 }
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform:translateY(-2px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.58); transform:translateY(-2px); }
-.handName{
-  position:absolute;
-  left:8px; right:8px; bottom:8px;
-  font-size:11px;
-  font-weight:1000;
-  line-height:1.15;
-  text-shadow:0 2px 12px rgba(0,0,0,.92);
-  background:linear-gradient(180deg, transparent, rgba(0,0,0,.55));
-  border-radius:10px;
-  padding:6px 6px 4px;
+
+/* Floating controls (bottom-right) */
+.fab{
+  position:fixed;
+  right:10px;
+  bottom: calc(120px + env(safe-area-inset-bottom)); /* above hand dock */
+  z-index:28;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
-.handNo{
-  position:absolute;
-  top:8px; left:8px;
-  font-size:10px;
+.fabBtn{
+  min-width:78px;
+  padding:10px 12px;
+  border-radius:16px;
+  border:1px solid rgba(89,242,255,.22);
+  background:rgba(0,0,0,.35);
+  color:rgba(233,236,255,.92);
   font-weight:1000;
-  padding:4px 6px;
-  border-radius:10px;
-  background:rgba(0,0,0,.55);
-  border:1px solid rgba(89,242,255,.18);
+  letter-spacing:.06em;
+  box-shadow:0 12px 28px rgba(0,0,0,.40);
+}
+.fabBtn:active{ transform:translateY(1px); }
+.fabBtn.ghost{
+  border:1px solid rgba(167,176,217,.22);
+  color:rgba(167,176,217,.95);
+}
+.fabBtn.danger{
+  border:1px solid rgba(255,77,109,.35);
+  background:rgba(255,77,109,.12);
 }
 
-/* LOG（見やすく小さめ） */
-.log{
-  height:120px;
-  overflow:auto;
-  padding:10px;
-  background:rgba(0,0,0,.18);
-}
-.log.hide{ display:none; }
-.logLine{ margin:6px 0; font-size:13px; line-height:1.35; color:rgba(233,236,255,.92); }
-.logLine.muted{ color:rgba(167,176,217,.92); }
-.logLine.warn{ color:rgba(255,77,109,.95); }
-
-/* MODALS */
-.modal{ display:none; position:fixed; inset:0; z-index:50; }
+/* Modals */
+.modal{ display:none; position:fixed; inset:0; z-index:60; }
 .modal.show{ display:block; }
 .back{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
 
@@ -371,6 +328,8 @@ body{
   box-shadow:var(--shadow);
   overflow:hidden;
 }
+.smallBox{ width:min(560px,94vw); }
+
 .boxHead{
   display:flex;
   align-items:center;
@@ -393,13 +352,14 @@ body{
   background:rgba(6,8,14,.55);
 }
 .viewerText{
-  font-size:14px;
-  line-height:1.6;
+  font-size:15px;
+  line-height:1.7;
   white-space:pre-wrap;
   color:rgba(233,236,255,.92);
 }
 @media (max-width:720px){
   .viewerBody{ grid-template-columns:1fr; }
+  .fab{ right:8px; }
 }
 
 .zoneList{
@@ -431,6 +391,21 @@ body{
 .zMeta .t{ font-weight:1000; font-size:13px; }
 .zMeta .s{ color:var(--muted); font-size:11px; }
 
+.logBody{
+  padding:12px;
+  max-height:72vh;
+  overflow:auto;
+}
+.logLine{
+  margin:6px 0;
+  font-size:13px;
+  line-height:1.35;
+  color:rgba(233,236,255,.92);
+}
+.logLine.muted{ color:rgba(167,176,217,.92); }
+.logLine.warn{ color:rgba(255,77,109,.95); }
+
+/* Confirm */
 .confirmBox{
   position:absolute;
   left:50%; top:50%;
@@ -454,6 +429,7 @@ body{
   justify-content:flex-end;
 }
 
+/* Settings / Help */
 .settings{
   padding:12px;
   display:flex;
@@ -491,21 +467,4 @@ body{
   border-radius:14px;
   border:1px solid rgba(89,242,255,.12);
   background:rgba(6,8,14,.55);
-}
-
-/* ===== スマホ対策：盤面を優先表示、手札＆ログを下部ドックへ ===== */
-@media (max-width: 980px){
-  body{ overflow:auto; }
-  .main{
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-    padding:8px;
-  }
-  .mat{ min-height: 520px; }
-  .side{
-    position:sticky;
-    bottom:0;
-    z-index:10;
-  }
-  .log{ height:92px; }
 }
