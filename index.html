@@ -1,187 +1,128 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>Manpuku World マンプクワールド</title>
-  <link rel="stylesheet" href="style.css?v=1000" />
+  <link rel="stylesheet" href="./style.css?v=4002" />
 </head>
 <body>
-
-<section id="titleScreen" class="screen active">
-  <div class="titlePanel">
-    <div class="logo">
-      <div class="logoMain">Manpuku World</div>
-      <div class="logoSub">マンプクワールド</div>
-    </div>
-
-    <div class="titleMeta">
-      <div class="pill">横持ち推奨</div>
-      <div class="pill">演出：派手（スキップ可）</div>
-      <div class="pill">カード：長押しで拡大</div>
-    </div>
-
-    <button id="btnStart" class="btn primary">画面をタップして開始</button>
-    <div class="small">（ロード後、自動でフィールド＆カード画像を探索します）</div>
-  </div>
-</section>
-
-<section id="gameScreen" class="screen">
-  <header class="topbar">
-    <div class="left">
-      <div class="chip" id="turnChip">TURN 1</div>
-      <div class="chip" id="phaseChip">START</div>
-      <div class="chip subtle" id="whoChip">YOU</div>
-    </div>
-
-    <div class="right">
-      <button class="btn" id="btnNextPhase">次のフェイズ</button>
-      <button class="btn" id="btnEndTurn">ターン終了</button>
-      <button class="btn ghost" id="btnSkipFx">演出スキップ: OFF</button>
-      <button class="btn ghost" id="btnSettings">画像設定</button>
-    </div>
-  </header>
-
-  <main class="layout">
-    <section class="board">
-      <div class="rotateHint" id="rotateHint">
-        <div class="rotateBox">
-          <div class="rotateTitle">横向き推奨</div>
-          <div class="rotateText">iPhoneを横向きにするとフィールド全体が見やすくなります。</div>
-          <button class="btn small" id="btnCloseRotateHint">このまま続ける</button>
-        </div>
+  <!-- Title -->
+  <section id="titleScreen" class="screen active">
+    <div class="titlePanel">
+      <div class="logo">
+        <div class="logoMain">Manpuku World</div>
+        <div class="logoSub">マンプクワールド</div>
       </div>
 
-      <div class="playmat" id="playmat">
-        <div class="matImg" id="matImg"></div>
+      <div class="titleMeta">
+        <div class="pill">カード：長押しで拡大</div>
+        <div class="pill">画像が無くてもプレイ確認OK</div>
+      </div>
 
-        <div class="matGrid" id="matGrid">
-          <div class="cell pile" data-zone="AI_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="aiOutsideCount">0</div></div>
-          <div class="cell pile" data-zone="AI_wing"><div class="zTitle">WING</div><div class="zCount" id="aiWingCount">0</div></div>
-          <div class="cell center"><div class="centerText">MANPUKU</div></div>
-          <div class="cell pile" data-zone="AI_deck"><div class="zTitle">DECK</div><div class="zCount" id="aiDeckCount">0</div></div>
+      <button id="btnStart" class="btn primary">画面をタップして開始</button>
+      <div class="small" id="bootStatus">JS: 未確認</div>
+    </div>
+  </section>
 
-          <div class="cell stage" data-zone="AI_stage" style="grid-column:1 / span 3;">
-            <div class="rowTitle">ENEMY STAGE</div>
-            <div class="slots" id="aiStage"></div>
-          </div>
-          <div class="cell pile shield" data-zone="AI_shield"><div class="zTitle">SHIELD</div><div class="zCount" id="aiShieldCount">3</div></div>
+  <!-- Game -->
+  <section id="gameScreen" class="screen">
+    <header class="topbar">
+      <div class="left">
+        <div class="chip" id="turnChip">TURN 1</div>
+        <div class="chip" id="phaseChip">START</div>
+        <div class="chip subtle" id="whoChip">YOU</div>
+        <div class="chip subtle" id="jsChip">JS: ...</div>
+      </div>
+      <div class="right">
+        <button class="btn" id="btnNextPhase">次のフェイズ</button>
+        <button class="btn" id="btnEndTurn">ターン終了</button>
+      </div>
+    </header>
 
-          <div class="cell stage" data-zone="P1_stage" style="grid-column:1 / span 3;">
-            <div class="rowTitle">YOUR STAGE</div>
-            <div class="slots" id="p1Stage"></div>
-          </div>
-          <div class="cell pile shield" data-zone="P1_shield"><div class="zTitle">SHIELD</div><div class="zCount" id="p1ShieldCount">3</div></div>
+    <main class="layout">
+      <section class="board">
+        <div class="playmat" id="playmat">
+          <div class="matImg" id="matImg"></div>
 
-          <div class="cell pile" data-zone="P1_deck"><div class="zTitle">DECK</div><div class="zCount" id="p1DeckCount">0</div></div>
-          <div class="cell pile" data-zone="P1_wing"><div class="zTitle">WING</div><div class="zCount" id="p1WingCount">0</div></div>
-          <div class="cell pile" data-zone="P1_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="p1OutsideCount">0</div></div>
-          <div class="cell hint">
-            <div class="mini">カード長押し：拡大</div>
-            <div class="mini">攻撃：攻撃側→相手をタップ→確認</div>
-            <div class="mini">WING/OUTSIDE：タップで一覧</div>
+          <div class="matGrid">
+            <!-- 上段：アウトサイド/ウイング/中央/デッキ（相手） -->
+            <div class="cell pile" data-zone="AI_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="aiOutsideCount">0</div></div>
+            <div class="cell pile" data-zone="AI_wing"><div class="zTitle">WING</div><div class="zCount" id="aiWingCount">0</div></div>
+            <div class="cell center"><div class="centerText">MANPUKU</div></div>
+            <div class="cell pile" data-zone="AI_deck"><div class="zTitle">DECK</div><div class="zCount" id="aiDeckCount">0</div></div>
+
+            <!-- 2段目：相手ステージ/相手シールド -->
+            <div class="cell stage" style="grid-column:1 / span 3;">
+              <div class="rowTitle">ENEMY STAGE</div>
+              <div class="slots" id="aiStage"></div>
+            </div>
+            <div class="cell pile shield"><div class="zTitle">SHIELD</div><div class="zCount" id="aiShieldCount">3</div></div>
+
+            <!-- 3段目：自分ステージ/自分シールド -->
+            <div class="cell stage" style="grid-column:1 / span 3;">
+              <div class="rowTitle">YOUR STAGE</div>
+              <div class="slots" id="p1Stage"></div>
+            </div>
+            <div class="cell pile shield"><div class="zTitle">SHIELD</div><div class="zCount" id="p1ShieldCount">3</div></div>
+
+            <!-- 下段：デッキ/ウイング/アウトサイド（自分）+ ヒント -->
+            <div class="cell pile" data-zone="P1_deck"><div class="zTitle">DECK</div><div class="zCount" id="p1DeckCount">0</div></div>
+            <div class="cell pile" data-zone="P1_wing"><div class="zTitle">WING</div><div class="zCount" id="p1WingCount">0</div></div>
+            <div class="cell pile" data-zone="P1_outside"><div class="zTitle">OUTSIDE</div><div class="zCount" id="p1OutsideCount">0</div></div>
+            <div class="cell hint">
+              <div class="mini">MAIN：手札をタップ → 空枠をタップで登場</div>
+              <div class="mini">BATTLE：自分キャラ → 相手キャラで攻撃</div>
+              <div class="mini">長押し：カード拡大</div>
+            </div>
           </div>
         </div>
+      </section>
 
-        <svg class="arrowLayer" id="arrowLayer" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <defs>
-            <marker id="arrowHead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-              <polygon points="0 0, 6 3, 0 6"></polygon>
-            </marker>
-          </defs>
-          <line id="attackLine" x1="0" y1="0" x2="0" y2="0" stroke-width="1.5" marker-end="url(#arrowHead)" />
-        </svg>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="handHeader">
-        <div class="label">HAND</div>
-        <div class="sub">（登場：MAINでキャラを空枠タップ）</div>
-      </div>
-      <div class="hand" id="hand"></div>
-
-      <div class="logHeader">
-        <div class="label">LOG</div>
-        <div class="sub">（画像NGが出たら「画像設定」で紐付け）</div>
-      </div>
-      <div class="log" id="log"></div>
-    </section>
-  </main>
-</section>
-
-<div class="modal" id="viewerModal">
-  <div class="modalBack" id="viewerClose"></div>
-  <div class="modalCard">
-    <div class="modalHeader">
-      <div class="modalTitle" id="viewerTitle">CARD</div>
-      <button class="btn small" id="viewerCloseBtn">閉じる</button>
-    </div>
-    <div class="viewerBody">
-      <img id="viewerImg" alt="card" />
-      <div class="viewerText" id="viewerText"></div>
-    </div>
-  </div>
-</div>
-
-<div class="modal" id="zoneModal">
-  <div class="modalBack" id="zoneClose"></div>
-  <div class="modalCard">
-    <div class="modalHeader">
-      <div class="modalTitle" id="zoneTitle">ZONE</div>
-      <button class="btn small" id="zoneCloseBtn">閉じる</button>
-    </div>
-    <div class="zoneList" id="zoneList"></div>
-  </div>
-</div>
-
-<div class="modal" id="confirmModal">
-  <div class="modalBack"></div>
-  <div class="modalCard smallCard">
-    <div class="modalHeader"><div class="modalTitle">確認</div></div>
-    <div class="confirmBody" id="confirmText">攻撃しますか？</div>
-    <div class="confirmBtns">
-      <button class="btn danger" id="confirmYes">YES</button>
-      <button class="btn" id="confirmNo">NO</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal" id="settingsModal">
-  <div class="modalBack" id="settingsClose"></div>
-  <div class="modalCard">
-    <div class="modalHeader">
-      <div class="modalTitle">画像設定（ここで紐付ければ、以後ずっと保存されます）</div>
-      <button class="btn small" id="settingsCloseBtn">閉じる</button>
-    </div>
-
-    <div class="settingsBody">
-      <div class="settingsBlock">
-        <div class="settingsTitle">フィールド画像URL</div>
-        <div class="settingsRow">
-          <input id="fieldUrlInput" class="input" placeholder="例：/assets/field.png.jpg など" />
-          <button id="btnSaveFieldUrl" class="btn">保存</button>
-          <button id="btnAutoField" class="btn ghost">自動探索</button>
+      <section class="panel">
+        <div class="handHeader">
+          <div class="label">HAND</div>
+          <div class="sub">画像が無くても名前でプレイできます</div>
         </div>
-        <div class="settingsHint">※ フィールド画像が出ない時は、ここに正しいURLを入れて保存してください。</div>
-      </div>
+        <div class="hand" id="hand"></div>
 
-      <div class="settingsBlock">
-        <div class="settingsTitle">カード画像URL（Noごと）</div>
-        <div class="settingsHint">
-          画像が出ないカードだけ、URLを保存してください（以後ずっと残ります）。<br/>
-          例：<code>/assets/cards/01_黒の魔法使いクルエラ.png</code>
+        <div class="logHeader">
+          <div class="label">LOG</div>
+          <div class="sub">ここに状況が出ます（エラーも表示します）</div>
         </div>
-        <div id="cardMapList" class="cardMapList"></div>
-        <div class="settingsRow bottomRow">
-          <button id="btnAutoCards" class="btn ghost">カード画像を自動探索</button>
-          <button id="btnClearMap" class="btn ghost">保存した紐付けを全消去</button>
-        </div>
+        <div class="log" id="log"></div>
+      </section>
+    </main>
+  </section>
+
+  <!-- Viewer -->
+  <div class="modal" id="viewerModal">
+    <div class="modalBack" id="viewerClose"></div>
+    <div class="modalCard">
+      <div class="modalHeader">
+        <div class="modalTitle" id="viewerTitle">CARD</div>
+        <button class="btn small" id="viewerCloseBtn">閉じる</button>
+      </div>
+      <div class="viewerBody">
+        <img id="viewerImg" alt="card" />
+        <div class="viewerText" id="viewerText"></div>
       </div>
     </div>
   </div>
-</div>
 
-<script src="script.js?v=1000"></script>
+  <!-- Confirm -->
+  <div class="modal" id="confirmModal">
+    <div class="modalBack" id="confirmBack"></div>
+    <div class="modalCard smallCard">
+      <div class="modalHeader"><div class="modalTitle">確認</div></div>
+      <div class="confirmBody" id="confirmText">攻撃しますか？</div>
+      <div class="confirmBtns">
+        <button class="btn danger" id="confirmYes">YES</button>
+        <button class="btn" id="confirmNo">NO</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./script.js?v=4002"></script>
 </body>
 </html>
