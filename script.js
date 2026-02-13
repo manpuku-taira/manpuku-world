@@ -1,9 +1,13 @@
 /* =========================================================
-  Manpuku World - Product Base v40002
-  FIX:
-   - Encode filenames (Japanese / spaces / .png.JPG) so images load
-   - Auto set card names from detected filenames
-   - Ensure field shows both halves + board stays tappable on mobile
+  Manpuku World - UI Full Board v40003
+  Goals:
+   - Field always full screen (enemy+you)
+   - Hand as small overlay dock
+   - No No./name on cards in board/hand (clean look)
+   - Long-press opens viewer with BIG text (name/effect), NO No displayed
+   - Log hidden: long-press LOG button opens log modal
+   - Buttons space-saving: floating NEXT/END
+   - Keep image loading robust (Japanese filenames / .png.JPG)
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -17,13 +21,12 @@ const el = {
 
   chipTurn: $("chipTurn"),
   chipPhase: $("chipPhase"),
-  chipWho: $("chipWho"),
-  chipNet: $("chipNet"),
 
   btnHelp: $("btnHelp"),
   btnSettings: $("btnSettings"),
   btnNext: $("btnNext"),
   btnEnd: $("btnEnd"),
+  btnLog: $("btnLog"),
 
   fieldTop: $("fieldTop"),
   fieldBottom: $("fieldBottom"),
@@ -43,9 +46,6 @@ const el = {
   pWingN: $("pWingN"),
   pOutN: $("pOutN"),
 
-  log: $("log"),
-  btnLog: $("btnLog"),
-
   arrowLine: $("arrowLine"),
 
   viewerM: $("viewerM"),
@@ -56,6 +56,9 @@ const el = {
   zoneM: $("zoneM"),
   zoneTitle: $("zoneTitle"),
   zoneList: $("zoneList"),
+
+  logM: $("logM"),
+  logBody: $("logBody"),
 
   confirmM: $("confirmM"),
   confirmTitle: $("confirmTitle"),
@@ -72,15 +75,34 @@ const el = {
   helpM: $("helpM"),
 };
 
-/* ---------- Logs ---------- */
+/* ---------- Logs (stored, not shown on board) ---------- */
+const LOGS = [];
 function log(msg, kind="muted"){
-  const d = document.createElement("div");
-  d.className = `logLine ${kind}`;
-  d.textContent = msg;
-  el.log.prepend(d);
+  LOGS.unshift({msg, kind, t: Date.now()});
+  // also push into modal body if open
+  if(el.logM.classList.contains("show")){
+    renderLogModal();
+  }
 }
 window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
 window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
+
+function renderLogModal(){
+  el.logBody.innerHTML = "";
+  if(!LOGS.length){
+    const d = document.createElement("div");
+    d.className = "logLine muted";
+    d.textContent = "（ログはまだありません）";
+    el.logBody.appendChild(d);
+    return;
+  }
+  for(const it of LOGS.slice(0, 120)){
+    const d = document.createElement("div");
+    d.className = `logLine ${it.kind}`;
+    d.textContent = it.msg;
+    el.logBody.appendChild(d);
+  }
+}
 
 /* ---------- Storage Keys ---------- */
 const LS_REPO = "mw_repo";
@@ -95,9 +117,7 @@ function normalizeText(t){
     .replaceAll("出来る","できる");
 }
 
-/* ---------- Starter deck (20 types x2) ----------
-   name is auto-filled from filename if detected
--------------------------------------------------- */
+/* ---------- Starter deck (20 types x2) ---------- */
 const CardRegistry = Array.from({length:20}, (_,i)=> {
   const no = i+1;
   const rank = ((i%5)+1);
@@ -105,7 +125,7 @@ const CardRegistry = Array.from({length:20}, (_,i)=> {
   const atk = atkMax; // placeholder
   return {
     no,
-    name: `カード${no}`, // will be overwritten by filename-derived name if available
+    name: `カード${no}`, // overwritten by filename-derived name if available
     rank,
     atk,
     type: "character",
@@ -150,11 +170,9 @@ const state = {
   }
 };
 
-function updateTop(){
+function updateHUD(){
   el.chipTurn.textContent = `TURN ${state.turn}`;
   el.chipPhase.textContent = state.phase;
-  el.chipWho.textContent = "YOU";
-  el.chipNet.textContent = state.img.ready ? "IMG: OK" : "IMG: ...";
 }
 function updateCounts(){
   el.aiDeckN.textContent = state.AI.deck.length;
@@ -267,10 +285,9 @@ async function validateImage(url){
   });
 }
 
-/* filename -> card display name */
+/* filename -> card display name (used only in viewer / zones) */
 function stripExtAll(name){
   let base = name;
-  // remove multiple extensions (".png.JPG" etc)
   for(let i=0;i<3;i++){
     const dot = base.lastIndexOf(".");
     if(dot <= 0) break;
@@ -282,30 +299,24 @@ function stripExtAll(name){
 }
 function nameFromFilename(filename, no){
   let base = stripExtAll(filename);
-  // remove leading "01_" or "1_" etc
   base = base.replace(new RegExp(`^${pad2(no)}_`), "");
   base = base.replace(new RegExp(`^${no}_`), "");
-  // visual cleanup
   base = base.replaceAll("_"," ");
   base = base.trim();
   return base || `カード${no}`;
 }
-
-/* apply derived names to registry */
 function applyNamesFromMap(cardMap){
   for(let no=1; no<=20; no++){
     const k = pad2(no);
     const fn = cardMap[k];
     if(fn){
-      const nm = nameFromFilename(fn, no);
-      CardRegistry[no-1].name = nm;
+      CardRegistry[no-1].name = nameFromFilename(fn, no);
     }
   }
 }
 
 async function rescanImages(){
   state.img.ready = false;
-  updateTop();
   log("画像スキャン開始：GitHubから assets を取得します…", "muted");
 
   const cache = {};
@@ -327,17 +338,15 @@ async function rescanImages(){
 
     setCache(cache);
 
-    log(`OK assets: ${assetFiles.length}件 / cards: ${cardFiles.length}件`, "muted");
     if(cache.fieldFile) log(`OK フィールド検出: ${cache.fieldFile}`, "muted");
     else log("NG フィールド未検出（assets/field.* を確認）", "warn");
 
     const mapped = Object.keys(cache.cardMap || {}).length;
-    if(mapped >= 20) log("OK カード画像：No.01〜20を自動紐付けしました", "muted");
-    else log(`注意：自動紐付け不足（${mapped}/20）… 先頭が 01_ などの形式か確認してください`, "warn");
+    if(mapped >= 20) log("OK カード画像：No.01〜20を自動紐付け", "muted");
+    else log(`注意：カード画像自動紐付け不足（${mapped}/20）`, "warn");
 
   }catch(err){
     log(`NG GitHub API取得失敗：${String(err.message || err)}`, "warn");
-    log("※リポジトリが公開か／設定の owner/repo が正しいか確認してください", "warn");
   }
 
   await applyImagesFromCache();
@@ -345,7 +354,6 @@ async function rescanImages(){
 
 async function applyImagesFromCache(){
   const cache = getCache();
-
   if(cache.repo && cache.repo !== getRepo()){
     log("画像キャッシュは別リポジトリのため破棄します", "warn");
     clearCache();
@@ -363,14 +371,19 @@ async function applyImagesFromCache(){
       log("OK フィールド読込：上下同時表示", "muted");
     }else{
       log(`NG フィールド読込失敗: ${u}`, "warn");
+      el.fieldTop.style.backgroundImage = "";
+      el.fieldBottom.style.backgroundImage = "";
     }
+  }else{
+    el.fieldTop.style.backgroundImage = "";
+    el.fieldBottom.style.backgroundImage = "";
   }
 
   // Cards
   state.img.cardUrlByNo = {};
   state.img.cardFileByNo = {};
   const map = cache.cardMap || {};
-  applyNamesFromMap(map); // <<< 手札に名前を出す
+  applyNamesFromMap(map);
 
   for(const k of Object.keys(map)){
     const file = map[k];
@@ -379,7 +392,6 @@ async function applyImagesFromCache(){
   }
 
   state.img.ready = true;
-  updateTop();
 
   const miss = [];
   for(let no=1; no<=20; no++){
@@ -396,30 +408,29 @@ async function applyImagesFromCache(){
 }
 
 /* ---------- Rendering ---------- */
-function faceForCard(card){
+function bindLongPress(node, fn, ms=420){
+  let t = null;
+  const start = ()=> { clearTimeout(t); t = setTimeout(fn, ms); };
+  const end = ()=> clearTimeout(t);
+  node.addEventListener("mousedown", start);
+  node.addEventListener("mouseup", end);
+  node.addEventListener("mouseleave", end);
+  node.addEventListener("touchstart", start, {passive:true});
+  node.addEventListener("touchend", end, {passive:true});
+}
+
+function faceForCard(card, isEnemy=false){
   const face = document.createElement("div");
-  face.className = "face fallback";
-
-  const b1 = document.createElement("div");
-  b1.className="badge";
-  b1.textContent = `No.${card.no}`;
-
-  const b2 = document.createElement("div");
-  b2.className="badge atk";
-  b2.textContent = `ATK ${card.atk}`;
-
-  const nm = document.createElement("div");
-  nm.className="name";
-  nm.textContent = card.name;
-
-  face.appendChild(b1);
-  face.appendChild(b2);
-  face.appendChild(nm);
-
+  face.className = "face";
   const url = state.img.cardUrlByNo[pad2(card.no)];
-  if(url) face.style.backgroundImage = `url("${url}")`;
-  else face.classList.add("fallback");
-
+  if(url){
+    face.style.backgroundImage = `url("${url}")`;
+  }else{
+    face.classList.add("fallback");
+  }
+  if(isEnemy){
+    face.style.transform = "rotate(180deg)";
+  }
   return face;
 }
 
@@ -430,31 +441,22 @@ function makeSlot(card, opts={}){
   if(opts.sel) slot.classList.add("sel");
 
   if(card){
-    slot.appendChild(faceForCard(card));
+    slot.appendChild(faceForCard(card, !!opts.enemy));
     bindLongPress(slot, ()=> openViewer(card));
   }
   return slot;
 }
 
-function bindLongPress(node, fn){
-  let t = null;
-  const start = ()=> { clearTimeout(t); t = setTimeout(fn, 420); };
-  const end = ()=> clearTimeout(t);
-  node.addEventListener("mousedown", start);
-  node.addEventListener("mouseup", end);
-  node.addEventListener("mouseleave", end);
-  node.addEventListener("touchstart", start, {passive:true});
-  node.addEventListener("touchend", end, {passive:true});
-}
-
 function renderZones(){
   el.aiE.innerHTML = "";
-  for(let i=0;i<3;i++) el.aiE.appendChild(makeSlot(state.AI.E[i]));
+  for(let i=0;i<3;i++){
+    el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
+  }
 
   el.aiC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.AI.C[i];
-    const slot = makeSlot(c);
+    const slot = makeSlot(c, {enemy:true});
     slot.addEventListener("click", ()=> onClickEnemyCard(i), {passive:true});
     el.aiC.appendChild(slot);
   }
@@ -473,14 +475,15 @@ function renderZones(){
   }
 
   el.pE.innerHTML = "";
-  for(let i=0;i<3;i++) el.pE.appendChild(makeSlot(state.P1.E[i]));
+  for(let i=0;i<3;i++){
+    el.pE.appendChild(makeSlot(state.P1.E[i]));
+  }
 }
 
 function renderHand(){
   el.hand.innerHTML = "";
   for(let i=0;i<state.P1.hand.length;i++){
     const c = state.P1.hand[i];
-
     const h = document.createElement("div");
     h.className = "handCard";
 
@@ -495,17 +498,6 @@ function renderHand(){
       h.style.backgroundPosition = "center";
     }
 
-    const no = document.createElement("div");
-    no.className = "handNo";
-    no.textContent = `No.${c.no}`;
-
-    const nm = document.createElement("div");
-    nm.className = "handName";
-    nm.textContent = c.name;
-
-    h.appendChild(no);
-    h.appendChild(nm);
-
     h.addEventListener("click", ()=>{
       state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
       state.selectedAttackerPos = null;
@@ -518,13 +510,13 @@ function renderHand(){
 }
 
 function renderAll(){
-  updateTop();
+  updateHUD();
   updateCounts();
   renderZones();
   renderHand();
 }
 
-/* ---------- Viewer / Zone viewer ---------- */
+/* ---------- Modals ---------- */
 function showModal(id){ $(id).classList.add("show"); }
 function hideModal(id){ $(id).classList.remove("show"); }
 
@@ -537,11 +529,13 @@ document.addEventListener("click", (e)=>{
   if(close==="confirm") hideModal("confirmM");
   if(close==="settings") hideModal("settingsM");
   if(close==="help") hideModal("helpM");
+  if(close==="log") hideModal("logM");
 });
 
 function openViewer(card){
-  el.viewerTitle.textContent = `No.${card.no} ${card.name}`;
-  el.viewerText.textContent = card.text || "";
+  // NO No in title (as requested)
+  el.viewerTitle.textContent = `${card.name}`;
+  el.viewerText.textContent = (card.text || "");
   const url = state.img.cardUrlByNo[pad2(card.no)];
   el.viewerImg.src = url || "";
   showModal("viewerM");
@@ -570,7 +564,7 @@ function openZone(title, cards){
       meta.className = "zMeta";
       const t = document.createElement("div");
       t.className = "t";
-      t.textContent = `No.${c.no} ${c.name}`;
+      t.textContent = `${c.name}`; // NO No
       const s = document.createElement("div");
       s.className = "s";
       s.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
@@ -699,14 +693,9 @@ function enforceHandLimit(side){
 /* ---------- Summon ---------- */
 function onClickYourC(pos){
   if(state.phase === "MAIN"){
-    if(state.selectedHandIndex==null){
-      if(state.P1.C[pos]) log("手札を選ぶか、BATTLEで攻撃者を選択してください", "muted");
-      return;
-    }
-    if(state.P1.C[pos]){
-      log("ここは埋まっています", "muted");
-      return;
-    }
+    if(state.selectedHandIndex==null) return;
+    if(state.P1.C[pos]) return;
+
     const card = state.P1.hand[state.selectedHandIndex];
 
     if(state.normalSummonUsed){
@@ -727,10 +716,7 @@ function onClickYourC(pos){
   }
 
   if(state.phase === "BATTLE"){
-    if(!state.P1.C[pos]){
-      log("攻撃者がいません", "muted");
-      return;
-    }
+    if(!state.P1.C[pos]) return;
     state.selectedAttackerPos = (state.selectedAttackerPos===pos) ? null : pos;
     renderAll();
     return;
@@ -739,17 +725,11 @@ function onClickYourC(pos){
 
 function onLongPressEmptySlotForKenSan(pos){
   if(state.phase!=="MAIN") return;
-  if(state.selectedHandIndex==null){
-    log("見参：先に手札を選択してください", "muted");
-    return;
-  }
+  if(state.selectedHandIndex==null) return;
   if(state.P1.C[pos]) return;
 
   const card = state.P1.hand[state.selectedHandIndex];
-  if(card.rank < 5){
-    log("見参：RANK5以上のカードで使用します", "muted");
-    return;
-  }
+  if(card.rank < 5) return;
   if(state.P1.hand.length < 2){
     log("見参：仮コスト（手札1枚）が足りません", "warn");
     return;
@@ -763,7 +743,7 @@ function onLongPressEmptySlotForKenSan(pos){
     state.P1.C[pos]=c2;
 
     state.selectedHandIndex=null;
-    log(`見参：${c2.name}（仮コスト→${disc.name} をウイング）`, "muted");
+    log(`見参：${c2.name}`, "muted");
     renderAll();
   });
 }
@@ -771,18 +751,12 @@ function onLongPressEmptySlotForKenSan(pos){
 /* ---------- Battle ---------- */
 function onClickEnemyCard(enemyPos){
   if(state.phase!=="BATTLE") return;
-  if(state.selectedAttackerPos==null){
-    log("先に自分の攻撃者をタップしてください", "muted");
-    return;
-  }
+  if(state.selectedAttackerPos==null) return;
   const atkCard = state.P1.C[state.selectedAttackerPos];
   if(!atkCard){ state.selectedAttackerPos=null; renderAll(); return; }
 
   const defCard = state.AI.C[enemyPos];
-  if(!defCard){
-    log("相手キャラがいません（シールドを攻撃できます）", "muted");
-    return;
-  }
+  if(!defCard) return;
 
   askConfirm("攻撃確認", `${atkCard.name} → ${defCard.name}\n攻撃しますか？`, ()=>{
     resolveBattle_CvC("P1", state.selectedAttackerPos, "AI", enemyPos);
@@ -820,10 +794,7 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
 
 function attackShieldOrDirect(){
   if(state.phase!=="BATTLE") return;
-  if(state.selectedAttackerPos==null){
-    log("先に自分の攻撃者をタップしてください", "muted");
-    return;
-  }
+  if(state.selectedAttackerPos==null) return;
   const atkCard = state.P1.C[state.selectedAttackerPos];
   if(!atkCard){ state.selectedAttackerPos=null; renderAll(); return; }
 
@@ -853,8 +824,6 @@ function attackShieldOrDirect(){
 function onClickShieldCell(side){
   if(side==="AI"){
     attackShieldOrDirect();
-  }else{
-    log("自分のシールドは閲覧のみ（後で詳細UI追加）", "muted");
   }
 }
 
@@ -914,13 +883,10 @@ function bindBoardClicks(){
 
     if(act==="aiWing") openZone("ENEMY WING", state.AI.wing.slice().reverse());
     if(act==="aiOutside") openZone("ENEMY OUTSIDE", state.AI.outside.slice().reverse());
-    if(act==="aiDeck") log("相手デッキは非公開（枚数のみ）", "muted");
     if(act==="aiShield") onClickShieldCell("AI");
 
     if(act==="pWing") openZone("YOUR WING", state.P1.wing.slice().reverse());
     if(act==="pOutside") openZone("YOUR OUTSIDE", state.P1.outside.slice().reverse());
-    if(act==="pDeck") log("自分デッキは非公開（枚数のみ）", "muted");
-    if(act==="pShield") onClickShieldCell("P1");
   }, {passive:true});
 }
 
@@ -932,7 +898,18 @@ function startToGame(){
   startGame();
 }
 
-function bindModalsButtons(){
+function bindStart(){
+  el.boot.textContent = "JS: OK（読み込み成功）";
+  const go = ()=>{
+    if(state.started) return;
+    state.started=true;
+    startToGame();
+  };
+  el.btnStart.addEventListener("click", go, {passive:true});
+  el.title.addEventListener("click", go, {passive:true});
+}
+
+function bindHUDButtons(){
   el.btnHelp.addEventListener("click", ()=> showModal("helpM"), {passive:true});
   el.btnSettings.addEventListener("click", ()=>{
     el.repoInput.value = getRepo();
@@ -979,37 +956,32 @@ function bindPhaseButtons(){
   }, {passive:true});
 }
 
-function bindStart(){
-  el.boot.textContent = "JS: OK（読み込み成功）";
-  el.btnStart.addEventListener("click", ()=>{
-    if(state.started) return;
-    state.started=true;
-    startToGame();
-  }, {passive:true});
-  el.title.addEventListener("click", ()=>{
-    if(state.started) return;
-    state.started=true;
-    startToGame();
-  }, {passive:true});
-}
+/* LOG button: long-press opens modal */
+function bindLogButton(){
+  bindLongPress(el.btnLog, ()=>{
+    renderLogModal();
+    showModal("logM");
+  }, 360);
 
-function bindLogToggle(){
+  // short tap: show last one quickly (optional)
   el.btnLog.addEventListener("click", ()=>{
-    el.log.classList.toggle("hide");
+    if(LOGS[0]) {
+      // do nothing heavy; keep silent to save UX
+    }
   }, {passive:true});
 }
 
 /* ---------- Init ---------- */
 async function init(){
   el.boot.textContent = "JS: OK（初期化中…）";
-  updateTop();
+  updateHUD();
 
   bindStart();
-  bindModalsButtons();
+  bindHUDButtons();
   bindSettings();
   bindPhaseButtons();
   bindBoardClicks();
-  bindLogToggle();
+  bindLogButton();
 
   const cache = getCache();
   if(cache && cache.assetFiles && cache.cardFiles && cache.repo === getRepo()){
@@ -1020,6 +992,7 @@ async function init(){
   }
 
   el.boot.textContent = "JS: OK（準備完了）";
+  log("操作：盤面は常時フル表示／詳細は長押し", "muted");
 }
 
 document.addEventListener("DOMContentLoaded", init);
