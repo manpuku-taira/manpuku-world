@@ -1,11 +1,10 @@
-<!-- index.html（丸ごと置換・v40008） -->
 <!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40008" />
+  <link rel="stylesheet" href="./style.css?v=40009" />
 </head>
 <body>
 
@@ -49,7 +48,7 @@
       </div>
     </div>
 
-    <!-- ANNOUNCE (big instruction) -->
+    <!-- ANNOUNCE -->
     <div id="announce" class="announce"></div>
 
     <!-- Enemy Hand -->
@@ -66,7 +65,7 @@
 
         <div id="grid" class="grid">
 
-          <!-- ENEMY: row 1 (D + SSS) -->
+          <!-- ENEMY row1 -->
           <div class="cell pile">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
@@ -80,7 +79,7 @@
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
 
-          <!-- ENEMY: row 2 (W + EEE) -->
+          <!-- ENEMY row2 -->
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
@@ -91,7 +90,7 @@
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
 
-          <!-- ENEMY: row 3 (O + CCC) -->
+          <!-- ENEMY row3 -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
@@ -102,7 +101,7 @@
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
 
-          <!-- YOUR: row 4 (CCC + O) -->
+          <!-- YOUR row4 -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
@@ -113,7 +112,7 @@
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
-          <!-- YOUR: row 5 (EEE + W) -->
+          <!-- YOUR row5 -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
@@ -124,7 +123,7 @@
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
 
-          <!-- YOUR: row 6 (SSS + D) -->
+          <!-- YOUR row6 -->
           <div class="cell shieldSlot" data-side="P1" data-idx="0">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
@@ -247,12 +246,10 @@
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
         <div class="helpItem">・手札タップ：選択（紫枠）</div>
         <div class="helpItem">・MAIN：キャラはCへ／エフェクト・アイテムはEへ（最大3枠）</div>
-        <div class="helpItem">・見参が必要なカード：Cに置こうとするとコスト選択が始まります（回数無制限）</div>
-        <div class="helpItem">・装備カード：置いた後「装備するキャラを選択」アナウンスが出ます</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40008"></script>
+  <script src="./script.js?v=40009"></script>
 </body>
 </html>
