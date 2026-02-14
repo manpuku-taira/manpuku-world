@@ -3,181 +3,147 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Manpuku World / マンプクワールド</title>
-  <link rel="stylesheet" href="./style.css" />
+  <title>MANPUKU WORLD</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- TITLE -->
-  <section id="titleScreen" class="screen active">
+  <div id="titleScreen" class="screen active">
     <div class="titlePanel">
       <div class="logo">
-        <div class="logoMain">Manpuku World</div>
-        <div class="logoSub">マンプクワールド</div>
+        <div class="logoMain">MANPUKU WORLD</div>
+        <div class="logoSub">CARD BATTLE PROTOTYPE</div>
       </div>
 
       <div class="titleMeta">
-        <div class="pill">ダーク×サイバーファンタジー</div>
-        <div class="pill">派手演出（後で追加）</div>
-        <div class="pill">操作：タップ/長押し</div>
+        <div class="pill">スターター：20種×2枚（40枚）</div>
+        <div class="pill">長押し：カード詳細</div>
+        <div class="pill">タップ：配置/操作</div>
       </div>
 
-      <button id="startBtn" class="btn primary big">画面タッチで対戦開始</button>
-      <div class="small">※画像が無くてもプレイ確認できます（プレースホルダ表示）</div>
+      <button id="startBtn" class="btn primary">START（タップ）</button>
+      <div class="small">※画像がまだ無くてもプレイ確認できる設計です</div>
     </div>
-  </section>
+  </div>
 
   <!-- GAME -->
-  <section id="gameScreen" class="screen">
-    <div class="topbar">
-      <div class="left">
-        <div id="turnChip" class="chip">TURN -</div>
-        <div id="phaseChip" class="chip subtle">PHASE -</div>
-        <div id="whoChip" class="chip subtle">-</div>
+  <div id="gameScreen" class="screen">
+    <div class="hud">
+      <div class="hudLeft">
+        <div id="turnBadge" class="chip">TURN 1</div>
+        <div id="phaseBadge" class="chip subtle">START</div>
+        <div id="whoBadge" class="chip subtle">YOU</div>
       </div>
-      <div class="right">
+      <div class="hudRight">
         <button id="btnNextPhase" class="btn small primary">次のフェイズ</button>
         <button id="btnEndTurn" class="btn small">ターン終了</button>
-        <button id="btnLog" class="btn small ghost">ログ</button>
-        <button id="btnSettings" class="btn small ghost">画像/データ</button>
+        <button id="btnLog" class="btn small ghost">LOG</button>
       </div>
     </div>
 
     <div class="boardWrap">
-      <div class="battlefield" id="battlefield">
-        <div class="half enemy">
-          <div class="mat layer" id="enemyMat"></div>
-          <div class="grid">
-            <div class="cell pile"><div class="zTitle">D</div><div class="zCount" id="enemyDeckCount">-</div></div>
-            <div class="cell shields" id="enemyS0"></div>
-            <div class="cell shields" id="enemyS1"></div>
-            <div class="cell shields" id="enemyS2"></div>
+      <!-- Field image layer (enemy+you) -->
+      <div id="fieldLayer" class="fieldLayer">
+        <div class="fieldTop"></div>
+        <div class="fieldBottom"></div>
+      </div>
 
-            <div class="cell pile tappable" id="enemyW"><div class="zTitle">W</div><div class="zCount" id="enemyWingCount">0</div></div>
-            <div class="cell zone" id="enemyE0"></div>
-            <div class="cell zone" id="enemyE1"></div>
-            <div class="cell zone" id="enemyE2"></div>
+      <!-- Interactive zones overlay -->
+      <div class="zones">
+        <!-- ENEMY (top) -->
+        <div class="side enemy">
+          <div class="row rowDeck">
+            <div class="pile" data-zone="enemy_deck">
+              <div class="zTag">D</div>
+              <div id="enemyDeckCount" class="zCount">40</div>
+            </div>
+            <div class="shields" data-zone="enemy_shield"></div>
+          </div>
 
-            <div class="cell pile tappable" id="enemyO"><div class="zTitle">O</div><div class="zCount" id="enemyOutCount">0</div></div>
-            <div class="cell zone" id="enemyC0"></div>
-            <div class="cell zone" id="enemyC1"></div>
-            <div class="cell zone" id="enemyC2"></div>
+          <div class="row rowWing">
+            <div class="pile" data-zone="enemy_wing">
+              <div class="zTag">W</div>
+              <div id="enemyWingCount" class="zCount">0</div>
+            </div>
+            <div class="slots slotsE" data-zone="enemy_e"></div>
+          </div>
+
+          <div class="row rowOutside">
+            <div class="pile" data-zone="enemy_outside">
+              <div class="zTag">O</div>
+              <div id="enemyOutsideCount" class="zCount">0</div>
+            </div>
+            <div class="slots slotsC" data-zone="enemy_c"></div>
           </div>
 
           <div class="enemyHandBar">
-            <div class="chip subtle">ENEMY HAND</div>
-            <div id="enemyHandCount" class="chip">0</div>
+            <div class="enemyHandLabel">ENEMY HAND</div>
+            <div id="enemyHandFan" class="enemyHandFan"></div>
+            <div id="enemyHandCount" class="enemyHandCount">0</div>
           </div>
         </div>
 
-        <div class="half you">
-          <div class="mat layer" id="youMat"></div>
-          <div class="grid">
-            <div class="cell zone" id="youC0"></div>
-            <div class="cell zone" id="youC1"></div>
-            <div class="cell zone" id="youC2"></div>
-            <div class="cell pile tappable" id="youO"><div class="zTitle">O</div><div class="zCount" id="youOutCount">0</div></div>
-
-            <div class="cell zone" id="youE0"></div>
-            <div class="cell zone" id="youE1"></div>
-            <div class="cell zone" id="youE2"></div>
-            <div class="cell pile tappable" id="youW"><div class="zTitle">W</div><div class="zCount" id="youWingCount">0</div></div>
-
-            <div class="cell shields" id="youS0"></div>
-            <div class="cell shields" id="youS1"></div>
-            <div class="cell shields" id="youS2"></div>
-            <div class="cell pile"><div class="zTitle">D</div><div class="zCount" id="youDeckCount">-</div></div>
+        <!-- YOU (bottom) -->
+        <div class="side you">
+          <div class="row rowOutside">
+            <div class="slots slotsC" data-zone="you_c"></div>
+            <div class="pile" data-zone="you_outside">
+              <div class="zTag">O</div>
+              <div id="youOutsideCount" class="zCount">0</div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- HAND -->
-      <div class="handDock">
-        <div class="handTitle">
-          <div class="chip">HAND</div>
-          <div class="chip subtle">タップ：選択 / 長押し：詳細</div>
-        </div>
-        <div id="handRow" class="handRow"></div>
+          <div class="row rowWing">
+            <div class="slots slotsE" data-zone="you_e"></div>
+            <div class="pile" data-zone="you_wing">
+              <div class="zTag">W</div>
+              <div id="youWingCount" class="zCount">0</div>
+            </div>
+          </div>
 
-        <!-- ACTION BAR (必ず出る) -->
-        <div id="actionBar" class="actionBar">
-          <div id="selLabel" class="selLabel">手札を選択してください</div>
-          <div class="actions">
-            <button id="btnPlayC" class="btn small primary">登場(C)</button>
-            <button id="btnPlayE" class="btn small primary">設置(E)</button>
-            <button id="btnCancelSel" class="btn small ghost">キャンセル</button>
+          <div class="row rowDeck">
+            <div class="shields" data-zone="you_shield"></div>
+            <div class="pile" data-zone="you_deck">
+              <div class="zTag">D</div>
+              <div id="youDeckCount" class="zCount">40</div>
+            </div>
+          </div>
+
+          <!-- Hand -->
+          <div class="handDock">
+            <div id="hand" class="hand"></div>
           </div>
         </div>
       </div>
     </div>
-  </section>
 
-  <!-- CARD VIEWER -->
-  <div id="cardModal" class="modal">
-    <div class="modalBack" data-close="cardModal"></div>
-    <div class="modalCard">
-      <div class="modalHeader">
-        <div id="cardModalTitle" class="modalTitle">CARD</div>
-        <button class="btn small ghost" data-close="cardModal">閉じる</button>
-      </div>
-      <div class="viewerBody">
-        <img id="cardModalImg" alt="" />
-        <div id="cardModalText" class="viewerText"></div>
+    <!-- Modals -->
+    <div id="modalCard" class="modal">
+      <div class="modalBack"></div>
+      <div class="modalCard">
+        <div class="modalHeader">
+          <div id="modalCardTitle" class="modalTitle">CARD</div>
+          <button id="modalCardClose" class="btn small">閉じる</button>
+        </div>
+        <div class="viewer">
+          <img id="modalCardImg" alt="card" />
+          <div id="modalCardText" class="viewerText"></div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- LOG -->
-  <div id="logModal" class="modal">
-    <div class="modalBack" data-close="logModal"></div>
-    <div class="modalCard smallCard">
-      <div class="modalHeader">
-        <div class="modalTitle">LOG</div>
-        <button class="btn small ghost" data-close="logModal">閉じる</button>
-      </div>
-      <div id="logBox" class="logBox"></div>
-    </div>
-  </div>
-
-  <!-- SETTINGS -->
-  <div id="settingsModal" class="modal">
-    <div class="modalBack" data-close="settingsModal"></div>
-    <div class="modalCard">
-      <div class="modalHeader">
-        <div class="modalTitle">画像 / データ</div>
-        <button class="btn small ghost" data-close="settingsModal">閉じる</button>
-      </div>
-
-      <div class="settingsBody">
-        <div class="settingsBlock">
-          <div class="settingsTitle">フィールド画像</div>
-          <div class="settingsRow">
-            <input id="fieldInput" class="input" placeholder="/assets/field.jpg など" />
-            <button id="saveFieldBtn" class="btn small primary">保存</button>
-          </div>
+    <div id="modalLog" class="modal">
+      <div class="modalBack"></div>
+      <div class="modalCard small">
+        <div class="modalHeader">
+          <div class="modalTitle">LOG</div>
+          <button id="modalLogClose" class="btn small">閉じる</button>
         </div>
-
-        <div class="settingsBlock">
-          <div class="settingsTitle">裏面（任意）</div>
-          <div class="settingsRow">
-            <input id="backInput" class="input" placeholder="/assets/back.jpg（任意）" />
-            <button id="saveBackBtn" class="btn small primary">保存</button>
-          </div>
-          <div class="settingsHint">未設定でも黒カードで表示します。</div>
-        </div>
-
-        <div class="settingsBlock">
-          <div class="settingsTitle">カードテキスト（JSON貼り付け）</div>
-          <textarea id="cardJsonArea" class="textarea" placeholder='{"01":{"name":"カード名","text":"効果文","rank":2,"atk":1000,"type":"character"}, ... }'></textarea>
-          <div class="settingsRow bottomRow">
-            <button id="loadJsonBtn" class="btn small primary">反映</button>
-            <button id="exportJsonBtn" class="btn small ghost">書き出し</button>
-          </div>
-        </div>
-
+        <div id="logBox" class="logBox"></div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
