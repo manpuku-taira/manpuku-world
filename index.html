@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40015" />
+  <link rel="stylesheet" href="./style.css?v=40016" />
 </head>
 <body>
 
@@ -60,10 +60,10 @@
         <div id="fieldTop" class="field fieldTop"></div>
         <div id="fieldBottom" class="field fieldBottom"></div>
 
-        <!-- Grid (6 rows × 4 cols) -->
+        <!-- Grid -->
         <div id="grid" class="grid">
 
-          <!-- ROW 1: Enemy Deck + Enemy Shields -->
+          <!-- ROW 1 -->
           <div class="cell pile" data-click="aiDeck">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
@@ -77,7 +77,7 @@
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
 
-          <!-- ROW 2: Enemy Wing + Enemy E (span 3 cols) -->
+          <!-- ROW 2 -->
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
@@ -86,7 +86,7 @@
             <div id="aiE" class="slots enemy"></div>
           </div>
 
-          <!-- ROW 3: Enemy Outside + Enemy C (span 3 cols) -->
+          <!-- ROW 3 -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
@@ -95,7 +95,7 @@
             <div id="aiC" class="slots enemy"></div>
           </div>
 
-          <!-- ROW 4: Your C (span 3 cols) + Your Outside -->
+          <!-- ROW 4 -->
           <div class="cell stageRow span3">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
@@ -104,7 +104,7 @@
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
-          <!-- ROW 5: Your E (span 3 cols) + Your Wing -->
+          <!-- ROW 5 -->
           <div class="cell stageRow span3">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
@@ -113,7 +113,7 @@
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
 
-          <!-- ROW 6: Your Shields + Your Deck -->
+          <!-- ROW 6 -->
           <div class="cell shieldSlot" data-side="P1" data-idx="0">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
@@ -235,12 +235,13 @@
       <div class="help">
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
         <div class="helpItem">・手札をタップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（RANK4以下）／RANK5以上は空きCを長押しで見参</div>
+        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（通常召喚）</div>
+        <div class="helpItem">・MAIN：登場できないキャラ＝空きCを長押しで見参（コスト必須）</div>
         <div class="helpItem">・MAIN：エフェクト/アイテム＝空きEをタップで配置</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40015"></script>
+  <script src="./script.js?v=40016"></script>
 </body>
 </html>
