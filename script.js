@@ -1,1168 +1,346 @@
-/* =========================================================
-  Manpuku World - v40010
-  - 枠が必ず出るCSSセット前提
-  - 置ける場所ルール導入（character→C / effect,item→E）
-  - iPhoneでSEが鳴る：最初のタップでAudioContext解放
-========================================================= */
-
-const $ = (id) => document.getElementById(id);
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-/* ---------- Elements ---------- */
-const el = {
-  title: $("title"),
-  game: $("game"),
-  boot: $("boot"),
-  btnStart: $("btnStart"),
-
-  chipTurn: $("chipTurn"),
-  chipPhase: $("chipPhase"),
-  chipActive: $("chipActive"),
-  firstInfo: $("firstInfo"),
-
-  btnHelp: $("btnHelp"),
-  btnSettings: $("btnSettings"),
-  btnNext: $("btnNext"),
-  btnEnd: $("btnEnd"),
-  btnLog: $("btnLog"),
-
-  fieldTop: $("fieldTop"),
-  fieldBottom: $("fieldBottom"),
-
-  aiC: $("aiC"),
-  aiE: $("aiE"),
-  pC: $("pC"),
-  pE: $("pE"),
-  hand: $("hand"),
-  aiHand: $("aiHand"),
-  enemyHandLabel: $("enemyHandLabel"),
-
-  aiDeckN: $("aiDeckN"),
-  aiWingN: $("aiWingN"),
-  aiOutN: $("aiOutN"),
-  pDeckN: $("pDeckN"),
-  pWingN: $("pWingN"),
-  pOutN: $("pOutN"),
-
-  viewerM: $("viewerM"),
-  viewerTitle: $("viewerTitle"),
-  viewerImg: $("viewerImg"),
-  viewerText: $("viewerText"),
-
-  zoneM: $("zoneM"),
-  zoneTitle: $("zoneTitle"),
-  zoneList: $("zoneList"),
-
-  logM: $("logM"),
-  logBody: $("logBody"),
-
-  confirmM: $("confirmM"),
-  confirmTitle: $("confirmTitle"),
-  confirmBody: $("confirmBody"),
-  btnYes: $("btnYes"),
-  btnNo: $("btnNo"),
-
-  settingsM: $("settingsM"),
-  repoInput: $("repoInput"),
-  btnRepoSave: $("btnRepoSave"),
-  btnRescan: $("btnRescan"),
-  btnClearCache: $("btnClearCache"),
-  btnSound: $("btnSound"),
-
-  helpM: $("helpM"),
-};
-
-/* ---------- Logs ---------- */
-const LOGS = [];
-function log(msg, kind="muted"){
-  LOGS.unshift({msg, kind, t: Date.now()});
-  if(el.logM.classList.contains("show")) renderLogModal();
+<pre style="caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); font-style: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: auto; text-align: start; text-indent: 0px; text-transform: none; widows: auto; word-spacing: 0px; -webkit-tap-highlight-color: rgba(26, 26, 26, 0.3); -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; text-decoration: none; overflow-wrap: break-word; white-space: pre-wrap;">:root{
+  --bg:#05060a;
+  --text:#e9ecff;
+  --muted:#a7b0d9;
+  --danger:#ff4d6d;
+  --accent:#59f2ff;
+  --accent2:#b35bff;
+  --panel: rgba(10,12,22,.86);
+  --panel2: rgba(6,8,14,.68);
+  --shadow: 0 12px 40px rgba(0,0,0,.45);
 }
-window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
-window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
-
-function renderLogModal(){
-  el.logBody.innerHTML = "";
-  if(!LOGS.length){
-    const d = document.createElement("div");
-    d.className = "logLine muted";
-    d.textContent = "（ログはまだありません）";
-    el.logBody.appendChild(d);
-    return;
-  }
-  for(const it of LOGS.slice(0, 220)){
-    const d = document.createElement("div");
-    d.className = `logLine ${it.kind}`;
-    d.textContent = it.msg;
-    el.logBody.appendChild(d);
-  }
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  background:
+    radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
+    radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
+    var(--bg);
+  color:var(--text);
 }
 
-/* ---------- Storage ---------- */
-const LS_REPO = "mw_repo";
-const LS_IMG_CACHE = "mw_img_cache_v4";
-const LS_SOUND = "mw_sound_on";
+/* screens */
+.screen{ display:none; height:100%; }
+.screen.active{ display:flex; flex-direction:column; }
 
-/* ---------- Rules ---------- */
-const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
-const pad2 = (n)=> String(n).padStart(2,"0");
-function normalizeText(t){
-  return (t || "").replaceAll("又は","または").replaceAll("出来る","できる");
+/* buttons */
+.btn{
+  border:1px solid rgba(89,242,255,.22);
+  background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:14px;
+  font-weight:900;
+  font-size:13px;
+  letter-spacing:.06em;
+  box-shadow:0 10px 24px rgba(0,0,0,.35);
+}
+.btn:active{ transform:translateY(1px); }
+.btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
+.btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
+.btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
+.btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
+
+.chip{
+  padding:8px 10px;
+  border-radius:999px;
+  background:linear-gradient(180deg, rgba(16,20,38,.9), rgba(6,8,14,.9));
+  border:1px solid rgba(89,242,255,.18);
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.08em;
+}
+.chip.subtle{ border:1px solid rgba(167,176,217,.18); color:var(--muted); }
+.chipActive.enemy{ border-color: rgba(255,77,109,.35); }
+
+/* title */
+.titleWrap{ flex:1; display:flex; align-items:center; justify-content:center; padding:18px; }
+.logoBox{
+  width:min(680px,94vw);
+  background:linear-gradient(180deg, rgba(16,20,38,.78), rgba(8,10,18,.78));
+  border:1px solid rgba(89,242,255,.22);
+  border-radius:22px;
+  padding:24px 18px;
+  box-shadow:var(--shadow);
+  text-align:center;
+}
+.logoMain{ font-size:34px; font-weight:1000; letter-spacing:.02em; }
+.logoSub{ margin-top:6px; font-size:14px; color:var(--muted); letter-spacing:.22em; }
+.logoTags{ margin:14px 0 6px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+.tag{ font-size:12px; color:var(--muted); padding:8px 10px; border-radius:999px; border:1px solid rgba(167,176,217,.18); background:rgba(16,20,38,.35); }
+.mini{ margin-top:10px; font-size:12px; color:var(--muted); }
+
+/* hud */
+.hud{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px;
+  border-bottom:1px solid rgba(89,242,255,.12);
+  background:rgba(0,0,0,.18);
+}
+.hudLeft,.hudRight{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.hudCenter{ font-weight:900; color:var(--muted); letter-spacing:.12em; }
+
+.iconBtn{
+  border:1px solid rgba(89,242,255,.18);
+  background:rgba(10,12,22,.66);
+  color:var(--text);
+  padding:8px 10px;
+  border-radius:12px;
+  font-weight:1000;
 }
 
-/* ---------- Sound (iOS unlock) ---------- */
-let soundOn = (localStorage.getItem(LS_SOUND) ?? "1") === "1";
-let audioCtx = null;
-let audioUnlocked = false;
-
-function ensureAudio(){
-  if(!soundOn) return;
-  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if(audioCtx.state === "suspended") audioCtx.resume().catch(()=>{});
+/* enemy hand */
+.enemyHandDock{
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
 }
-function unlockAudioOnce(){
-  if(audioUnlocked) return;
-  audioUnlocked = true;
-  try{
-    ensureAudio();
-    const t0 = audioCtx.currentTime;
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    g.gain.setValueAtTime(0.00001, t0);
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(t0);
-    o.stop(t0 + 0.01);
-  }catch{}
-}
-function beep(freq=440, dur=0.08, gain=0.12, type="square"){
-  if(!soundOn) return;
-  ensureAudio();
-  const t0 = audioCtx.currentTime;
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, t0);
-  g.gain.setValueAtTime(gain, t0);
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  o.connect(g); g.connect(audioCtx.destination);
-  o.start(t0);
-  o.stop(t0 + dur);
-}
-const SE = {
-  ui(){ beep(740, .05, .10, "square"); },
-  place(){ beep(520, .08, .14, "triangle"); },
-  phase(){ beep(980, .05, .10, "sine"); },
-  attack(){ beep(240, .10, .16, "sawtooth"); },
-  brk(){ beep(140, .14, .16, "square"); },
-};
-
-/* ---------- Starter deck (20 types x2) ---------- */
-/* 暫定：01-14=character / 15-20=effect（後で確定データに置換） */
-const CardRegistry = Array.from({length:20}, (_,i)=> {
-  const no = i+1;
-  const rank = ((i%5)+1);
-  const atk = rank*500;
-  const type = (no<=14) ? "character" : "effect";
-  return { no, name:`カード${no}`, rank, atk, type, text: normalizeText("（テキストは後で確定）") };
-});
-
-function shuffle(a){
-  for(let i=a.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [a[i],a[j]]=[a[j],a[i]];
-  }
-}
-function buildDeck(){
-  const deck = [];
-  for(const c of CardRegistry){ deck.push({...c}); deck.push({...c}); }
-  shuffle(deck);
-  return deck;
+.enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
+.enemyHand{ display:flex; gap:8px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
+.handBack{
+  width:34px; height:48px;
+  border-radius:10px;
+  border:1px solid rgba(167,176,217,.22);
+  background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
+  box-shadow:0 10px 24px rgba(0,0,0,.25);
+  background-size:cover; background-position:center;
 }
 
-/* ---------- State ---------- */
-const state = {
-  started:false,
-  turn:1,
-  phase:"START",
-  activeSide:"P1",
-  firstSide:"P1",
-  normalSummonUsed:false,
-
-  selectedHandIndex:null,
-  selectedAttackerPos:null,
-
-  P1: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
-  AI: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
-
-  img: { fieldUrl:"", backUrl:"", cardUrlByNo:{}, cardFileByNo:{}, ready:false },
-
-  aiRunning:false,
-};
-
-/* ---------- UI helpers ---------- */
-function setActiveUI(){
-  const you = (state.activeSide==="P1");
-  el.chipActive.textContent = you ? "YOUR TURN" : "ENEMY TURN";
-  el.chipActive.classList.toggle("enemy", !you);
-
-  el.btnNext.disabled = !you;
-  el.btnEnd.disabled  = !you;
-  el.btnNext.style.opacity = you ? "1" : ".45";
-  el.btnEnd.style.opacity  = you ? "1" : ".45";
-}
-function updateHUD(){
-  el.chipTurn.textContent = `TURN ${state.turn}`;
-  el.chipPhase.textContent = state.phase;
-  setActiveUI();
-}
-function updateCounts(){
-  el.aiDeckN.textContent = state.AI.deck.length;
-  el.aiWingN.textContent = state.AI.wing.length;
-  el.aiOutN.textContent = state.AI.outside.length;
-
-  el.pDeckN.textContent = state.P1.deck.length;
-  el.pWingN.textContent = state.P1.wing.length;
-  el.pOutN.textContent = state.P1.outside.length;
-
-  el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
+/* stage */
+.stage{ flex:1; padding:10px; min-height:0; }
+.mat{
+  position:relative;
+  width:100%;
+  height:100%;
+  border:1px solid rgba(89,242,255,.12);
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow:var(--shadow);
+  background:rgba(0,0,0,.22);
 }
 
-/* ---------- GitHub image scan ---------- */
-function getRepo(){ return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world"; }
-function setRepo(v){ localStorage.setItem(LS_REPO, v); }
-function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE) || "{}"); }catch{ return {}; } }
-function setCache(obj){ localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj)); }
-function clearCache(){ localStorage.removeItem(LS_IMG_CACHE); }
+/* field images (top/bottom) */
+.field{
+  position:absolute;
+  left:0; right:0;
+  height:50%;
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:contain;
+  opacity:.9;
+  pointer-events:none;
+}
+.fieldTop{ top:0; transform:rotate(180deg); }
+.fieldBottom{ bottom:0; }
 
-async function ghList(path){
-  const repo = getRepo();
-  const url = `https://api.github.com/repos/${repo}/contents/${path}?ref=main`;
-  const res = await fetch(url, { headers: { "Accept":"application/vnd.github+json" }});
-  if(!res.ok) throw new Error(`GitHub API NG: ${res.status}`);
-  const data = await res.json();
-  if(!Array.isArray(data)) return [];
-  return data.filter(x=>x && x.type === "file").map(x=>x.name);
-}
-function encFile(name){ return encodeURIComponent(name); }
-function vercelPathCards(filename){ return `/assets/cards/${encFile(filename)}`; }
-function vercelPathAssets(filename){ return `/assets/${encFile(filename)}`; }
-
-function pickFieldFile(assetFiles){
-  const lowers = assetFiles.map(n=>n.toLowerCase());
-  const idx = lowers.findIndex(n=>n.startsWith("field."));
-  if(idx>=0) return assetFiles[idx];
-  const cand = ["field.png.jpg","field.jpg","field.png","field.jpeg","field.PNG","field.JPG"];
-  for(const c of cand){
-    const k = assetFiles.findIndex(n=>n.toLowerCase() === c.toLowerCase());
-    if(k>=0) return assetFiles[k];
-  }
-  return "";
-}
-function pickBackFile(assetFiles){
-  const lowers = assetFiles.map(n=>n.toLowerCase());
-  const pri = ["card_back.png","card_back.jpg","card_back.jpeg","cardback.png","cardback.jpg","back.png","back.jpg","back.jpeg"];
-  for(const p of pri){
-    const i = lowers.findIndex(n=>n === p);
-    if(i>=0) return assetFiles[i];
-  }
-  const idx = lowers.findIndex(n=>n.startsWith("card_back."));
-  if(idx>=0) return assetFiles[idx];
-  const idx2 = lowers.findIndex(n=>n.startsWith("back."));
-  if(idx2>=0) return assetFiles[idx2];
-  return "";
-}
-function scoreCardFilename(name, no){
-  const s = name.toLowerCase();
-  const p2 = pad2(no).toLowerCase();
-  const p1 = String(no).toLowerCase();
-  let score = 0;
-  if(s.startsWith(`${p2}_`)) score += 100;
-  if(s.startsWith(`${p1}_`)) score += 80;
-  if(s.startsWith(`${p2}.`)) score += 70;
-  if(s.startsWith(`${p1}.`)) score += 60;
-  if(s.includes(`${p2}_`)) score += 30;
-  if(s.includes(`${p1}_`)) score += 20;
-  if(s.includes(".jpg")) score += 5;
-  if(s.includes(".png")) score += 5;
-  if(s.includes(".jpeg")) score += 4;
-  if(s.includes(".png.jpg") || s.includes(".png.jpeg") || s.includes(".png.jpg")) score += 6;
-  return score;
-}
-function buildCardMapFromFileList(cardFiles){
-  const map = {};
-  for(let no=1; no<=20; no++){
-    let best = {name:"", score:-1};
-    for(const f of cardFiles){
-      const sc = scoreCardFilename(f, no);
-      if(sc > best.score) best = {name:f, score:sc};
-    }
-    if(best.score >= 60) map[pad2(no)] = best.name;
-  }
-  return map;
-}
-async function validateImage(url){
-  return new Promise((resolve)=>{
-    const img = new Image();
-    img.onload = ()=> resolve(true);
-    img.onerror = ()=> resolve(false);
-    img.src = url;
-  });
-}
-function stripExtAll(name){
-  let base = name;
-  for(let i=0;i<3;i++){
-    const dot = base.lastIndexOf(".");
-    if(dot <= 0) break;
-    const ext = base.slice(dot+1).toLowerCase();
-    if(["png","jpg","jpeg","webp","gif"].includes(ext)) base = base.slice(0,dot);
-    else break;
-  }
-  return base;
-}
-function nameFromFilename(filename, no){
-  let base = stripExtAll(filename);
-  base = base.replace(new RegExp(`^${pad2(no)}_`), "");
-  base = base.replace(new RegExp(`^${no}_`), "");
-  base = base.replaceAll("_"," ");
-  base = base.trim();
-  return base || `カード${no}`;
-}
-function applyNamesFromMap(cardMap){
-  for(let no=1; no<=20; no++){
-    const k = pad2(no);
-    const fn = cardMap[k];
-    if(fn) CardRegistry[no-1].name = nameFromFilename(fn, no);
-  }
+.grid{
+  position:absolute;
+  inset:0;
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  grid-template-rows:repeat(6, 1fr);
+  gap:10px;
+  padding:10px;
 }
 
-async function rescanImages(){
-  state.img.ready = false;
-  log("画像スキャン開始：GitHubから assets を取得します…", "muted");
-
-  const cache = {};
-  const repo = getRepo();
-  try{
-    const [assetFiles, cardFiles] = await Promise.all([
-      ghList("assets"),
-      ghList("assets/cards"),
-    ]);
-
-    cache.repo = repo;
-    cache.assetFiles = assetFiles;
-    cache.cardFiles = cardFiles;
-    cache.scannedAt = Date.now();
-
-    cache.fieldFile = pickFieldFile(assetFiles) || "";
-    cache.backFile  = pickBackFile(assetFiles) || "";
-    cache.cardMap   = buildCardMapFromFileList(cardFiles);
-
-    setCache(cache);
-
-    if(cache.fieldFile) log(`OK フィールド検出: ${cache.fieldFile}`, "muted");
-    else log("NG フィールド未検出（assets/field.* を確認）", "warn");
-
-    if(cache.backFile) log(`OK 裏面検出: ${cache.backFile}`, "muted");
-    else log("裏面：未設定（黒い裏面で動作）", "muted");
-
-    const mapped = Object.keys(cache.cardMap || {}).length;
-    if(mapped >= 20) log("OK カード画像：No.01〜20を自動紐付け", "muted");
-    else log(`注意：カード画像自動紐付け不足（${mapped}/20）`, "warn");
-
-  }catch(err){
-    log(`NG GitHub API取得失敗：${String(err.message || err)}`, "warn");
-  }
-
-  await applyImagesFromCache();
+.cell{
+  background: rgba(10,12,22,.62);
+  border: 1px solid rgba(89,242,255,.12);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  overflow:hidden;
+  position:relative;
 }
 
-async function applyImagesFromCache(){
-  const cache = getCache();
-  if(cache.repo && cache.repo !== getRepo()){
-    log("画像キャッシュは別リポジトリのため破棄します", "warn");
-    clearCache();
-    return;
-  }
+.pile{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+}
+.pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
+.pile .n{ font-size:18px; font-weight:1000; }
 
-  // field
-  if(cache.fieldFile){
-    const u = vercelPathAssets(cache.fieldFile);
-    if(await validateImage(u)){
-      state.img.fieldUrl = u;
-      el.fieldTop.style.backgroundImage = `url("${u}")`;
-      el.fieldBottom.style.backgroundImage = `url("${u}")`;
-      log("OK フィールド読込：上下同時表示", "muted");
-    }else{
-      state.img.fieldUrl = "";
-      el.fieldTop.style.backgroundImage = "";
-      el.fieldBottom.style.backgroundImage = "";
-      log(`NG フィールド読込失敗: ${u}`, "warn");
-    }
-  }
+.stageRow{ padding:10px; }
+.rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; font-weight:900; }
 
-  // back
-  state.img.backUrl = "";
-  if(cache.backFile){
-    const b = vercelPathAssets(cache.backFile);
-    if(await validateImage(b)){
-      state.img.backUrl = b;
-      log("OK 裏面読込：適用", "muted");
-    }else{
-      log(`NG 裏面読込失敗: ${b}（黒で継続）`, "warn");
-      state.img.backUrl = "";
-    }
-  }
+.slots{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
 
-  // cards
-  state.img.cardUrlByNo = {};
-  state.img.cardFileByNo = {};
-  const map = cache.cardMap || {};
-  applyNamesFromMap(map);
-  for(const k of Object.keys(map)){
-    const file = map[k];
-    state.img.cardFileByNo[k] = file;
-    state.img.cardUrlByNo[k] = vercelPathCards(file);
-  }
+/* IMPORTANT: empty slot visible */
+.slot{
+  width:calc((100% - 20px)/3);
+  aspect-ratio:2/3;
+  border-radius:14px;
+  border:1px solid rgba(167,176,217,.22);
+  background:rgba(6,8,14,.55);
+  position:relative;
+  overflow:hidden;
+}
+.slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
+.slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-  state.img.ready = true;
-
-  const miss = [];
-  for(let no=1; no<=20; no++){
-    const key = pad2(no);
-    if(!state.img.cardUrlByNo[key]) miss.push(key);
-  }
-  if(miss.length) log(`カード画像未検出：${miss.join(", ")}`, "warn");
-  else log("カード画像：20種すべて検出", "muted");
-
-  renderAll();
+.face{
+  position:absolute;
+  inset:0;
+  background-size:cover;
+  background-position:center;
+}
+.face.fallback{
+  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
 }
 
-/* ---------- Rendering ---------- */
-function bindLongPress(node, fn, ms=420){
-  let t = null;
-  const start = ()=> { clearTimeout(t); t = setTimeout(fn, ms); };
-  const end = ()=> clearTimeout(t);
-  node.addEventListener("mousedown", start);
-  node.addEventListener("mouseup", end);
-  node.addEventListener("mouseleave", end);
-  node.addEventListener("touchstart", start, {passive:true});
-  node.addEventListener("touchend", end, {passive:true});
+/* shields */
+.shieldSlot{ padding:10px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
+.sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; }
+.backCard{
+  flex:1;
+  border-radius:14px;
+  border:1px solid rgba(167,176,217,.22);
+  background: #070914;
+  background-size:cover; background-position:center;
+}
+.backCard.empty{ opacity:.2; }
+.shieldCount{
+  position:absolute;
+  right:10px;
+  top:10px;
+  font-size:11px;
+  font-weight:1000;
+  padding:4px 6px;
+  border-radius:10px;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(89,242,255,.18);
 }
 
-function faceForCard(card, isEnemy=false){
-  const face = document.createElement("div");
-  face.className = "face";
-  const url = state.img.cardUrlByNo[pad2(card.no)];
-  if(url){
-    face.style.backgroundImage = `url("${url}")`;
-  }else{
-    face.classList.add("fallback");
-  }
-  if(isEnemy) face.style.transform = "rotate(180deg)";
-  return face;
+/* hand */
+.handDock{ padding:10px; }
+.hand{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding:10px;
+  border:1px solid rgba(89,242,255,.12);
+  border-radius:18px;
+  background:var(--panel2);
+  box-shadow:var(--shadow);
 }
-function makeSlot(card, opts={}){
-  const slot = document.createElement("div");
-  slot.className = "slot";
-  if(opts.glow) slot.classList.add("glow");
-  if(opts.sel) slot.classList.add("sel");
-  if(card){
-    slot.appendChild(faceForCard(card, !!opts.enemy));
-    bindLongPress(slot, ()=> openViewer(card));
-  }
-  return slot;
+.handCard{
+  width:92px;
+  flex:0 0 auto;
+  aspect-ratio:2/3;
+  border-radius:14px;
+  border:1px solid rgba(89,242,255,.18);
+  background:rgba(6,8,14,.55);
+  background-size:cover;
+  background-position:center;
+  box-shadow:var(--shadow);
 }
+.handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
+.handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* ---------- Modals ---------- */
-function showModal(id){ $(id).classList.add("show"); }
-function hideModal(id){ $(id).classList.remove("show"); }
-
-document.addEventListener("click", (e)=>{
-  const t = e.target;
-  if(!(t instanceof HTMLElement)) return;
-  const close = t.getAttribute("data-close");
-  if(close==="viewer") hideModal("viewerM");
-  if(close==="zone") hideModal("zoneM");
-  if(close==="confirm") hideModal("confirmM");
-  if(close==="settings") hideModal("settingsM");
-  if(close==="help") hideModal("helpM");
-  if(close==="log") hideModal("logM");
-});
-
-function openViewer(card){
-  el.viewerTitle.textContent = `${card.name}`;
-  el.viewerText.textContent = (card.text || "");
-  const url = state.img.cardUrlByNo[pad2(card.no)];
-  el.viewerImg.src = url || "";
-  showModal("viewerM");
+/* fab */
+.fab{
+  position:fixed;
+  right:10px;
+  bottom:12px;
+  display:flex;
+  gap:10px;
+  z-index:10;
 }
-
-function openZone(title, cards){
-  el.zoneTitle.textContent = title;
-  el.zoneList.innerHTML = "";
-
-  if(!cards.length){
-    const empty = document.createElement("div");
-    empty.className = "logLine muted";
-    empty.textContent = "（空です）";
-    el.zoneList.appendChild(empty);
-  }else{
-    cards.forEach((c)=>{
-      const it = document.createElement("div");
-      it.className = "zoneItem";
-
-      const th = document.createElement("div");
-      th.className = "zThumb";
-      const url = state.img.cardUrlByNo[pad2(c.no)];
-      if(url) th.style.backgroundImage = `url("${url}")`;
-
-      const meta = document.createElement("div");
-      meta.className = "zMeta";
-      const tt = document.createElement("div");
-      tt.className = "t";
-      tt.textContent = `${c.name}`;
-      const ss = document.createElement("div");
-      ss.className = "s";
-      ss.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
-
-      meta.appendChild(tt); meta.appendChild(ss);
-      it.appendChild(th); it.appendChild(meta);
-
-      it.addEventListener("click", ()=> openViewer(c), {passive:true});
-      el.zoneList.appendChild(it);
-    });
-  }
-  showModal("zoneM");
+.fabBtn{
+  border:1px solid rgba(89,242,255,.22);
+  background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
+  color:var(--text);
+  padding:12px 14px;
+  border-radius:16px;
+  font-weight:1000;
+  letter-spacing:.08em;
+  box-shadow:var(--shadow);
+}
+.fabBtn.danger{
+  border:1px solid rgba(255,77,109,.35);
+  background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92));
 }
 
-/* ---------- Confirm ---------- */
-let confirmYes = null;
-function askConfirm(title, body, onYes){
-  el.confirmTitle.textContent = title;
-  el.confirmBody.textContent = body;
-  confirmYes = onYes;
-  showModal("confirmM");
+/* modals */
+.modal{ display:none; position:fixed; inset:0; z-index:50; }
+.modal.show{ display:block; }
+.back{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
+.box{
+  position:absolute;
+  left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  width:min(980px,94vw);
+  max-height:88vh;
+  background:rgba(10,12,22,.92);
+  border:1px solid rgba(89,242,255,.18);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
 }
-el.btnNo.addEventListener("click", ()=> hideModal("confirmM"), {passive:true});
-el.btnYes.addEventListener("click", ()=>{
-  hideModal("confirmM");
-  if(confirmYes){ const fn = confirmYes; confirmYes=null; fn(); }
-}, {passive:true});
+.smallBox{ width:min(520px,94vw); }
+.confirmBox{ width:min(560px,94vw); }
 
-/* ---------- Turn / Phase core ---------- */
-function draw(side, n=1){
-  const p = state[side];
-  for(let i=0;i<n;i++){
-    if(p.deck.length<=0){
-      log(`${side==="P1"?"あなた":"AI"}：デッキ切れ（ドロー不能）`, "warn");
-      return;
-    }
-    p.hand.push(p.deck.shift());
-  }
+.boxHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px;
+  border-bottom:1px solid rgba(89,242,255,.12);
 }
-function enforceHandLimit(side){
-  const p = state[side];
-  while(p.hand.length > 7){
-    const c = p.hand.pop();
-    p.wing.push(c);
-    log(`${side==="P1"?"あなた":"AI"}：手札上限でウイングへ → ${c.name}`, "muted");
-  }
+.boxTitle{ font-weight:1000; letter-spacing:.12em; font-size:13px; }
+
+.viewerBody{
+  display:grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap:12px;
+  padding:12px;
 }
-function resolveBattle_CvC(aSide, aPos, dSide, dPos){
-  const A = state[aSide].C[aPos];
-  const D = state[dSide].C[dPos];
-  if(!A || !D) return;
-
-  SE.attack();
-  log(`バトル：${A.name}(${A.atk}) vs ${D.name}(${D.atk})`, "muted");
-
-  if(A.atk === D.atk){
-    state[aSide].C[aPos]=null;
-    state[dSide].C[dPos]=null;
-    state[aSide].wing.push(A);
-    state[dSide].wing.push(D);
-    SE.brk();
-    log("同値処理：相打ち（両方ウイング）", "muted");
-    return;
-  }
-  if(A.atk > D.atk){
-    state[dSide].C[dPos]=null;
-    state[dSide].wing.push(D);
-    SE.brk();
-    log(`破壊：${D.name} → ウイング`, "muted");
-  }else{
-    state[aSide].C[aPos]=null;
-    state[aSide].wing.push(A);
-    SE.brk();
-    log(`破壊：${A.name} → ウイング`, "muted");
-  }
+.viewerBody img{
+  width:100%;
+  border-radius:16px;
+  border:1px solid rgba(167,176,217,.18);
+  background:rgba(6,8,14,.55);
+}
+.viewerText{
+  font-size:14px;
+  line-height:1.6;
+  white-space:pre-wrap;
+  color:rgba(233,236,255,.92);
+}
+@media (max-width:720px){
+  .viewerBody{ grid-template-columns:1fr; }
 }
 
-/* ---------- AI (simple) ---------- */
-function aiMain(){
-  // キャラを出す
-  const emptyC = state.AI.C.findIndex(x=>!x);
-  if(emptyC>=0){
-    const idx = state.AI.hand.findIndex(c=>c.type==="character" && c.rank<=4);
-    if(idx>=0){
-      const c = state.AI.hand.splice(idx,1)[0];
-      state.AI.C[emptyC]=c;
-      SE.place();
-      log(`AI：登場 → ${c.name}`, "muted");
-    }
-  }
-  // Eに置く（仮）
-  const emptyE = state.AI.E.findIndex(x=>!x);
-  if(emptyE>=0){
-    const idx2 = state.AI.hand.findIndex(c=>c.type!=="character");
-    if(idx2>=0){
-      const c = state.AI.hand.splice(idx2,1)[0];
-      state.AI.E[emptyE]=c;
-      SE.place();
-      log(`AI：配置（E）→ ${c.name}`, "muted");
-    }
-  }
-}
-function aiBattle(){
-  for(let i=0;i<3;i++){
-    const atk = state.AI.C[i];
-    if(!atk) continue;
-
-    const playerIdxs = state.P1.C.map((c,idx)=>c?idx:-1).filter(x=>x>=0);
-    if(playerIdxs.length){
-      const t = playerIdxs[Math.floor(Math.random()*playerIdxs.length)];
-      resolveBattle_CvC("AI", i, "P1", t);
-    }else{
-      const sidx = state.P1.shield.findIndex(x=>!!x);
-      if(sidx>=0){
-        const sh = state.P1.shield[sidx];
-        state.P1.shield[sidx] = null;
-        state.P1.hand.push(sh);
-        SE.brk();
-        log(`AI：シールド破壊 → あなた手札へ ${sh.name}`, "warn");
-      }else{
-        log("敗北：相手のダイレクトアタック（仮）", "warn");
-      }
-    }
-  }
-}
-async function runAITurn(){
-  if(state.aiRunning) return;
-  if(state.activeSide !== "AI") return;
-  state.aiRunning = true;
-
-  try{
-    log("相手ターン開始", "warn");
-
-    state.phase = "START"; updateHUD(); renderAll();
-    await sleep(220);
-
-    state.phase = "DRAW"; updateHUD(); SE.phase();
-    draw("AI", 1);
-    log("AI：ドロー +1", "muted");
-    renderAll();
-    await sleep(280);
-
-    state.phase = "MAIN"; updateHUD(); SE.phase();
-    aiMain();
-    renderAll();
-    await sleep(360);
-
-    state.phase = "BATTLE"; updateHUD(); SE.phase();
-    aiBattle();
-    renderAll();
-    await sleep(420);
-
-    state.phase = "END"; updateHUD(); SE.phase();
-    enforceHandLimit("AI");
-    renderAll();
-    await sleep(240);
-
-    state.activeSide = "P1";
-    state.turn++;
-    state.phase = "START";
-    log(`TURN ${state.turn} あなたのターン開始`, "muted");
-    updateHUD();
-    renderAll();
-
-  }finally{
-    state.aiRunning = false;
-  }
-}
-
-/* ---------- Player actions ---------- */
-function selectedCard(){
-  if(state.selectedHandIndex==null) return null;
-  return state.P1.hand[state.selectedHandIndex] || null;
-}
-
-function onClickYourC(pos){
-  if(state.activeSide!=="P1") return;
-
-  if(state.phase === "MAIN"){
-    const card = selectedCard();
-    if(!card) return;
-    if(state.P1.C[pos]) return;
-
-    if(card.type !== "character"){
-      log("このカードはキャラクターではないため、Cには置けません", "warn");
-      return;
-    }
-    if(state.normalSummonUsed){
-      log("登場（通常召喚）はターン1回です", "warn");
-      return;
-    }
-    if(card.rank >= 5){
-      log("RANK5以上は見参（今は仮）です", "warn");
-      return;
-    }
-
-    state.P1.C[pos] = card;
-    state.P1.hand.splice(state.selectedHandIndex,1);
-    state.selectedHandIndex = null;
-    state.normalSummonUsed = true;
-    SE.place();
-    log(`登場：${card.name}`, "muted");
-    renderAll();
-    return;
-  }
-
-  if(state.phase === "BATTLE"){
-    if(!state.P1.C[pos]) return;
-    state.selectedAttackerPos = (state.selectedAttackerPos===pos) ? null : pos;
-    renderAll();
-    return;
-  }
-}
-
-function onClickYourE(pos){
-  if(state.activeSide!=="P1") return;
-  if(state.phase !== "MAIN") return;
-
-  const card = selectedCard();
-  if(!card) return;
-  if(state.P1.E[pos]) return;
-
-  if(card.type === "character"){
-    log("キャラクターはEには置けません（Cに置いてください）", "warn");
-    return;
-  }
-
-  state.P1.E[pos] = card;
-  state.P1.hand.splice(state.selectedHandIndex,1);
-  state.selectedHandIndex = null;
-  SE.place();
-  log(`配置（E）：${card.name}`, "muted");
-  renderAll();
-}
-
-function onClickEnemyCard(enemyPos){
-  if(state.activeSide!=="P1") return;
-  if(state.phase!=="BATTLE") return;
-  if(state.selectedAttackerPos==null) return;
-
-  const atkCard = state.P1.C[state.selectedAttackerPos];
-  const defCard = state.AI.C[enemyPos];
-  if(!atkCard || !defCard) return;
-
-  askConfirm("攻撃確認", `${atkCard.name} → ${defCard.name}\n攻撃しますか？`, ()=>{
-    resolveBattle_CvC("P1", state.selectedAttackerPos, "AI", enemyPos);
-    state.selectedAttackerPos = null;
-    renderAll();
-  });
-}
-
-function onClickEnemyShield(idx){
-  if(state.activeSide!=="P1") return;
-  if(state.phase!=="BATTLE") return;
-  if(state.selectedAttackerPos==null) return;
-
-  const atkCard = state.P1.C[state.selectedAttackerPos];
-  if(!atkCard) return;
-
-  const enemyHasC = state.AI.C.some(Boolean);
-  if(enemyHasC){
-    log("相手キャラがいる間はシールドを攻撃できません", "warn");
-    return;
-  }
-  if(!state.AI.shield[idx]){
-    log("そのシールドは既にありません", "warn");
-    return;
-  }
-
-  askConfirm("攻撃確認", `${atkCard.name} がシールドを攻撃します。\nシールドを破壊（→相手手札）しますか？`, ()=>{
-    const sh = state.AI.shield[idx];
-    state.AI.shield[idx] = null;
-    state.AI.hand.push(sh);
-    SE.brk();
-    log(`シールド破壊：相手手札へ → ${sh.name}`, "muted");
-    state.selectedAttackerPos = null;
-    renderAll();
-  });
-}
-
-/* ---------- Render parts ---------- */
-function renderZones(){
-  // AI E
-  el.aiE.innerHTML = "";
-  for(let i=0;i<3;i++){
-    el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
-  }
-
-  // AI C
-  el.aiC.innerHTML = "";
-  for(let i=0;i<3;i++){
-    const c = state.AI.C[i];
-    const slot = makeSlot(c, {enemy:true});
-    slot.addEventListener("click", ()=> onClickEnemyCard(i), {passive:true});
-    el.aiC.appendChild(slot);
-  }
-
-  // YOUR C
-  el.pC.innerHTML = "";
-  for(let i=0;i<3;i++){
-    const c = state.P1.C[i];
-    const card = selectedCard();
-    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed && card && card.type==="character" && !c);
-    const sel = (state.selectedAttackerPos===i);
-    const slot = makeSlot(c, {glow, sel});
-    slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
-    el.pC.appendChild(slot);
-  }
-
-  // YOUR E
-  el.pE.innerHTML = "";
-  for(let i=0;i<3;i++){
-    const c = state.P1.E[i];
-    const card = selectedCard();
-    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && card && card.type!=="character" && !c);
-    const slot = makeSlot(c, {glow});
-    slot.addEventListener("click", ()=> onClickYourE(i), {passive:true});
-    el.pE.appendChild(slot);
-  }
-}
-
-function renderHand(){
-  el.hand.innerHTML = "";
-  for(let i=0;i<state.P1.hand.length;i++){
-    const c = state.P1.hand[i];
-    const h = document.createElement("div");
-    h.className = "handCard";
-
-    const playable = (state.activeSide==="P1" && state.phase==="MAIN");
-    if(playable) h.classList.add("glow");
-    if(state.selectedHandIndex===i) h.classList.add("sel");
-
-    const url = state.img.cardUrlByNo[pad2(c.no)];
-    if(url){
-      h.style.backgroundImage = `url("${url}")`;
-    }
-
-    h.addEventListener("click", ()=>{
-      if(state.activeSide!=="P1") return;
-      SE.ui();
-      state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
-      state.selectedAttackerPos = null;
-      renderAll();
-    }, {passive:true});
-
-    bindLongPress(h, ()=> openViewer(c));
-    el.hand.appendChild(h);
-  }
-}
-
-function renderEnemyHand(){
-  el.aiHand.innerHTML = "";
-  const n = state.AI.hand.length;
-  const show = Math.min(n, 12);
-  for(let i=0;i<show;i++){
-    const b = document.createElement("div");
-    b.className = "handBack";
-    if(state.img.backUrl) b.style.backgroundImage = `url("${state.img.backUrl}")`;
-    el.aiHand.appendChild(b);
-  }
-  if(n > show){
-    const more = document.createElement("div");
-    more.className = "handBack";
-    more.textContent = `+${n-show}`;
-    more.style.display = "flex";
-    more.style.alignItems = "center";
-    more.style.justifyContent = "center";
-    more.style.fontWeight = "1000";
-    more.style.color = "rgba(233,236,255,.92)";
-    el.aiHand.appendChild(more);
-  }
-}
-
-function ensureShieldCountBadge(cell){
-  let b = cell.querySelector(".shieldCount");
-  if(!b){
-    b = document.createElement("div");
-    b.className = "shieldCount";
-    cell.appendChild(b);
-  }
-  return b;
-}
-function renderShields(){
-  const nodes = document.querySelectorAll(".shieldSlot");
-  nodes.forEach((cell)=>{
-    const side = cell.getAttribute("data-side");
-    const idx = Number(cell.getAttribute("data-idx") || "0");
-    const back = cell.querySelector(".backCard");
-    const sh = state[side].shield[idx];
-    const exists = !!sh;
-
-    back.classList.toggle("empty", !exists);
-
-    if(exists){
-      if(state.img.backUrl){
-        back.style.backgroundImage = `url("${state.img.backUrl}")`;
-        back.style.backgroundColor = "";
-      }else{
-        back.style.backgroundImage = "";
-        back.style.backgroundColor = "#070914";
-      }
-    }else{
-      back.style.backgroundImage = "";
-      back.style.backgroundColor = "";
-    }
-
-    const count = state[side].shield.filter(Boolean).length;
-    const badge = ensureShieldCountBadge(cell);
-    badge.textContent = `${count}/3`;
-
-    cell.onclick = ()=> { if(side==="AI") onClickEnemyShield(idx); };
-  });
-}
-
-function renderAll(){
-  updateCounts();
-  renderZones();
-  renderHand();
-  renderEnemyHand();
-  renderShields();
-}
-
-/* ---------- Board clicks (wing/outside) ---------- */
-function bindBoardClicks(){
-  const grid = $("grid");
-  grid.addEventListener("click", (e)=>{
-    const t = e.target.closest(".cell");
-    if(!t) return;
-    const act = t.getAttribute("data-click");
-    if(!act) return;
-
-    SE.ui();
-    if(act==="aiWing") openZone("ENEMY WING", state.AI.wing.slice().reverse());
-    if(act==="aiOutside") openZone("ENEMY OUTSIDE", state.AI.outside.slice().reverse());
-
-    if(act==="pWing") openZone("YOUR WING", state.P1.wing.slice().reverse());
-    if(act==="pOutside") openZone("YOUR OUTSIDE", state.P1.outside.slice().reverse());
-  }, {passive:true});
-}
-
-/* ---------- Phase Buttons ---------- */
-function nextPhase(){
-  const i = PHASES.indexOf(state.phase);
-  const next = PHASES[(i+1)%PHASES.length];
-  state.phase = next;
-  SE.phase();
-
-  if(next==="START"){
-    state.normalSummonUsed = false;
-    state.selectedHandIndex = null;
-    state.selectedAttackerPos = null;
-  }
-  if(next==="DRAW"){
-    draw(state.activeSide, 1);
-    log(`${state.activeSide==="P1"?"あなた":"AI"}：ドロー +1`, "muted");
-  }
-  if(next==="END"){
-    enforceHandLimit(state.activeSide);
-  }
-
-  updateHUD();
-  renderAll();
-}
-
-function endTurn(){
-  enforceHandLimit(state.activeSide);
-
-  if(state.activeSide==="P1"){
-    state.activeSide = "AI";
-    state.phase = "START";
-    updateHUD();
-    renderAll();
-    runAITurn();
-  }else{
-    state.activeSide = "P1";
-    state.turn++;
-    state.phase = "START";
-    log(`TURN ${state.turn} あなたのターン開始`, "muted");
-    updateHUD();
-    renderAll();
-  }
-}
-
-/* ---------- Start Game ---------- */
-function startGame(){
-  state.turn = 1;
-  state.phase = "START";
-  state.normalSummonUsed = false;
-  state.selectedHandIndex = null;
-  state.selectedAttackerPos = null;
-  state.aiRunning = false;
-
-  state.P1.deck = buildDeck();
-  state.AI.deck = buildDeck();
-
-  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
-  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
-
-  state.P1.hand = [];
-  state.AI.hand = [];
-  draw("P1", 4);
-  draw("AI", 4);
-
-  state.P1.C = [null,null,null];
-  state.AI.C = [null,null,null];
-  state.P1.E = [null,null,null];
-  state.AI.E = [null,null,null];
-  state.P1.wing = [];
-  state.AI.wing = [];
-  state.P1.outside = [];
-  state.AI.outside = [];
-
-  state.firstSide = (Math.random() < 0.5) ? "P1" : "AI";
-  state.activeSide = state.firstSide;
-
-  if(state.firstSide==="P1"){
-    el.firstInfo.textContent = "先攻：あなた";
-    log("先攻：あなた", "muted");
-    log("あなたのターン開始", "muted");
-  }else{
-    el.firstInfo.textContent = "先攻：相手";
-    log("先攻：相手", "warn");
-  }
-
-  log("ゲーム開始：シールド3（裏向き）/ 初手4", "muted");
-
-  updateHUD();
-  renderAll();
-
-  if(state.activeSide==="AI"){
-    runAITurn();
-  }
-}
-
-/* ---------- Start / Buttons / Settings ---------- */
-function bindStart(){
-  el.boot.textContent = "JS: OK（読み込み成功）";
-  const go = ()=>{
-    unlockAudioOnce();
-    if(state.started) return;
-    state.started=true;
-    el.title.classList.remove("active");
-    el.game.classList.add("active");
-    log("対戦画面：表示OK", "muted");
-    startGame();
-  };
-  el.btnStart.addEventListener("click", ()=>{ SE.ui(); go(); }, {passive:true});
-  el.title.addEventListener("click", go, {passive:true});
-}
-
-function bindHUDButtons(){
-  el.btnHelp.addEventListener("click", ()=>{ SE.ui(); showModal("helpM"); }, {passive:true});
-  el.btnSettings.addEventListener("click", ()=>{
-    SE.ui();
-    el.repoInput.value = getRepo();
-    showModal("settingsM");
-  }, {passive:true});
-}
-
-function bindSettings(){
-  if(el.btnSound){
-    el.btnSound.textContent = soundOn ? "SE: ON" : "SE: OFF";
-    el.btnSound.addEventListener("click", ()=>{
-      soundOn = !soundOn;
-      localStorage.setItem(LS_SOUND, soundOn ? "1" : "0");
-      el.btnSound.textContent = soundOn ? "SE: ON" : "SE: OFF";
-      SE.ui();
-    }, {passive:true});
-  }
-
-  el.btnRepoSave.addEventListener("click", async ()=>{
-    const v = (el.repoInput.value || "").trim();
-    if(!v.includes("/")){
-      log("設定NG：owner/repo 形式で入力してください", "warn");
-      return;
-    }
-    setRepo(v);
-    clearCache();
-    log(`設定：リポジトリ = ${v}`, "muted");
-    await rescanImages();
-  }, {passive:true});
-
-  el.btnRescan.addEventListener("click", async ()=>{ SE.ui(); await rescanImages(); }, {passive:true});
-
-  el.btnClearCache.addEventListener("click", ()=>{
-    SE.ui();
-    clearCache();
-    log("画像キャッシュを消去しました", "muted");
-    state.img.ready=false;
-    el.fieldTop.style.backgroundImage = "";
-    el.fieldBottom.style.backgroundImage = "";
-    state.img.cardUrlByNo = {};
-    state.img.cardFileByNo = {};
-    state.img.backUrl = "";
-    renderAll();
-  }, {passive:true});
-}
-
-function bindPhaseButtons(){
-  el.btnNext.addEventListener("click", ()=>{
-    if(state.activeSide!=="P1") return;
-    SE.ui();
-    nextPhase();
-  }, {passive:true});
-
-  el.btnEnd.addEventListener("click", ()=>{
-    if(state.activeSide!=="P1") return;
-    SE.ui();
-    endTurn();
-  }, {passive:true});
-}
-
-function bindLogButton(){
-  bindLongPress(el.btnLog, ()=>{
-    renderLogModal();
-    showModal("logM");
-  }, 360);
-}
-
-/* ---------- init ---------- */
-async function init(){
-  el.boot.textContent = "JS: OK（初期化中…）";
-  updateHUD();
-
-  document.addEventListener("pointerdown", unlockAudioOnce, { once:true });
-
-  bindStart();
-  bindHUDButtons();
-  bindSettings();
-  bindPhaseButtons();
-  bindBoardClicks();
-  bindLogButton();
-
-  const cache = getCache();
-  if(cache && cache.assetFiles && cache.cardFiles && cache.repo === getRepo()){
-    log("画像：キャッシュを使用（必要なら設定→再取得）", "muted");
-    await applyImagesFromCache();
-  }else{
-    await rescanImages();
-  }
-
-  el.boot.textContent = "JS: OK（準備完了）";
-  log("C/E枠は常時表示（各3）／詳細は長押し", "muted");
-}
-
-document.addEventListener("DOMContentLoaded", init);
+.zoneList{ padding:12px; display:flex; flex-direction:column; gap:8px; max-height:74vh; overflow:auto; }
+.zoneItem{ display:flex; gap:10px; align-items:center; padding:10px; border-radius:14px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
+.zThumb{ width:54px; aspect-ratio:2/3; border-radius:10px; border:1px solid rgba(167,176,217,.18); background-size:cover; background-position:center; }
+.zMeta .t{ font-weight:1000; font-size:13px; }
+.zMeta .s{ color:var(--muted); font-size:11px; }
+
+.logBody{ padding:12px; max-height:74vh; overflow:auto; }
+.logLine{ margin:6px 0; font-size:12px; color:rgba(233,236,255,.92); }
+.logLine.muted{ color:rgba(167,176,217,.92); }
+.logLine.warn{ color:rgba(255,77,109,.95); }
+
+.confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; }
+.confirmBtns{ display:flex; gap:10px; padding:0 12px 12px; justify-content:flex-end; }
+
+.settings{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+.setBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
+.setTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
+.setRow{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.setHint{ font-size:12px; color:var(--muted); line-height:1.5; margin-top:8px; }
+.input{
+  flex:1;
+  min-width:240px;
+  padding:10px 12px;
+  border-radius:14px;</pre>
