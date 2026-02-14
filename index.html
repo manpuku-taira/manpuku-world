@@ -1,11 +1,11 @@
-<!-- index.html（丸ごと置換・v40007） -->
+<!-- index.html（丸ごと置換・v40008） -->
 <!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40007" />
+  <link rel="stylesheet" href="./style.css?v=40008" />
 </head>
 <body>
 
@@ -49,6 +49,9 @@
       </div>
     </div>
 
+    <!-- ANNOUNCE (big instruction) -->
+    <div id="announce" class="announce"></div>
+
     <!-- Enemy Hand -->
     <div class="enemyHandDock">
       <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
@@ -61,11 +64,10 @@
         <div id="fieldTop" class="field fieldTop"></div>
         <div id="fieldBottom" class="field fieldBottom"></div>
 
-        <!-- Grid (6 rows × 4 cols) -->
         <div id="grid" class="grid">
 
           <!-- ENEMY: row 1 (D + SSS) -->
-          <div class="cell pile" data-click="aiDeck">
+          <div class="cell pile">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
           <div class="cell shieldSlot" data-side="AI" data-idx="0">
@@ -132,14 +134,11 @@
           <div class="cell shieldSlot" data-side="P1" data-idx="2">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
-          <div class="cell pile" data-click="pDeck">
+          <div class="cell pile">
             <div class="z">D</div><div id="pDeckN" class="n">0</div>
           </div>
 
         </div>
-
-        <!-- Arrow layer -->
-        <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
       </div>
     </div>
 
@@ -232,14 +231,6 @@
           </div>
           <div class="setHint">assets/field.*、assets/cards の画像を自動検出します。</div>
         </div>
-
-        <div class="setBlock">
-          <div class="setTitle">サウンド</div>
-          <div class="setRow">
-            <button id="btnSound" class="btn small primary">SE: ON</button>
-          </div>
-          <div class="setHint">今は内蔵SE（ピコ音）です。後で音源ファイルに差し替え可能です。</div>
-        </div>
       </div>
     </div>
   </div>
@@ -254,15 +245,14 @@
       </div>
       <div class="help">
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
-        <div class="helpItem">・手札をタップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（RANK4以下）／RANK5以上は空きCを長押しで見参（仮）</div>
-        <div class="helpItem">・MAIN：アイテム/エフェクト＝空きEをタップで配置（仮）</div>
-        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラまたはシールドをタップ</div>
-        <div class="helpItem">・LOG：長押しでログ表示</div>
+        <div class="helpItem">・手札タップ：選択（紫枠）</div>
+        <div class="helpItem">・MAIN：キャラはCへ／エフェクト・アイテムはEへ（最大3枠）</div>
+        <div class="helpItem">・見参が必要なカード：Cに置こうとするとコスト選択が始まります（回数無制限）</div>
+        <div class="helpItem">・装備カード：置いた後「装備するキャラを選択」アナウンスが出ます</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40007"></script>
+  <script src="./script.js?v=40008"></script>
 </body>
 </html>
