@@ -1,9 +1,11 @@
 /* =========================================================
-  Manpuku World - v40015
+  Manpuku World - v40016
   FIX:
-   - C/E枠が極小(半円)になる問題
-     → HTMLを横3マス結合(span3)にし、幅を確保
-   - 画像が見えない/枠が見えないの副作用を解消
+   - CardRegistryをNo.01〜20のtype付きに更新（effect/item混在）
+   - E表示/配置が機能するように修正
+   - 「登場できない」キャラは通常召喚禁止
+   - 見参はコスト必須（手札 or ステージのカード1枚→ウイング）
+   - 敵ハンドを最小化し、自分ハンド領域を回復（CSS側）
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +29,6 @@ const el = {
   btnEnd: $("btnEnd"),
   btnLog: $("btnLog"),
 
-  matRoot: $("matRoot"),
   fieldTop: $("fieldTop"),
   fieldBottom: $("fieldBottom"),
 
@@ -46,19 +47,16 @@ const el = {
   pWingN: $("pWingN"),
   pOutN: $("pOutN"),
 
-  viewerM: $("viewerM"),
   viewerTitle: $("viewerTitle"),
   viewerImg: $("viewerImg"),
   viewerText: $("viewerText"),
 
-  zoneM: $("zoneM"),
   zoneTitle: $("zoneTitle"),
   zoneList: $("zoneList"),
 
   logM: $("logM"),
   logBody: $("logBody"),
 
-  confirmM: $("confirmM"),
   confirmTitle: $("confirmTitle"),
   confirmBody: $("confirmBody"),
   btnYes: $("btnYes"),
@@ -69,15 +67,13 @@ const el = {
   btnRepoSave: $("btnRepoSave"),
   btnRescan: $("btnRescan"),
   btnClearCache: $("btnClearCache"),
-
-  helpM: $("helpM"),
 };
 
 /* ---------- Logs ---------- */
 const LOGS = [];
 function log(msg, kind="muted"){
   LOGS.unshift({msg, kind, t: Date.now()});
-  if(el.logM.classList.contains("show")) renderLogModal();
+  if($("logM").classList.contains("show")) renderLogModal();
 }
 window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
 window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
@@ -110,13 +106,118 @@ function normalizeText(t){
   return (t || "").replaceAll("又は","または").replaceAll("出来る","できる");
 }
 
-/* ---------- Starter deck (20 types x2) ---------- */
-const CardRegistry = Array.from({length:20}, (_,i)=> {
-  const no = i+1;
-  const rank = ((i%5)+1);
-  const atk = rank*500;
-  return { no, name:`カード${no}`, rank, atk, type:"character", text: normalizeText("（テキストは後で確定）") };
-});
+/* =========================================================
+  Cards No.01〜20（最低限：type/登場不可/見参コスト）
+  - type: "character" | "effect" | "item"
+  - cannotNormalSummon: true のキャラは「登場」不可（見参のみ）
+  - kensanCost: "any_card"（手札またはステージのカード1枚）
+========================================================= */
+const CardRegistry = [
+  { no:1,  id:"card_01", name:"黒の魔法使いクルエラ", type:"character", rank:5, atk:2500, tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    cannotNormalSummon:true, kensanCost:"any_card",
+    effects:[
+      "このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。",
+      "1ターンに1度発動できる。デッキ・ウイングから「黒魔法」カード1枚を手札に加える。"
+    ]
+  },
+  { no:2,  id:"card_02", name:"黒魔法-フレイムバレット", type:"effect", rank:3, atk:0, tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "自分ステージに「クルエラ」がある時、手札から発動できる。相手ステージのキャラクター1体を選び、以下の効果を1つ選択する。",
+      "・相手ステージのATKが1番高いキャラクター1体をウイングに送る。",
+      "・相手ステージのrank4以下のキャラクターをすべてウイングに送る。"
+    ]
+  },
+  { no:3,  id:"card_03", name:"トナカイの少女ニコラ", type:"character", rank:5, atk:2000, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    cannotNormalSummon:true, kensanCost:"any_card",
+    effects:[
+      "このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。",
+      "自分ターンに発動できる。このターンの終わりまで、このキャラクターのATK+1000。"
+    ]
+  },
+  { no:4,  id:"card_04", name:"聖ラウス", type:"character", rank:4, atk:2000, tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "このカードが登場した時、発動できる。デッキ・ウイングからタグ「クランプス」カード1枚を手札に加える。"
+    ]
+  },
+  { no:5,  id:"card_05", name:"統括AI タータ", type:"character", rank:4, atk:2000, tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    effects:[
+      "このカードが登場した時、発動できる。デッキから2枚ドローする。",
+      "自分ターンに1度発動できる。手札から2枚までウイングに送る。その後、送った枚数と同じ枚数だけ、タイトルタグ「BUGBUG西遊記」カードをデッキから手札に加える。"
+    ]
+  },
+  { no:6,  id:"card_06", name:"麗し令嬢エフィ", type:"character", rank:5, atk:2000, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    cannotNormalSummon:true, kensanCost:"any_card",
+    effects:[
+      "このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。",
+      "自分ターンに発動できる。このターンの終わりまで、相手ステージのキャラクター1体を選び、ATK-1000。"
+    ]
+  },
+  { no:7,  id:"card_07", name:"狩猟まひる", type:"character", rank:3, atk:1500, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "（効果テキスト未確定：後で差し替え）" ]
+  },
+  { no:8,  id:"card_08", name:"組織の男 手形", type:"effect", rank:3, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "相手ターンに1度発動できる。相手が発動した効果を無効にする。" ]
+  },
+  { no:9,  id:"card_09", name:"小太郎・孫悟空Lv17", type:"character", rank:4, atk:2000, tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    effects:[
+      "このカードが自分ステージに存在する時、発動できる。手札の「小次郎」カードを見参させる。",
+      "自分ステージに「小次郎」カードがある時、このカードのATK+500。"
+    ]
+  },
+  { no:10, id:"card_10", name:"小次郎・孫悟空Lv17", type:"character", rank:4, atk:2000, tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    effects:[
+      "このカードが自分ステージに存在する時、発動できる。手札の「小太郎」カードを見参させる。",
+      "自分ステージに「小太郎」カードがある時、このカードのATK+500。"
+    ]
+  },
+  { no:11, id:"card_11", name:"司令", type:"item", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "このカードが登場した時、発動できる。自分ステージのキャラクター1体を選択し、このカードをアイテム扱いとして装備する。そのキャラクターのATK+500。"
+    ]
+  },
+  { no:12, id:"card_12", name:"班目プロデューサー", type:"character", rank:3, atk:1500, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "このカードは1ターンに1度、バトルでは破壊されない。" ]
+  },
+  { no:13, id:"card_13", name:"超弩級砲塔列車スタマックス氏", type:"character", rank:4, atk:2000, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "このカードが自分ステージに存在する時、発動できる。このカードをウイングに送り、相手ステージのキャラクター1体を選択し、このターンの終わりまでATK-1000。",
+      "この効果は相手ターンでも発動できる。"
+    ]
+  },
+  { no:14, id:"card_14", name:"記憶抹消", type:"effect", rank:3, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "相手がカードの効果を発動した時、手札から発動できる。その効果を無効にしてウイングに送る。" ]
+  },
+  { no:15, id:"card_15", name:"桜蘭の陰陽術 - 闘 -", type:"effect", rank:3, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "自分・相手のキャラクターがバトルする時、手札から発動できる。このターンの終わりまで自分ステージのキャラクター1体を選択し、ATK+1000。" ]
+  },
+  { no:16, id:"card_16", name:"力こそパワー！！", type:"effect", rank:3, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "自分ターンにのみ発動できる。相手ステージのATKが1番低いキャラクター1体を選択し、ウイングに送る。" ]
+  },
+  { no:17, id:"card_17", name:"キャトルミューティレーション", type:"effect", rank:3, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[ "自分ステージのキャラクターがバトルでウイングに送られた時、手札から発動できる。相手キャラクター1体を選択し手札に戻す。" ]
+  },
+  { no:18, id:"card_18", name:"a-xブラスター01 -放射型-", type:"item", rank:2, atk:0, tags:["射手"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "自分のターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+500。",
+      "タグ「射手」をもつキャラクターが装備した場合、さらにATK+500させ、相手ターンの開始時に相手の手札を1枚ランダムにウイングに送る。"
+    ]
+  },
+  { no:19, id:"card_19", name:"-聖剣- アロングダイト", type:"item", rank:2, atk:0, tags:["勇者","剣士"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "自分ターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+500。",
+      "タグ「勇者」「剣士」を持つキャラクターがこのカードを装備した場合、さらにATK+500し、相手キャラクターをバトルでウイングに送った時、カードを1枚ドローする。"
+    ]
+  },
+  { no:20, id:"card_20", name:"普通の棒", type:"item", rank:1, atk:0, tags:["勇者"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    effects:[
+      "自分ターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+300。",
+      "タグ「勇者」を持つキャラクターがこのカードを装備した場合、さらにATK+500。"
+    ]
+  },
+].map(c => ({
+  ...c,
+  text: normalizeText((c.effects || []).join("\n")),
+}));
 
 function shuffle(a){
   for(let i=a.length-1;i>0;i--){
@@ -124,6 +225,8 @@ function shuffle(a){
     [a[i],a[j]]=[a[j],a[i]];
   }
 }
+
+/* デッキ：20種×2枚＝40枚（type混在） */
 function buildDeck(){
   const deck = [];
   for(const c of CardRegistry){ deck.push({...c}); deck.push({...c}); }
@@ -168,12 +271,14 @@ function setActiveUI(){
   el.btnNext.style.opacity = you ? "1" : ".45";
   el.btnEnd.style.opacity  = you ? "1" : ".45";
 }
+
 function updateHUD(){
   el.chipTurn.textContent = `TURN ${state.turn}`;
   el.chipPhase.textContent = state.phase;
   setActiveUI();
   el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
 }
+
 function updateCounts(){
   el.aiDeckN.textContent = state.AI.deck.length;
   el.aiWingN.textContent = state.AI.wing.length;
@@ -185,11 +290,11 @@ function updateCounts(){
 }
 
 /* ---------- GitHub image scan ---------- */
-function getRepo(){ return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world"; }
-function setRepo(v){ localStorage.setItem(LS_REPO, v); }
-function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE) || "{}"); }catch{ return {}; } }
-function setCache(obj){ localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj)); }
-function clearCache(){ localStorage.removeItem(LS_IMG_CACHE); }
+function getRepo(){ return localStorage.getItem("mw_repo") || "manpuku-taira/manpuku-world"; }
+function setRepo(v){ localStorage.setItem("mw_repo", v); }
+function getCache(){ try{ return JSON.parse(localStorage.getItem("mw_img_cache_v4") || "{}"); }catch{ return {}; } }
+function setCache(obj){ localStorage.setItem("mw_img_cache_v4", JSON.stringify(obj)); }
+function clearCache(){ localStorage.removeItem("mw_img_cache_v4"); }
 
 async function ghList(path){
   const repo = getRepo();
@@ -208,11 +313,6 @@ function pickFieldFile(assetFiles){
   const lowers = assetFiles.map(n=>n.toLowerCase());
   const idx = lowers.findIndex(n=>n.startsWith("field."));
   if(idx>=0) return assetFiles[idx];
-  const cand = ["field.png.jpg","field.jpg","field.png","field.jpeg","field.PNG","field.JPG"];
-  for(const c of cand){
-    const k = assetFiles.findIndex(n=>n.toLowerCase() === c.toLowerCase());
-    if(k>=0) return assetFiles[k];
-  }
   return "";
 }
 function pickBackFile(assetFiles){
@@ -237,10 +337,9 @@ function scoreCardFilename(name, no){
   if(s.startsWith(`${p1}_`)) score += 80;
   if(s.includes(`${p2}_`)) score += 30;
   if(s.includes(`${p1}_`)) score += 20;
-  if(s.includes(".jpg")) score += 5;
   if(s.includes(".png")) score += 5;
+  if(s.includes(".jpg")) score += 5;
   if(s.includes(".jpeg")) score += 4;
-  if(s.includes(".png.jpg") || s.includes(".png.jpeg") || s.includes(".png.JPG")) score += 6;
   return score;
 }
 function buildCardMapFromFileList(cardFiles){
@@ -262,32 +361,6 @@ async function validateImage(url){
     img.onerror = ()=> resolve(false);
     img.src = url;
   });
-}
-function stripExtAll(name){
-  let base = name;
-  for(let i=0;i<3;i++){
-    const dot = base.lastIndexOf(".");
-    if(dot <= 0) break;
-    const ext = base.slice(dot+1).toLowerCase();
-    if(["png","jpg","jpeg","webp","gif"].includes(ext)) base = base.slice(0,dot);
-    else break;
-  }
-  return base;
-}
-function nameFromFilename(filename, no){
-  let base = stripExtAll(filename);
-  base = base.replace(new RegExp(`^${pad2(no)}_`), "");
-  base = base.replace(new RegExp(`^${no}_`), "");
-  base = base.replaceAll("_"," ");
-  base = base.trim();
-  return base || `カード${no}`;
-}
-function applyNamesFromMap(cardMap){
-  for(let no=1; no<=20; no++){
-    const k = pad2(no);
-    const fn = cardMap[k];
-    if(fn) CardRegistry[no-1].name = nameFromFilename(fn, no);
-  }
 }
 
 async function rescanImages(){
@@ -314,14 +387,10 @@ async function rescanImages(){
     setCache(cache);
 
     if(cache.fieldFile) log(`OK フィールド検出: ${cache.fieldFile}`, "muted");
-    else log("NG フィールド未検出（assets/field.* を確認）", "warn");
+    else log("注意：フィールド未検出（assets/field.* を確認）", "warn");
 
     if(cache.backFile) log(`OK 裏面検出: ${cache.backFile}`, "muted");
     else log("裏面：未設定（黒い裏面で動作）", "muted");
-
-    const mapped = Object.keys(cache.cardMap || {}).length;
-    if(mapped >= 20) log("OK カード画像：No.01〜20を自動紐付け", "muted");
-    else log(`注意：カード画像自動紐付け不足（${mapped}/20）`, "warn");
 
   }catch(err){
     log(`NG GitHub API取得失敗：${String(err.message || err)}`, "warn");
@@ -347,7 +416,6 @@ async function applyImagesFromCache(){
       el.fieldBottom.style.backgroundImage = `url("${u}")`;
       log("OK フィールド読込：上下同時表示", "muted");
     }else{
-      state.img.fieldUrl = "";
       el.fieldTop.style.backgroundImage = "";
       el.fieldBottom.style.backgroundImage = "";
       log(`NG フィールド読込失敗: ${u}`, "warn");
@@ -371,7 +439,6 @@ async function applyImagesFromCache(){
   state.img.cardUrlByNo = {};
   state.img.cardFileByNo = {};
   const map = cache.cardMap || {};
-  applyNamesFromMap(map);
   for(const k of Object.keys(map)){
     const file = map[k];
     state.img.cardFileByNo[k] = file;
@@ -416,8 +483,6 @@ function makeSlot(card, opts={}){
   if(card){
     slot.appendChild(faceForCard(card, !!opts.enemy));
     bindLongPress(slot, ()=> openViewer(card));
-  }else{
-    slot.dataset.empty = "1";
   }
   return slot;
 }
@@ -439,10 +504,10 @@ document.addEventListener("click", (e)=>{
 });
 
 function openViewer(card){
-  el.viewerTitle.textContent = `${card.name}`;
-  el.viewerText.textContent = (card.text || "");
+  $("viewerTitle").textContent = `${card.name}`;
+  $("viewerText").textContent = (card.text || "");
   const url = state.img.cardUrlByNo[pad2(card.no)];
-  el.viewerImg.src = url || "";
+  $("viewerImg").src = url || "";
   showModal("viewerM");
 }
 
@@ -472,7 +537,7 @@ function openZone(title, cards){
       t.textContent = `${c.name}`;
       const s = document.createElement("div");
       s.className = "s";
-      s.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
+      s.textContent = `${c.type.toUpperCase()} / RANK ${c.rank}` + (c.type==="character" ? ` / ATK ${c.atk}` : "");
 
       meta.appendChild(t); meta.appendChild(s);
       it.appendChild(th); it.appendChild(meta);
@@ -498,14 +563,13 @@ el.btnYes.addEventListener("click", ()=>{
   if(confirmYes){ const fn = confirmYes; confirmYes=null; fn(); }
 }, {passive:true});
 
-/* ---------- Turn / Phase core ---------- */
+/* ---------- Core ---------- */
 function setActiveSide(side){
   state.activeSide = side;
   setActiveUI();
 }
 function setPhase(p){
   state.phase = p;
-  updateHUD();
   renderAll();
 }
 
@@ -555,15 +619,74 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
   }
 }
 
-/* ---------- AI logic (simple) ---------- */
+/* ---------- Cost helpers ---------- */
+function listStageCards(side){
+  const p = state[side];
+  const list = [];
+  for(let i=0;i<3;i++){
+    if(p.C[i]) list.push({zone:"C", idx:i, card:p.C[i]});
+    if(p.E[i]) list.push({zone:"E", idx:i, card:p.E[i]});
+  }
+  return list;
+}
+
+/* 見参コスト：手札 or ステージのカード1枚（type問わず） */
+function payKensanCostAnyCard(side){
+  const p = state[side];
+
+  const handIdxs = p.hand.map((c,idx)=>({c, idx})).filter(x=>x.c);
+  const stage = listStageCards(side);
+
+  if(handIdxs.length + stage.length <= 1){
+    return null;
+  }
+
+  // 今回はUI簡易のため：手札優先で1枚捨てる（選択UIは次段で実装）
+  // ただし、見参対象自身以外を優先する。
+  const discardFromHand = ()=>{
+    if(p.hand.length<=0) return null;
+    return p.hand.pop();
+  };
+  const d = discardFromHand();
+  if(d){
+    p.wing.push(d);
+    return d;
+  }
+
+  // 手札が無い場合：ステージからE→Cの順で1枚送る
+  for(let i=0;i<3;i++){
+    if(p.E[i]){
+      const c = p.E[i]; p.E[i]=null; p.wing.push(c); return c;
+    }
+  }
+  for(let i=0;i<3;i++){
+    if(p.C[i]){
+      const c = p.C[i]; p.C[i]=null; p.wing.push(c); return c;
+    }
+  }
+  return null;
+}
+
+/* ---------- AI (簡易) ---------- */
 function aiMain(){
+  // 通常召喚：登場できるキャラだけ出す
   const empty = state.AI.C.findIndex(x=>!x);
   if(empty>=0){
-    const idx = state.AI.hand.findIndex(c=>c.rank<=4);
+    const idx = state.AI.hand.findIndex(c=>c.type==="character" && !c.cannotNormalSummon);
     if(idx>=0){
       const c = state.AI.hand.splice(idx,1)[0];
       state.AI.C[empty]=c;
       log(`AI：登場 → ${c.name}`, "muted");
+    }
+  }
+  // E：effect/itemを空きEへ（簡易）
+  const emptyE = state.AI.E.findIndex(x=>!x);
+  if(emptyE>=0){
+    const idxE = state.AI.hand.findIndex(c=>c.type!=="character");
+    if(idxE>=0){
+      const c = state.AI.hand.splice(idxE,1)[0];
+      state.AI.E[emptyE]=c;
+      log(`AI：配置 → ${c.name}`, "muted");
     }
   }
 }
@@ -593,11 +716,11 @@ async function runAITurn(){
 
   state.aiRunning = true;
   try{
-    setPhase("START"); await sleep(180);
-    setPhase("DRAW");  draw("AI", 1); renderAll(); await sleep(220);
-    setPhase("MAIN");  aiMain(); renderAll(); await sleep(240);
-    setPhase("BATTLE"); aiBattle(); renderAll(); await sleep(260);
-    setPhase("END"); enforceHandLimit("AI"); renderAll(); await sleep(180);
+    setPhase("START"); await sleep(160);
+    setPhase("DRAW");  draw("AI", 1); await sleep(180);
+    setPhase("MAIN");  aiMain(); await sleep(220);
+    setPhase("BATTLE"); aiBattle(); await sleep(240);
+    setPhase("END"); enforceHandLimit("AI"); await sleep(160);
 
     setActiveSide("P1");
     state.turn++;
@@ -617,15 +740,21 @@ function onClickYourC(pos){
     if(state.P1.C[pos]) return;
 
     const card = state.P1.hand[state.selectedHandIndex];
+    if(!card) return;
 
+    if(card.type !== "character"){
+      log("C（キャラクター）にエフェクト/アイテムは置けません", "warn");
+      return;
+    }
+    if(card.cannotNormalSummon){
+      log("このキャラクターは登場できません。空きCを長押しして見参してください", "warn");
+      return;
+    }
     if(state.normalSummonUsed){
       log("登場（通常召喚）はターン1回です", "warn");
       return;
     }
-    if(card.rank >= 5){
-      log("RANK5以上は見参（空スロット長押し）です", "warn");
-      return;
-    }
+
     state.P1.C[pos] = card;
     state.P1.hand.splice(state.selectedHandIndex,1);
     state.selectedHandIndex = null;
@@ -639,6 +768,7 @@ function onClickYourC(pos){
     if(!state.P1.C[pos]) return;
     state.selectedAttackerPos = (state.selectedAttackerPos===pos) ? null : pos;
     renderAll();
+    return;
   }
 }
 
@@ -649,10 +779,13 @@ function onClickYourE(pos){
   if(state.P1.E[pos]) return;
 
   const card = state.P1.hand[state.selectedHandIndex];
+  if(!card) return;
+
   if(card.type === "character"){
     log("E（エフェクト/アイテム）にキャラクターは置けません", "warn");
     return;
   }
+
   state.P1.E[pos] = card;
   state.P1.hand.splice(state.selectedHandIndex,1);
   state.selectedHandIndex = null;
@@ -660,6 +793,7 @@ function onClickYourE(pos){
   renderAll();
 }
 
+/* 見参：空C長押し（無制限） */
 function onLongPressEmptySlotForKenSan(pos){
   if(state.activeSide!=="P1") return;
   if(state.phase!=="MAIN") return;
@@ -667,23 +801,41 @@ function onLongPressEmptySlotForKenSan(pos){
   if(state.P1.C[pos]) return;
 
   const card = state.P1.hand[state.selectedHandIndex];
-  if(card.rank < 5) return;
+  if(!card) return;
 
-  if(state.P1.hand.length < 2){
-    log("見参：コスト（手札またはステージのカード1枚）が必要です", "warn");
+  if(card.type !== "character"){
+    log("見参できるのはキャラクターのみです", "warn");
+    return;
+  }
+  if(!card.cannotNormalSummon){
+    log("このキャラクターは通常登場できます（Cをタップ）", "muted");
     return;
   }
 
-  askConfirm("見参", `${card.name} を見参しますか？\nコスト：手札のカード1枚をウイングへ送ります`, ()=>{
-    const discIdx = (state.selectedHandIndex===state.P1.hand.length-1) ? 0 : state.P1.hand.length-1;
-    const disc = state.P1.hand.splice(discIdx,1)[0];
-    state.P1.wing.push(disc);
+  // コスト確認：手札またはステージに“別のカード”が1枚必要（簡易）
+  const p = state.P1;
+  const stageCount = listStageCards("P1").length;
+  const canPay = (p.hand.length + stageCount) >= 2; // 見参対象を含むため+1
+  if(!canPay){
+    log("見参：コスト不足（手札またはステージのカード1枚が必要）", "warn");
+    return;
+  }
 
+  askConfirm("見参", `${card.name} を見参しますか？\nコスト：手札またはステージのカード1枚をウイングへ送ります`, ()=>{
+    // 1) コスト支払い（簡易：手札優先で1枚→ウイング）
+    const paid = payKensanCostAnyCard("P1");
+    if(!paid){
+      log("見参：コスト支払いに失敗しました", "warn");
+      renderAll();
+      return;
+    }
+
+    // 2) 見参対象を場へ
     const c2 = state.P1.hand.splice(state.selectedHandIndex,1)[0];
     state.P1.C[pos]=c2;
-
     state.selectedHandIndex=null;
-    log(`見参：${c2.name}`, "muted");
+
+    log(`見参：${c2.name}（コスト：${paid.name}）`, "muted");
     renderAll();
   });
 }
@@ -732,13 +884,15 @@ function onClickEnemyShield(idx){
   });
 }
 
-/* ---------- Render parts ---------- */
+/* ---------- Render ---------- */
 function renderZones(){
+  // Enemy E
   el.aiE.innerHTML = "";
   for(let i=0;i<3;i++){
     el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
   }
 
+  // Enemy C
   el.aiC.innerHTML = "";
   for(let i=0;i<3;i++){
     const slot = makeSlot(state.AI.C[i], {enemy:true});
@@ -746,17 +900,17 @@ function renderZones(){
     el.aiC.appendChild(slot);
   }
 
+  // Your C
   el.pC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.P1.C[i];
-    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed && state.selectedHandIndex!=null && !c);
-    const sel = (state.selectedAttackerPos===i);
-    const slot = makeSlot(c, {glow, sel});
+    const slot = makeSlot(c, {sel: state.selectedAttackerPos===i});
     slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
     if(!c) bindLongPress(slot, ()=> onLongPressEmptySlotForKenSan(i));
     el.pC.appendChild(slot);
   }
 
+  // Your E
   el.pE.innerHTML = "";
   for(let i=0;i<3;i++){
     const slot = makeSlot(state.P1.E[i]);
@@ -772,8 +926,6 @@ function renderHand(){
     const h = document.createElement("div");
     h.className = "handCard";
 
-    const playable = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed);
-    if(playable) h.classList.add("glow");
     if(state.selectedHandIndex===i) h.classList.add("sel");
 
     const url = state.img.cardUrlByNo[pad2(c.no)];
@@ -798,7 +950,7 @@ function renderHand(){
 function renderEnemyHand(){
   el.aiHand.innerHTML = "";
   const n = state.AI.hand.length;
-  const show = Math.min(n, 14);
+  const show = Math.min(n, 16);
   for(let i=0;i<show;i++){
     const b = document.createElement("div");
     b.className = "handBack";
@@ -837,7 +989,6 @@ function renderShields(){
     const exists = !!sh;
 
     back.classList.toggle("empty", !exists);
-
     if(exists){
       if(state.img.backUrl){
         back.style.backgroundImage = `url("${state.img.backUrl}")`;
@@ -852,20 +1003,23 @@ function renderShields(){
     }
 
     const count = state[side].shield.filter(Boolean).length;
-    const badge = ensureShieldCountBadge(cell);
-    badge.textContent = `${count}/3`;
+    ensureShieldCountBadge(cell).textContent = `${count}/3`;
 
     cell.onclick = ()=> { if(side==="AI") onClickEnemyShield(idx); };
   });
 }
 
 function renderAll(){
-  updateCounts();
-  updateHUD();
-  renderZones();
-  renderHand();
-  renderEnemyHand();
-  renderShields();
+  try{
+    updateCounts();
+    updateHUD();
+    renderZones();
+    renderHand();
+    renderEnemyHand();
+    renderShields();
+  }catch(e){
+    log(`描画エラー: ${String(e?.message || e)}`, "warn");
+  }
 }
 
 /* ---------- Board clicks ---------- */
@@ -970,7 +1124,7 @@ function startGame(){
   }
 }
 
-/* ---------- Start / Buttons / Settings ---------- */
+/* ---------- Bind ---------- */
 function bindStart(){
   el.boot.textContent = "JS: OK（読み込み成功）";
   const go = ()=>{
@@ -985,8 +1139,8 @@ function bindStart(){
 }
 
 function bindHUDButtons(){
-  el.btnHelp.addEventListener("click", ()=> showModal("helpM"), {passive:true});
-  el.btnSettings.addEventListener("click", ()=>{
+  $("btnHelp").addEventListener("click", ()=> showModal("helpM"), {passive:true});
+  $("btnSettings").addEventListener("click", ()=>{
     el.repoInput.value = getRepo();
     showModal("settingsM");
   }, {passive:true});
@@ -1033,10 +1187,15 @@ function bindPhaseButtons(){
 }
 
 function bindLogButton(){
-  bindLongPress(el.btnLog, ()=>{
-    renderLogModal();
-    showModal("logM");
-  }, 360);
+  const btn = $("btnLog");
+  let t = null;
+  const start = ()=> { clearTimeout(t); t = setTimeout(()=>{ renderLogModal(); showModal("logM"); }, 360); };
+  const end = ()=> clearTimeout(t);
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("mouseup", end);
+  btn.addEventListener("mouseleave", end);
+  btn.addEventListener("touchstart", start, {passive:true});
+  btn.addEventListener("touchend", end, {passive:true});
 }
 
 /* ---------- init ---------- */
