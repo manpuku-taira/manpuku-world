@@ -1,6 +1,10 @@
-/* script.js（丸ごと置換・v40007）
-   ※ロジックは v40005 と同一（安定版）
-   ※CSSだけで「相手ハンド縮小→自分ハンド切れ解消」を行うため、JSは安全に維持
+/* script.js（丸ごと置換・v40008）
+  FIX:
+   - フィールド上カード/枠が選択できない問題：UI層のクリック透過はCSSで保証 + クリックハンドラ整理
+  ADD:
+   - 見参（必要カード）を「長押し不要」で実行可能（Cに置こうとするとコスト選択へ）
+   - 見参回数：無制限
+   - コスト選択 / 装備対象選択 / 効果対象選択 を「大きいアナウンス」で誘導
 */
 
 const $ = (id) => document.getElementById(id);
@@ -17,6 +21,8 @@ const el = {
   chipPhase: $("chipPhase"),
   chipActive: $("chipActive"),
   firstInfo: $("firstInfo"),
+
+  announce: $("announce"),
 
   btnHelp: $("btnHelp"),
   btnSettings: $("btnSettings"),
@@ -106,14 +112,92 @@ function normalizeText(t){
   return (t || "").replaceAll("又は","または").replaceAll("出来る","できる");
 }
 
-/* ---------- Starter deck (20 types x2) ---------- */
-const CardRegistry = Array.from({length:20}, (_,i)=> {
-  const no = i+1;
-  const rank = ((i%5)+1);
-  const atkMax = rank*500;
-  const atk = atkMax;
-  return { no, name:`カード${no}`, rank, atk, type:"character", text: normalizeText("（テキストは後で確定）") };
-});
+/* ---------- Card DB (20) ---------- */
+/* まずはテストプレイ優先：rank/atkは仮置き。
+   効果処理は「導線（選択UI）」を中心に実装し、個別効果の完全自動処理は次段で拡張。 */
+const CardRegistry = [
+  { no:1,  id:"card_01", name:"黒の魔法使いクルエラ", type:"character", rank:5, atk:2500, tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードは登場できず、手札または自分ステージのキャラクターカード1枚をウイングに送り、手札から見参できる。\n1ターンに1度発動できる。デッキ・ウイングから「黒魔法」カード1枚を手札に加える。"),
+    kensan:{ required:true, cost:{ hand:"any", stage:"character", count:1 } }
+  },
+  { no:2,  id:"card_02", name:"黒魔法-フレイムバレット", type:"effect", rank:2, atk:0, tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分ステージに「クルエラ」がある時、手札から発動できる。相手ステージのキャラクター1体を選び、以下の効果を1つ選択する。\n・相手ステージのATKが1番高いキャラクター1体をウイングに送る。\n・相手ステージのrank4以下のキャラクターをすべてウイングに送る。"),
+    target:{ kind:"enemyCharacterOptional" }
+  },
+  { no:3,  id:"card_03", name:"トナカイの少女ニコラ", type:"character", rank:5, atk:2000, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードは登場できず、手札または自分ステージのキャラクターカード1枚をウイングに送り、手札から見参できる。\n自分ターンに発動できる。このターンの終わりまで、このキャラクターのATK+1000。"),
+    kensan:{ required:true, cost:{ hand:"any", stage:"character", count:1 } }
+  },
+  { no:4,  id:"card_04", name:"聖ラウス", type:"character", rank:3, atk:1500, tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードが登場した時、発動できる。デッキ・ウイングからタグ「クランプス」カード1枚を手札に加える。")
+  },
+  { no:5,  id:"card_05", name:"統括AI タータ", type:"character", rank:4, atk:2000, tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    text: normalizeText("このカードが登場した時、発動できる。デッキから2枚ドローする。\n自分ターンに1度発動できる。手札から2枚までウイングに送る。その後、送った枚数と同じ枚数だけ、タイトルタグ「BUGBUG西遊記」カードをデッキから手札に加える。")
+  },
+  { no:6,  id:"card_06", name:"麗し令嬢エフィ", type:"character", rank:5, atk:2200, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードは登場できず、手札または自分ステージのキャラクターカード1枚をウイングに送り、手札から見参できる。\n自分ターンに発動できる。このターンの終わりまで、相手ステージのキャラクター1体を選び、ATK-1000。"),
+    kensan:{ required:true, cost:{ hand:"any", stage:"character", count:1 } },
+    target:{ kind:"enemyCharacter" }
+  },
+  { no:7,  id:"card_07", name:"狩猟まひる", type:"character", rank:3, atk:1500, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("（効果は後で確定）")
+  },
+  { no:8,  id:"card_08", name:"組織の男 手形", type:"effect", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("相手ターンに1度発動できる。相手が発動した効果を無効にする。")
+  },
+  { no:9,  id:"card_09", name:"小太郎・孫悟空Lv17", type:"character", rank:4, atk:2000, tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    text: normalizeText("このカードが自分ステージに存在する時、発動できる。手札の「小次郎」カードを見参させる。\n自分ステージに「小次郎」カードがある時、このカードのATK+500。")
+  },
+  { no:10, id:"card_10", name:"小次郎・孫悟空Lv17", type:"character", rank:4, atk:2000, tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    text: normalizeText("このカードが自分ステージに存在する時、発動できる。手札の「小太郎」カードを見参させる。\n自分ステージに「小太郎」カードがある時、このカードのATK+500。")
+  },
+  { no:11, id:"card_11", name:"司令", type:"item", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードが登場した時、発動できる。自分ステージのキャラクター1体を選択し、このカードをアイテム扱いとして装備する。そのキャラクターのATK+500。"),
+    equip:{ bonus:500 }
+  },
+  { no:12, id:"card_12", name:"班目プロデューサー", type:"character", rank:3, atk:1500, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードは1ターンに1度、バトルでは破壊されない。")
+  },
+  { no:13, id:"card_13", name:"超弩級砲塔列車スタマックス氏", type:"character", rank:4, atk:2000, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードが自分ステージに存在する時、発動できる。このカードをウイングに送り、相手ステージのキャラクター1体を選択し、このターンの終わりまでATK-1000。\nこの効果は相手ターンでも発動できる。"),
+    target:{ kind:"enemyCharacter" }
+  },
+  { no:14, id:"card_14", name:"記憶抹消", type:"effect", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("相手がカードの効果を発動した時、手札から発動できる。その効果を無効にしてウイングに送る。")
+  },
+  { no:15, id:"card_15", name:"桜蘭の陰陽術 - 闘 -", type:"effect", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分・相手のキャラクターがバトルする時、手札から発動できる。このターンの終わりまで自分ステージのキャラクター1体を選択し、ATK+1000。"),
+    target:{ kind:"yourCharacter" }
+  },
+  { no:16, id:"card_16", name:"力こそパワー！！", type:"effect", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分ターンにのみ発動できる。相手ステージのATKが1番低いキャラクター1体を選択し、ウイングに送る。"),
+    target:{ kind:"enemyCharacter" }
+  },
+  { no:17, id:"card_17", name:"キャトルミューティレーション", type:"effect", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分ステージのキャラクターがバトルでウイングに送られた時、手札から発動できる。相手キャラクター1体を選択し手札に戻す。"),
+    target:{ kind:"enemyCharacter" }
+  },
+  { no:18, id:"card_18", name:"a-xブラスター01 -放射型-", type:"item", rank:2, atk:0, tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分のターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+500。\nタグ「射手」をもつキャラクターが装備した場合、さらにATK+500させ、相手ターンの開始時に相手の手札を1枚ランダムにウイングに送る。"),
+    equip:{ bonus:500 }
+  },
+  { no:19, id:"card_19", name:"-聖剣- アロングダイト", type:"item", rank:2, atk:0, tags:["勇者","剣士"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分ターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+500。\nタグ「勇者」「剣士」を持つキャラクターがこのカードを装備した場合、さらにATK+500し、相手キャラクターをバトルでウイングに送った時、カードを1枚ドローする。"),
+    equip:{ bonus:500 }
+  },
+  { no:20, id:"card_20", name:"普通の棒", type:"item", rank:1, atk:0, tags:["勇者"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分ターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+300。\nタグ「勇者」を持つキャラクターがこのカードを装備した場合、さらにATK+500。"),
+    equip:{ bonus:300 }
+  },
+];
+
+function cloneCard(no){
+  const base = CardRegistry.find(c=>c.no===no);
+  const c = JSON.parse(JSON.stringify(base));
+  c.baseAtk = c.atk || 0;
+  c.bonusAtk = 0;
+  return c;
+}
 
 function shuffle(a){
   for(let i=a.length-1;i>0;i--){
@@ -121,9 +205,14 @@ function shuffle(a){
     [a[i],a[j]]=[a[j],a[i]];
   }
 }
+
+/* デッキ：20種×2 */
 function buildDeck(){
   const deck = [];
-  for(const c of CardRegistry){ deck.push({...c}); deck.push({...c}); }
+  for(let no=1; no<=20; no++){
+    deck.push(cloneCard(no));
+    deck.push(cloneCard(no));
+  }
   shuffle(deck);
   return deck;
 }
@@ -140,6 +229,9 @@ const state = {
   selectedHandIndex:null,
   selectedAttackerPos:null,
 
+  // selection flow
+  flow: null, // {kind, ...}
+
   P1: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
   AI: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
 
@@ -154,6 +246,19 @@ const state = {
   aiRunning:false,
 };
 
+/* ---------- Announce ---------- */
+function setAnnounce(text, kind=""){
+  if(!text){
+    el.announce.textContent = "";
+    el.announce.classList.add("hide");
+    el.announce.classList.remove("warn");
+    return;
+  }
+  el.announce.classList.remove("hide");
+  el.announce.textContent = text;
+  el.announce.classList.toggle("warn", kind==="warn");
+}
+
 /* ---------- UI helpers ---------- */
 function setActiveUI(){
   const you = (state.activeSide==="P1");
@@ -163,7 +268,6 @@ function setActiveUI(){
   el.matRoot.classList.toggle("youTurn", you);
   el.matRoot.classList.toggle("enemyTurn", !you);
 
-  // Player buttons disabled on AI turn
   el.btnNext.disabled = !you;
   el.btnEnd.disabled  = !you;
   el.btnNext.style.opacity = you ? "1" : ".45";
@@ -182,6 +286,17 @@ function updateCounts(){
   el.pDeckN.textContent = state.P1.deck.length;
   el.pWingN.textContent = state.P1.wing.length;
   el.pOutN.textContent = state.P1.outside.length;
+
+  const n = state.AI.hand.length;
+  const lab = document.getElementById("enemyHandLabel");
+  if(lab) lab.textContent = `ENEMY HAND ×${n}`;
+}
+
+function calcAtk(card){
+  if(!card) return 0;
+  const base = card.baseAtk ?? card.atk ?? 0;
+  const bonus = card.bonusAtk ?? 0;
+  return base + bonus;
 }
 
 /* ---------- GitHub image scan ---------- */
@@ -264,32 +379,6 @@ async function validateImage(url){
     img.onerror = ()=> resolve(false);
     img.src = url;
   });
-}
-function stripExtAll(name){
-  let base = name;
-  for(let i=0;i<3;i++){
-    const dot = base.lastIndexOf(".");
-    if(dot <= 0) break;
-    const ext = base.slice(dot+1).toLowerCase();
-    if(["png","jpg","jpeg","webp","gif"].includes(ext)) base = base.slice(0,dot);
-    else break;
-  }
-  return base;
-}
-function nameFromFilename(filename, no){
-  let base = stripExtAll(filename);
-  base = base.replace(new RegExp(`^${pad2(no)}_`), "");
-  base = base.replace(new RegExp(`^${no}_`), "");
-  base = base.replaceAll("_"," ");
-  base = base.trim();
-  return base || `カード${no}`;
-}
-function applyNamesFromMap(cardMap){
-  for(let no=1; no<=20; no++){
-    const k = pad2(no);
-    const fn = cardMap[k];
-    if(fn) CardRegistry[no-1].name = nameFromFilename(fn, no);
-  }
 }
 
 async function rescanImages(){
@@ -376,8 +465,7 @@ async function applyImagesFromCache(){
   // cards
   state.img.cardUrlByNo = {};
   state.img.cardFileByNo = {};
-  const map = cache.cardMap || {};
-  applyNamesFromMap(map);
+  const map = (cache.cardMap || {});
   for(const k of Object.keys(map)){
     const file = map[k];
     state.img.cardFileByNo[k] = file;
@@ -397,7 +485,7 @@ async function applyImagesFromCache(){
   renderAll();
 }
 
-/* ---------- Rendering ---------- */
+/* ---------- Rendering helpers ---------- */
 function bindLongPress(node, fn, ms=420){
   let t = null;
   const start = ()=> { clearTimeout(t); t = setTimeout(fn, ms); };
@@ -426,6 +514,7 @@ function makeSlot(card, opts={}){
   slot.className = "slot";
   if(opts.glow) slot.classList.add("glow");
   if(opts.sel) slot.classList.add("sel");
+  if(opts.need) slot.classList.add("need");
   if(card){
     slot.appendChild(faceForCard(card, !!opts.enemy));
     bindLongPress(slot, ()=> openViewer(card));
@@ -483,7 +572,7 @@ function openZone(title, cards){
       t.textContent = `${c.name}`;
       const s = document.createElement("div");
       s.className = "s";
-      s.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
+      s.textContent = `RANK ${c.rank} / ATK ${calcAtk(c)}`;
 
       meta.appendChild(t); meta.appendChild(s);
       it.appendChild(th); it.appendChild(meta);
@@ -547,9 +636,9 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
   const D = state[dSide].C[dPos];
   if(!A || !D) return;
 
-  log(`バトル：${A.name}(${A.atk}) vs ${D.name}(${D.atk})`, "muted");
+  log(`バトル：${A.name}(${calcAtk(A)}) vs ${D.name}(${calcAtk(D)})`, "muted");
 
-  if(A.atk === D.atk){
+  if(calcAtk(A) === calcAtk(D)){
     state[aSide].C[aPos]=null;
     state[dSide].C[dPos]=null;
     state[aSide].wing.push(A);
@@ -557,7 +646,7 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
     log("同値処理：相打ち（両方ウイング）", "muted");
     return;
   }
-  if(A.atk > D.atk){
+  if(calcAtk(A) > calcAtk(D)){
     state[dSide].C[dPos]=null;
     state[dSide].wing.push(D);
     log(`破壊：${D.name} → ウイング`, "muted");
@@ -568,34 +657,39 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
   }
 }
 
-/* ---------- AI logic ---------- */
-function aiMain(){
-  let used = false;
+/* ---------- Flow / Selection helpers ---------- */
+function clearFlow(){
+  state.flow = null;
+  setAnnounce("");
+}
+function startFlow(flow){
+  state.flow = flow;
+  setAnnounce(flow.announce || "選択してください");
+}
 
+/* コストとして選べるカードの一覧（ハンド or ステージ） */
+function isSelectableAsCost(card, filter){
+  if(!card) return false;
+  if(filter === "any") return true;
+  if(filter === "character") return card.type === "character";
+  if(filter === "effect") return card.type === "effect";
+  if(filter === "item") return card.type === "item";
+  return true;
+}
+
+/* ---------- AI（簡易） ---------- */
+function aiMain(){
   const empty = state.AI.C.findIndex(x=>!x);
   if(empty>=0){
-    const idx = state.AI.hand.findIndex(c=>c.rank<=4);
+    const idx = state.AI.hand.findIndex(c=>c.type==="character" && !c.kensan?.required && c.rank<=4);
     if(idx>=0){
       const c = state.AI.hand.splice(idx,1)[0];
       state.AI.C[empty]=c;
-      used = true;
       log(`AI：登場 → ${c.name}`, "muted");
-    }
-  }
-
-  if(!used){
-    const empty2 = state.AI.C.findIndex(x=>!x);
-    const idx5 = state.AI.hand.findIndex(c=>c.rank>=5);
-    if(empty2>=0 && idx5>=0 && state.AI.hand.length>=2){
-      const disc = state.AI.hand.pop();
-      state.AI.wing.push(disc);
-      const c = state.AI.hand.splice(idx5,1)[0];
-      state.AI.C[empty2]=c;
-      log(`AI：見参（仮）→ ${c.name}`, "muted");
+      return;
     }
   }
 }
-
 function aiBattle(){
   for(let i=0;i<3;i++){
     const atk = state.AI.C[i];
@@ -626,34 +720,30 @@ async function runAITurn(){
 
   state.aiRunning = true;
   try{
+    clearFlow();
     log("相手ターン開始", "warn");
     state.normalSummonUsed = false;
     state.selectedHandIndex = null;
     state.selectedAttackerPos = null;
 
-    setPhase("START");
-    await sleep(260);
+    setPhase("START"); await sleep(200);
 
     setPhase("DRAW");
     draw("AI", 1);
     log("AI：ドロー +1", "muted");
-    renderAll();
-    await sleep(340);
+    renderAll(); await sleep(240);
 
     setPhase("MAIN");
     aiMain();
-    renderAll();
-    await sleep(420);
+    renderAll(); await sleep(260);
 
     setPhase("BATTLE");
     aiBattle();
-    renderAll();
-    await sleep(520);
+    renderAll(); await sleep(300);
 
     setPhase("END");
     enforceHandLimit("AI");
-    renderAll();
-    await sleep(340);
+    renderAll(); await sleep(220);
 
     setActiveSide("P1");
     state.turn++;
@@ -671,18 +761,84 @@ async function runAITurn(){
 function onClickYourC(pos){
   if(state.activeSide!=="P1") return;
 
+  // flow: equip target
+  if(state.flow?.kind === "equipTarget"){
+    if(!state.P1.C[pos]){ log("装備先はキャラクターを選んでください", "warn"); return; }
+    const { ePos, itemCard, bonus } = state.flow;
+    // equip
+    itemCard.equippedTo = { side:"P1", zone:"C", pos };
+    state.P1.E[ePos] = itemCard;
+    state.P1.C[pos].bonusAtk = (state.P1.C[pos].bonusAtk || 0) + bonus;
+    log(`装備：${itemCard.name} → ${state.P1.C[pos].name}（ATK+${bonus}）`, "muted");
+    clearFlow();
+    renderAll();
+    return;
+  }
+
+  // flow: kensan cost selection (stage)
+  if(state.flow?.kind === "kCost"){
+    const f = state.flow;
+    const cand = state.P1.C[pos];
+    if(!cand){ log("コストにするカードを選んでください（キャラ枠）", "warn"); return; }
+    if(!isSelectableAsCost(cand, f.costStageFilter)){ log("この枠のカードはコストにできません", "warn"); return; }
+    // pay cost from stage
+    state.P1.C[pos] = null;
+    state.P1.wing.push(cand);
+    log(`コスト：ステージから → ${cand.name}`, "muted");
+    // place kensan card
+    state.P1.C[f.placePos] = f.card;
+    // remove from hand (stored at handIndex)
+    state.P1.hand.splice(f.handIndex, 1);
+    state.selectedHandIndex = null;
+    clearFlow();
+    log(`見参：${f.card.name}`, "muted");
+    renderAll();
+    return;
+  }
+
+  // normal MAIN interactions
   if(state.phase === "MAIN"){
     if(state.selectedHandIndex==null) return;
     if(state.P1.C[pos]) return;
 
     const card = state.P1.hand[state.selectedHandIndex];
 
+    // only character to C
+    if(card.type !== "character"){
+      log("キャラクター以外はCに置けません（Eへ置いてください）", "warn");
+      return;
+    }
+
+    // kensan required -> start cost select flow
+    if(card.kensan?.required){
+      // needs 1 cost from hand(any) or stage(character)
+      const canPayHand = state.P1.hand.length >= 2; // besides itself
+      const canPayStage = state.P1.C.some(Boolean); // character only will be checked on tap
+      if(!canPayHand && !canPayStage){
+        log("見参：コストが足りません（手札かステージに1枚必要）", "warn");
+        setAnnounce("見参：手札またはステージからコスト1枚が必要です。", "warn");
+        return;
+      }
+      startFlow({
+        kind:"kCost",
+        announce:`見参：コストにするカードを選んでください（手札1枚 または ステージのキャラクター1枚）`,
+        card,
+        handIndex: state.selectedHandIndex,
+        placePos: pos,
+        costHandFilter: card.kensan.cost.hand || "any",
+        costStageFilter: card.kensan.cost.stage || "character",
+      });
+      renderAll();
+      return;
+    }
+
+    // normal summon (once per turn) : rank<=4
     if(state.normalSummonUsed){
       log("登場（通常召喚）はターン1回です", "warn");
       return;
     }
     if(card.rank >= 5){
-      log("RANK5以上は見参（空スロット長押し）です", "warn");
+      log("RANK5以上は見参が必要です（該当カードのみ）", "warn");
       return;
     }
 
@@ -695,6 +851,7 @@ function onClickYourC(pos){
     return;
   }
 
+  // BATTLE
   if(state.phase === "BATTLE"){
     if(!state.P1.C[pos]) return;
     state.selectedAttackerPos = (state.selectedAttackerPos===pos) ? null : pos;
@@ -703,36 +860,84 @@ function onClickYourC(pos){
   }
 }
 
-function onLongPressEmptySlotForKenSan(pos){
+function onClickYourE(pos){
   if(state.activeSide!=="P1") return;
-  if(state.phase!=="MAIN") return;
-  if(state.selectedHandIndex==null) return;
-  if(state.P1.C[pos]) return;
 
-  const card = state.P1.hand[state.selectedHandIndex];
-  if(card.rank < 5) return;
-
-  if(state.P1.hand.length < 2){
-    log("見参：仮コスト（手札1枚）が足りません", "warn");
+  // flow: kensan cost selection (stage E if allowed)
+  if(state.flow?.kind === "kCost"){
+    const f = state.flow;
+    // Only allow stage E as cost when stage filter is "any"
+    if(f.costStageFilter !== "any"){
+      log("この見参はステージのキャラクターのみコストにできます", "warn");
+      return;
+    }
+    const cand = state.P1.E[pos];
+    if(!cand){ log("コストにするカードを選んでください（E枠）", "warn"); return; }
+    // pay cost
+    state.P1.E[pos] = null;
+    state.P1.wing.push(cand);
+    log(`コスト：ステージから → ${cand.name}`, "muted");
+    // place
+    state.P1.C[f.placePos] = f.card;
+    state.P1.hand.splice(f.handIndex, 1);
+    state.selectedHandIndex = null;
+    clearFlow();
+    log(`見参：${f.card.name}`, "muted");
+    renderAll();
     return;
   }
 
-  askConfirm("見参（仮）", `${card.name} を見参しますか？\n仮コスト：手札を1枚ウイングへ送ります`, ()=>{
-    const discIdx = (state.selectedHandIndex===state.P1.hand.length-1) ? 0 : state.P1.hand.length-1;
-    const disc = state.P1.hand.splice(discIdx,1)[0];
-    state.P1.wing.push(disc);
+  if(state.phase !== "MAIN") return;
+  if(state.selectedHandIndex==null) return;
+  if(state.P1.E[pos]){ log("そのE枠は埋まっています", "warn"); return; }
 
-    const c2 = state.P1.hand.splice(state.selectedHandIndex,1)[0];
-    state.P1.C[pos]=c2;
+  const card = state.P1.hand[state.selectedHandIndex];
 
-    state.selectedHandIndex=null;
-    log(`見参：${c2.name}`, "muted");
+  // Only effect/item to E
+  if(card.type === "character"){
+    log("キャラクターはEに置けません（Cへ置いてください）", "warn");
+    return;
+  }
+
+  // place to E (max 3 by design)
+  const placed = state.P1.hand.splice(state.selectedHandIndex,1)[0];
+  state.selectedHandIndex = null;
+
+  // If item -> require equip target selection
+  if(placed.type === "item"){
+    startFlow({
+      kind:"equipTarget",
+      announce:`装備：装備する自分キャラクターを選んでください（YOUR C）`,
+      ePos: pos,
+      itemCard: placed,
+      bonus: placed.equip?.bonus ?? 0,
+    });
+    log(`アイテム配置：${placed.name}（装備先を選択してください）`, "muted");
     renderAll();
-  });
+    return;
+  }
+
+  // effect -> for now just place, and if needs target show prompt
+  state.P1.E[pos] = placed;
+  if(placed.target?.kind){
+    setAnnounce(`効果：対象を選んでください（まだ自動処理は準備中：テスト導線）`);
+  }else{
+    setAnnounce("");
+  }
+  log(`エフェクト配置：${placed.name}`, "muted");
+  renderAll();
 }
 
 function onClickEnemyCard(enemyPos){
   if(state.activeSide!=="P1") return;
+
+  // flow: target selection (minimal UX now)
+  if(state.flow?.kind === "effectTargetEnemy"){
+    // will be expanded later
+    clearFlow();
+    return;
+  }
+
   if(state.phase!=="BATTLE") return;
   if(state.selectedAttackerPos==null) return;
 
@@ -771,10 +976,6 @@ function onClickEnemyShield(idx){
     state.AI.hand.push(sh);
     log(`シールド破壊：相手手札へ → ${sh.name}`, "muted");
 
-    if(state.AI.shield.every(x=>!x)){
-      log("相手シールド全破壊：次の攻撃でダイレクト可能（仮）", "muted");
-    }
-
     state.selectedAttackerPos = null;
     renderAll();
   });
@@ -782,9 +983,14 @@ function onClickEnemyShield(idx){
 
 /* ---------- Render parts ---------- */
 function renderZones(){
+  // AI E
   el.aiE.innerHTML = "";
-  for(let i=0;i<3;i++) el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
+  for(let i=0;i<3;i++){
+    const c = state.AI.E[i];
+    el.aiE.appendChild(makeSlot(c, {enemy:true}));
+  }
 
+  // AI C
   el.aiC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.AI.C[i];
@@ -793,19 +999,39 @@ function renderZones(){
     el.aiC.appendChild(slot);
   }
 
+  // YOUR C
   el.pC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.P1.C[i];
-    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed && state.selectedHandIndex!=null && !c);
+
+    // glow hint: when MAIN and selected character and empty slot
+    const selHand = (state.selectedHandIndex!=null) ? state.P1.hand[state.selectedHandIndex] : null;
+    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && selHand && selHand.type==="character" && !c);
     const sel = (state.selectedAttackerPos===i);
-    const slot = makeSlot(c, {glow, sel});
+
+    // need highlight when flow expects target
+    const need = (state.flow?.kind === "equipTarget" && !!state.P1.C[i]);
+
+    const slot = makeSlot(c, {glow, sel, need});
     slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
-    if(!c) bindLongPress(slot, ()=> onLongPressEmptySlotForKenSan(i));
     el.pC.appendChild(slot);
   }
 
+  // YOUR E
   el.pE.innerHTML = "";
-  for(let i=0;i<3;i++) el.pE.appendChild(makeSlot(state.P1.E[i]));
+  for(let i=0;i<3;i++){
+    const c = state.P1.E[i];
+
+    const selHand = (state.selectedHandIndex!=null) ? state.P1.hand[state.selectedHandIndex] : null;
+    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && selHand && selHand.type!=="character" && !c);
+
+    // need highlight when flow expects cost from E (only when allowed)
+    const need = (state.flow?.kind === "kCost" && state.flow?.costStageFilter === "any" && !!state.P1.E[i]);
+
+    const slot = makeSlot(c, {glow, need});
+    slot.addEventListener("click", ()=> onClickYourE(i), {passive:true});
+    el.pE.appendChild(slot);
+  }
 }
 
 function renderHand(){
@@ -815,21 +1041,67 @@ function renderHand(){
     const h = document.createElement("div");
     h.className = "handCard";
 
-    const playable = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed);
+    const playable = (state.activeSide==="P1" && state.phase==="MAIN");
     if(playable) h.classList.add("glow");
     if(state.selectedHandIndex===i) h.classList.add("sel");
+
+    // cost select highlight
+    const need = (state.flow?.kind === "kCost" && i !== state.flow.handIndex);
+    if(need) h.classList.add("need");
 
     const url = state.img.cardUrlByNo[pad2(c.no)];
     if(url){
       h.style.backgroundImage = `url("${url}")`;
       h.style.backgroundSize = "cover";
       h.style.backgroundPosition = "center";
+    }else{
+      // fallback
+      h.style.backgroundImage = "";
     }
 
     h.addEventListener("click", ()=>{
       if(state.activeSide!=="P1") return;
+
+      // if flow is kCost, clicking a hand card chooses cost
+      if(state.flow?.kind === "kCost"){
+        if(i === state.flow.handIndex){
+          log("このカード自身はコストにできません", "warn");
+          return;
+        }
+        const costCard = state.P1.hand[i];
+        if(!isSelectableAsCost(costCard, state.flow.costHandFilter)){
+          log("このカードはコストにできません", "warn");
+          return;
+        }
+
+        // pay: remove cost first (be careful with indices)
+        const f = state.flow;
+        const hi = f.handIndex;
+        const ci = i;
+
+        const cost = state.P1.hand.splice(ci,1)[0];
+        state.P1.wing.push(cost);
+        log(`コスト：手札から → ${cost.name}`, "muted");
+
+        // adjust handIndex after removal
+        let newHandIndex = hi;
+        if(ci < hi) newHandIndex = hi - 1;
+
+        // place kensan card
+        const kcard = state.P1.hand.splice(newHandIndex,1)[0];
+        state.P1.C[f.placePos] = kcard;
+
+        state.selectedHandIndex = null;
+        clearFlow();
+        log(`見参：${kcard.name}`, "muted");
+        renderAll();
+        return;
+      }
+
+      // normal select
       state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
       state.selectedAttackerPos = null;
+      setAnnounce("");
       renderAll();
     }, {passive:true});
 
@@ -871,6 +1143,7 @@ function ensureShieldCountBadge(cell){
   return b;
 }
 
+// Shield: FORCE black back always when exists
 function renderShields(){
   const nodes = document.querySelectorAll(".shieldSlot");
   nodes.forEach((cell)=>{
@@ -938,6 +1211,7 @@ function nextPhase(){
     state.normalSummonUsed = false;
     state.selectedHandIndex = null;
     state.selectedAttackerPos = null;
+    clearFlow();
   }
   if(next==="DRAW"){
     draw(state.activeSide, 1);
@@ -945,6 +1219,7 @@ function nextPhase(){
   }
   if(next==="END"){
     enforceHandLimit(state.activeSide);
+    clearFlow();
   }
 
   updateHUD();
@@ -953,6 +1228,7 @@ function nextPhase(){
 
 function endTurn(){
   enforceHandLimit(state.activeSide);
+  clearFlow();
 
   if(state.activeSide==="P1"){
     setActiveSide("AI");
@@ -972,12 +1248,14 @@ function endTurn(){
 
 /* ---------- Start Game ---------- */
 function startGame(){
+  setAnnounce("");
   state.turn = 1;
   state.phase = "START";
   state.normalSummonUsed = false;
   state.selectedHandIndex = null;
   state.selectedAttackerPos = null;
   state.aiRunning = false;
+  state.flow = null;
 
   state.P1.deck = buildDeck();
   state.AI.deck = buildDeck();
@@ -1095,6 +1373,7 @@ function bindLogButton(){
 async function init(){
   el.boot.textContent = "JS: OK（初期化中…）";
   updateHUD();
+  setAnnounce("");
 
   bindStart();
   bindHUDButtons();
