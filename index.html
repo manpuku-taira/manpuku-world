@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40007" />
+  <link rel="stylesheet" href="./style.css?v=40008" />
 </head>
 <body>
 
@@ -81,42 +81,40 @@
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
-          <div class="cell stageRow">
+
+          <!-- ★ここを横3列ぶんにする -->
+          <div class="cell stageRow" style="grid-column:2 / span 3;">
             <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
             <div id="aiE" class="slots enemy"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
 
           <!-- ENEMY: row 3 (O + CCC) -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
-          <div class="cell stageRow">
+
+          <!-- ★ここを横3列ぶんにする -->
+          <div class="cell stageRow" style="grid-column:2 / span 3;">
             <div class="rowTitle">ENEMY C（キャラクター）</div>
             <div id="aiC" class="slots enemy"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
 
           <!-- YOUR: row 4 (CCC + O) -->
-          <div class="cell stageRow">
+          <!-- ★ここを横3列ぶんにする -->
+          <div class="cell stageRow" style="grid-column:1 / span 3;">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
           <div class="cell pile" data-click="pOutside">
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
           <!-- YOUR: row 5 (EEE + W) -->
-          <div class="cell stageRow">
+          <!-- ★ここを横3列ぶんにする -->
+          <div class="cell stageRow" style="grid-column:1 / span 3;">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
           <div class="cell pile" data-click="pWing">
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
@@ -255,7 +253,7 @@
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
         <div class="helpItem">・手札をタップ：選択（紫枠）</div>
         <div class="helpItem">・MAIN：キャラはCへ、エフェクト/アイテムはEへ配置</div>
-        <div class="helpItem">・見参：必要なカードは空Cを長押し（無制限）</div>
+        <div class="helpItem">・見参：空Cを長押し（無制限）</div>
         <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラ/シールドをタップ</div>
         <div class="helpItem">・LOG：長押しでログ表示</div>
       </div>
