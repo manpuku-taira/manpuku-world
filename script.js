@@ -1,346 +1,103 @@
-<pre style="caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); font-style: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: auto; text-align: start; text-indent: 0px; text-transform: none; widows: auto; word-spacing: 0px; -webkit-tap-highlight-color: rgba(26, 26, 26, 0.3); -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; text-decoration: none; overflow-wrap: break-word; white-space: pre-wrap;">:root{
-  --bg:#05060a;
-  --text:#e9ecff;
-  --muted:#a7b0d9;
-  --danger:#ff4d6d;
-  --accent:#59f2ff;
-  --accent2:#b35bff;
-  --panel: rgba(10,12,22,.86);
-  --panel2: rgba(6,8,14,.68);
-  --shadow: 0 12px 40px rgba(0,0,0,.45);
-}
-*{ box-sizing:border-box; }
-html,body{ height:100%; }
-body{
-  margin:0;
-  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
-  background:
-    radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
-    radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
-    var(--bg);
-  color:var(--text);
+const PHASES = ["START","DRAW","MAIN","BATTLE","END"]
+
+const state = {
+  turn:1,
+  phase:"START",
+  active:"P1",
+  selected:null,
+  P1:{ hand:[], C:[null,null,null], shield:[1,1,1] },
+  AI:{ hand:[], C:[null,null,null], shield:[1,1,1] }
 }
 
-/* screens */
-.screen{ display:none; height:100%; }
-.screen.active{ display:flex; flex-direction:column; }
+function startGame(){
+  document.getElementById("title").classList.remove("active")
+  document.getElementById("game").classList.add("active")
 
-/* buttons */
-.btn{
-  border:1px solid rgba(89,242,255,.22);
-  background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
-  color:var(--text);
-  padding:10px 12px;
-  border-radius:14px;
-  font-weight:900;
-  font-size:13px;
-  letter-spacing:.06em;
-  box-shadow:0 10px 24px rgba(0,0,0,.35);
-}
-.btn:active{ transform:translateY(1px); }
-.btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
-.btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
-.btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
-.btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
-
-.chip{
-  padding:8px 10px;
-  border-radius:999px;
-  background:linear-gradient(180deg, rgba(16,20,38,.9), rgba(6,8,14,.9));
-  border:1px solid rgba(89,242,255,.18);
-  font-weight:900;
-  font-size:12px;
-  letter-spacing:.08em;
-}
-.chip.subtle{ border:1px solid rgba(167,176,217,.18); color:var(--muted); }
-.chipActive.enemy{ border-color: rgba(255,77,109,.35); }
-
-/* title */
-.titleWrap{ flex:1; display:flex; align-items:center; justify-content:center; padding:18px; }
-.logoBox{
-  width:min(680px,94vw);
-  background:linear-gradient(180deg, rgba(16,20,38,.78), rgba(8,10,18,.78));
-  border:1px solid rgba(89,242,255,.22);
-  border-radius:22px;
-  padding:24px 18px;
-  box-shadow:var(--shadow);
-  text-align:center;
-}
-.logoMain{ font-size:34px; font-weight:1000; letter-spacing:.02em; }
-.logoSub{ margin-top:6px; font-size:14px; color:var(--muted); letter-spacing:.22em; }
-.logoTags{ margin:14px 0 6px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
-.tag{ font-size:12px; color:var(--muted); padding:8px 10px; border-radius:999px; border:1px solid rgba(167,176,217,.18); background:rgba(16,20,38,.35); }
-.mini{ margin-top:10px; font-size:12px; color:var(--muted); }
-
-/* hud */
-.hud{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:10px;
-  border-bottom:1px solid rgba(89,242,255,.12);
-  background:rgba(0,0,0,.18);
-}
-.hudLeft,.hudRight{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.hudCenter{ font-weight:900; color:var(--muted); letter-spacing:.12em; }
-
-.iconBtn{
-  border:1px solid rgba(89,242,255,.18);
-  background:rgba(10,12,22,.66);
-  color:var(--text);
-  padding:8px 10px;
-  border-radius:12px;
-  font-weight:1000;
+  state.P1.hand = [1,2,3,4]
+  render()
 }
 
-/* enemy hand */
-.enemyHandDock{
-  padding:8px 10px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-.enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
-.enemyHand{ display:flex; gap:8px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
-.handBack{
-  width:34px; height:48px;
-  border-radius:10px;
-  border:1px solid rgba(167,176,217,.22);
-  background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
-  box-shadow:0 10px 24px rgba(0,0,0,.25);
-  background-size:cover; background-position:center;
+function render(){
+
+  document.getElementById("turnInfo").innerText = "TURN "+state.turn
+  document.getElementById("phaseInfo").innerText = state.phase
+  document.getElementById("activeInfo").innerText =
+    state.active==="P1"?"YOUR TURN":"ENEMY TURN"
+
+  renderHand()
+  renderZones()
 }
 
-/* stage */
-.stage{ flex:1; padding:10px; min-height:0; }
-.mat{
-  position:relative;
-  width:100%;
-  height:100%;
-  border:1px solid rgba(89,242,255,.12);
-  border-radius:18px;
-  overflow:hidden;
-  box-shadow:var(--shadow);
-  background:rgba(0,0,0,.22);
+function renderHand(){
+  const hand = document.getElementById("hand")
+  hand.innerHTML = ""
+
+  state.P1.hand.forEach((c,i)=>{
+    const div = document.createElement("div")
+    div.className="card"
+    div.innerText="Card "+c
+    div.onclick=()=>{
+      state.selected=i
+      render()
+    }
+    hand.appendChild(div)
+  })
 }
 
-/* field images (top/bottom) */
-.field{
-  position:absolute;
-  left:0; right:0;
-  height:50%;
-  background-repeat:no-repeat;
-  background-position:center;
-  background-size:contain;
-  opacity:.9;
-  pointer-events:none;
-}
-.fieldTop{ top:0; transform:rotate(180deg); }
-.fieldBottom{ bottom:0; }
+function renderZones(){
 
-.grid{
-  position:absolute;
-  inset:0;
-  display:grid;
-  grid-template-columns:repeat(4, 1fr);
-  grid-template-rows:repeat(6, 1fr);
-  gap:10px;
-  padding:10px;
-}
+  const pC = document.getElementById("pC")
+  pC.innerHTML=""
 
-.cell{
-  background: rgba(10,12,22,.62);
-  border: 1px solid rgba(89,242,255,.12);
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.25);
-  overflow:hidden;
-  position:relative;
-}
+  for(let i=0;i<3;i++){
+    const slot=document.createElement("div")
+    slot.className="slot"
+    slot.onclick=()=>{
+      if(state.phase==="MAIN" && state.selected!==null){
+        state.P1.C[i]=state.P1.hand.splice(state.selected,1)[0]
+        state.selected=null
+        render()
+      }
+    }
 
-.pile{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-}
-.pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
-.pile .n{ font-size:18px; font-weight:1000; }
+    if(state.P1.C[i]){
+      const card=document.createElement("div")
+      card.className="card"
+      card.innerText="Card "+state.P1.C[i]
+      slot.appendChild(card)
+    }
 
-.stageRow{ padding:10px; }
-.rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; font-weight:900; }
+    pC.appendChild(slot)
+  }
 
-.slots{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
-
-/* IMPORTANT: empty slot visible */
-.slot{
-  width:calc((100% - 20px)/3);
-  aspect-ratio:2/3;
-  border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
-  background:rgba(6,8,14,.55);
-  position:relative;
-  overflow:hidden;
-}
-.slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
-.slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
-
-.face{
-  position:absolute;
-  inset:0;
-  background-size:cover;
-  background-position:center;
-}
-.face.fallback{
-  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
+  const aiC=document.getElementById("aiC")
+  aiC.innerHTML=""
+  for(let i=0;i<3;i++){
+    const slot=document.createElement("div")
+    slot.className="slot"
+    if(state.AI.C[i]){
+      const card=document.createElement("div")
+      card.className="card"
+      card.innerText="AI"
+      slot.appendChild(card)
+    }
+    aiC.appendChild(slot)
+  }
 }
 
-/* shields */
-.shieldSlot{ padding:10px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
-.sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; }
-.backCard{
-  flex:1;
-  border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
-  background: #070914;
-  background-size:cover; background-position:center;
-}
-.backCard.empty{ opacity:.2; }
-.shieldCount{
-  position:absolute;
-  right:10px;
-  top:10px;
-  font-size:11px;
-  font-weight:1000;
-  padding:4px 6px;
-  border-radius:10px;
-  background:rgba(0,0,0,.55);
-  border:1px solid rgba(89,242,255,.18);
+function nextPhase(){
+  let i = PHASES.indexOf(state.phase)
+  state.phase = PHASES[(i+1)%PHASES.length]
+  render()
 }
 
-/* hand */
-.handDock{ padding:10px; }
-.hand{
-  display:flex;
-  gap:10px;
-  overflow-x:auto;
-  padding:10px;
-  border:1px solid rgba(89,242,255,.12);
-  border-radius:18px;
-  background:var(--panel2);
-  box-shadow:var(--shadow);
-}
-.handCard{
-  width:92px;
-  flex:0 0 auto;
-  aspect-ratio:2/3;
-  border-radius:14px;
-  border:1px solid rgba(89,242,255,.18);
-  background:rgba(6,8,14,.55);
-  background-size:cover;
-  background-position:center;
-  box-shadow:var(--shadow);
-}
-.handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
-.handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
-
-/* fab */
-.fab{
-  position:fixed;
-  right:10px;
-  bottom:12px;
-  display:flex;
-  gap:10px;
-  z-index:10;
-}
-.fabBtn{
-  border:1px solid rgba(89,242,255,.22);
-  background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
-  color:var(--text);
-  padding:12px 14px;
-  border-radius:16px;
-  font-weight:1000;
-  letter-spacing:.08em;
-  box-shadow:var(--shadow);
-}
-.fabBtn.danger{
-  border:1px solid rgba(255,77,109,.35);
-  background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92));
+function endTurn(){
+  state.active = state.active==="P1"?"AI":"P1"
+  state.turn++
+  state.phase="START"
+  render()
 }
 
-/* modals */
-.modal{ display:none; position:fixed; inset:0; z-index:50; }
-.modal.show{ display:block; }
-.back{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
-.box{
-  position:absolute;
-  left:50%; top:50%;
-  transform:translate(-50%,-50%);
-  width:min(980px,94vw);
-  max-height:88vh;
-  background:rgba(10,12,22,.92);
-  border:1px solid rgba(89,242,255,.18);
-  border-radius:18px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
-}
-.smallBox{ width:min(520px,94vw); }
-.confirmBox{ width:min(560px,94vw); }
-
-.boxHead{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:12px;
-  border-bottom:1px solid rgba(89,242,255,.12);
-}
-.boxTitle{ font-weight:1000; letter-spacing:.12em; font-size:13px; }
-
-.viewerBody{
-  display:grid;
-  grid-template-columns: 0.95fr 1.05fr;
-  gap:12px;
-  padding:12px;
-}
-.viewerBody img{
-  width:100%;
-  border-radius:16px;
-  border:1px solid rgba(167,176,217,.18);
-  background:rgba(6,8,14,.55);
-}
-.viewerText{
-  font-size:14px;
-  line-height:1.6;
-  white-space:pre-wrap;
-  color:rgba(233,236,255,.92);
-}
-@media (max-width:720px){
-  .viewerBody{ grid-template-columns:1fr; }
-}
-
-.zoneList{ padding:12px; display:flex; flex-direction:column; gap:8px; max-height:74vh; overflow:auto; }
-.zoneItem{ display:flex; gap:10px; align-items:center; padding:10px; border-radius:14px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
-.zThumb{ width:54px; aspect-ratio:2/3; border-radius:10px; border:1px solid rgba(167,176,217,.18); background-size:cover; background-position:center; }
-.zMeta .t{ font-weight:1000; font-size:13px; }
-.zMeta .s{ color:var(--muted); font-size:11px; }
-
-.logBody{ padding:12px; max-height:74vh; overflow:auto; }
-.logLine{ margin:6px 0; font-size:12px; color:rgba(233,236,255,.92); }
-.logLine.muted{ color:rgba(167,176,217,.92); }
-.logLine.warn{ color:rgba(255,77,109,.95); }
-
-.confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; }
-.confirmBtns{ display:flex; gap:10px; padding:0 12px 12px; justify-content:flex-end; }
-
-.settings{ padding:12px; display:flex; flex-direction:column; gap:12px; }
-.setBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
-.setTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
-.setRow{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.setHint{ font-size:12px; color:var(--muted); line-height:1.5; margin-top:8px; }
-.input{
-  flex:1;
-  min-width:240px;
-  padding:10px 12px;
-  border-radius:14px;</pre>
+document.getElementById("startBtn").onclick=startGame
+document.getElementById("nextBtn").onclick=nextPhase
+document.getElementById("endBtn").onclick=endTurn
