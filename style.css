@@ -5,7 +5,6 @@
   --danger:#ff4d6d;
   --accent:#59f2ff;
   --accent2:#b35bff;
-  --panel: rgba(10,12,22,.86);
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
 }
@@ -26,7 +25,7 @@ body{
 .screen{ display:none; height:100%; }
 .screen.active{ display:flex; flex-direction:column; }
 
-/* IMPORTANT: keep game layout stable */
+/* keep game layout stable */
 #game.screen.active{
   height:100dvh;
   min-height:100dvh;
@@ -49,7 +48,6 @@ body{
 .btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
 .btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
 .btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
-.btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
 
 .chip{
   padding:8px 10px;
@@ -126,7 +124,7 @@ body{
 /* stage */
 .stage{
   flex:1 1 auto;
-  min-height:520px;            /* ★盤面が潰れて枠が消えるのを防止 */
+  min-height:520px;
   padding:10px;
   overflow:hidden;
 }
@@ -144,7 +142,7 @@ body{
   background:rgba(0,0,0,.22);
 }
 
-/* field images (top/bottom) */
+/* field images */
 .field{
   position:absolute;
   left:0; right:0;
@@ -178,6 +176,9 @@ body{
   min-height:0;
 }
 
+/* ★ span3：横3マス結合（C/E行を広くする） */
+.span3{ grid-column: span 3; }
+
 .pile{
   display:flex;
   flex-direction:column;
@@ -188,7 +189,7 @@ body{
 .pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:18px; font-weight:1000; }
 
-.stageRow{ padding:8px; }
+.stageRow{ padding:8px; display:flex; flex-direction:column; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:6px; font-weight:900; }
 
 .slots{
@@ -196,9 +197,12 @@ body{
   gap:10px;
   align-items:center;
   justify-content:space-between;
+  width:100%;
+  flex:1 1 auto;
+  min-height:0;
 }
 
-/* empty slot visible */
+/* slots */
 .slot{
   width:calc((100% - 20px)/3);
   aspect-ratio:2/3;
