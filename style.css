@@ -9,10 +9,18 @@
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
 
-  /* Overlay heights */
   --hudH: 56px;
   --enemyH: 58px;
   --handH: 112px;
+
+  /* ===== SCALE (-15% target) ===== */
+  --gridPad: 8px;     /* 10 -> 8 */
+  --gridGap: 8px;     /* 10 -> 8 */
+  --cellRad: 14px;    /* 16 -> 14 */
+  --slotRad: 12px;    /* 14 -> 12 */
+  --slotGap: 8px;     /* 10 -> 8 */
+  --rowTitleMb: 5px;  /* 6 -> 5 */
+  --slotBorder: 1px;
 }
 
 *{ box-sizing:border-box; }
@@ -28,7 +36,6 @@ body{
   overflow:hidden;
 }
 
-/* screens */
 .screen{ display:none; height:100%; }
 .screen.active{ display:flex; flex-direction:column; }
 
@@ -80,11 +87,8 @@ body{
 .tag{ font-size:12px; color:var(--muted); padding:8px 10px; border-radius:999px; border:1px solid rgba(167,176,217,.18); background:rgba(16,20,38,.35); }
 .mini{ margin-top:10px; font-size:12px; color:var(--muted); }
 
-/* ===== GAME LAYOUT (overlay bars) ===== */
-#game{
-  position:relative;
-  overflow:hidden;
-}
+/* ===== GAME ===== */
+#game{ position:relative; overflow:hidden; }
 
 /* hud fixed */
 .hud{
@@ -115,7 +119,7 @@ body{
   font-weight:1000;
 }
 
-/* enemy hand fixed (under HUD) */
+/* enemy hand fixed */
 .enemyHandDock{
   position:fixed;
   left:0; right:0;
@@ -147,7 +151,7 @@ body{
   left:0; right:0;
   top:calc(var(--hudH) + var(--enemyH) + env(safe-area-inset-top));
   bottom:calc(var(--handH) + env(safe-area-inset-bottom));
-  padding:10px;
+  padding:8px; /* 10 -> 8 */
   min-height:0;
 }
 .mat{
@@ -155,13 +159,13 @@ body{
   width:100%;
   height:100%;
   border:1px solid rgba(89,242,255,.12);
-  border-radius:18px;
+  border-radius:16px; /* 18 -> 16 */
   overflow:hidden;
   box-shadow:var(--shadow);
   background:rgba(0,0,0,.22);
 }
 
-/* field images (top/bottom) */
+/* field images */
 .field{
   position:absolute;
   left:0; right:0;
@@ -182,15 +186,15 @@ body{
   display:grid;
   grid-template-columns:repeat(4, 1fr);
   grid-template-rows:repeat(6, 1fr);
-  gap:10px;
-  padding:10px;
+  gap:var(--gridGap);
+  padding:var(--gridPad);
 }
 
 /* cells */
 .cell{
   background: rgba(10,12,22,.62);
   border: 1px solid rgba(89,242,255,.12);
-  border-radius: 16px;
+  border-radius: var(--cellRad);
   box-shadow: 0 10px 30px rgba(0,0,0,.25);
   overflow:hidden;
   position:relative;
@@ -206,9 +210,9 @@ body{
 .pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:18px; font-weight:1000; }
 
-/* stage rows: make sure slots stay fully visible */
+/* stage rows */
 .stageRow{
-  padding:8px;
+  padding:6px; /* 8 -> 6 */
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -217,25 +221,25 @@ body{
   font-size:10px;
   letter-spacing:.18em;
   color:var(--muted);
-  margin:0 0 6px 0;
+  margin:0 0 var(--rowTitleMb) 0;
   font-weight:900;
   line-height:1.1;
 }
 .slots{
   display:flex;
-  gap:10px;
+  gap:var(--slotGap);
   align-items:center;
   justify-content:space-between;
   flex:1;
   min-height:0;
 }
 
-/* IMPORTANT: empty slot visible */
+/* slots (shrink) */
 .slot{
-  width:calc((100% - 20px)/3);
+  width:calc((100% - (var(--slotGap) * 2))/3);
   aspect-ratio:2/3;
-  border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
+  border-radius:var(--slotRad);
+  border:var(--slotBorder) solid rgba(167,176,217,.22);
   background:rgba(6,8,14,.55);
   position:relative;
   overflow:hidden;
@@ -255,7 +259,7 @@ body{
 
 /* shields */
 .shieldSlot{
-  padding:8px;
+  padding:6px;
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -264,7 +268,7 @@ body{
 .sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; line-height:1.1; }
 .backCard{
   flex:1;
-  border-radius:14px;
+  border-radius:var(--slotRad);
   border:1px solid rgba(167,176,217,.22);
   background:#070914;
   background-size:cover;
@@ -323,7 +327,7 @@ body{
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* FAB (keep above hand) */
+/* FAB */
 .fab{
   position:fixed;
   right:10px;
@@ -426,7 +430,5 @@ body{
   color:rgba(233,236,255,.95);
   outline:none;
 }
-
-/* help */
 .help{ padding:12px; display:flex; flex-direction:column; gap:10px; }
 .helpItem{ font-size:13px; color:rgba(233,236,255,.92); line-height:1.5; }
