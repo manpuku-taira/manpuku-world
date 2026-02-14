@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40012" />
+  <link rel="stylesheet" href="./style.css?v=40014" />
 </head>
 <body>
 
@@ -14,6 +14,11 @@
       <div class="logoBox">
         <div class="logoMain">Manpuku World</div>
         <div class="logoSub">マンプクワールド</div>
+        <div class="logoTags">
+          <div class="tag">CYBER FANTASY</div>
+          <div class="tag">AI DUEL</div>
+          <div class="tag">B（派手＋スキップ）</div>
+        </div>
         <div class="mini">画面タップ または START で開始</div>
         <div style="margin-top:14px;">
           <button id="btnStart" class="btn primary">START</button>
@@ -37,7 +42,7 @@
       </div>
       <div class="hudRight">
         <div id="chipActive" class="chip chipActive">YOUR TURN</div>
-        <button id="btnLog" class="iconBtn" title="ログ">LOG</button>
+        <button id="btnLog" class="iconBtn" title="ログ（長押し）">LOG</button>
         <button id="btnHelp" class="iconBtn" title="ヘルプ">?</button>
         <button id="btnSettings" class="iconBtn" title="設定">⚙</button>
       </div>
@@ -57,7 +62,8 @@
 
         <!-- Grid (6 rows × 4 cols) -->
         <div id="grid" class="grid">
-          <!-- ENEMY row1 -->
+
+          <!-- ENEMY: row 1 (D + SSS) -->
           <div class="cell pile" data-click="aiDeck">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
@@ -71,18 +77,18 @@
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
 
-          <!-- ENEMY row2 -->
+          <!-- ENEMY: row 2 (W + EEE) -->
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
           <div class="cell stageRow">
             <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-            <div id="aiE" class="slots"></div>
+            <div id="aiE" class="slots enemy"></div>
           </div>
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
 
-          <!-- ENEMY row3 -->
+          <!-- ENEMY: row 3 (O + CCC) -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
@@ -93,7 +99,7 @@
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
 
-          <!-- YOUR row4 -->
+          <!-- YOUR: row 4 (CCC + O) -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
@@ -104,7 +110,7 @@
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
-          <!-- YOUR row5 -->
+          <!-- YOUR: row 5 (EEE + W) -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
@@ -115,7 +121,7 @@
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
 
-          <!-- YOUR row6 -->
+          <!-- YOUR: row 6 (SSS + D) -->
           <div class="cell shieldSlot" data-side="P1" data-idx="0">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
@@ -128,7 +134,11 @@
           <div class="cell pile" data-click="pDeck">
             <div class="z">D</div><div id="pDeckN" class="n">0</div>
           </div>
+
         </div>
+
+        <!-- Arrow layer -->
+        <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
       </div>
     </div>
 
@@ -236,12 +246,14 @@
       <div class="help">
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
         <div class="helpItem">・手札をタップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場／E＝空きEをタップで発動</div>
-        <div class="helpItem">・BATTLE：自分キャラをタップ → 相手キャラ or シールドをタップ</div>
+        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（RANK4以下）／RANK5以上は空きCを長押しで見参</div>
+        <div class="helpItem">・MAIN：アイテム/エフェクト＝空きEをタップで配置</div>
+        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラまたはシールドをタップ</div>
+        <div class="helpItem">・LOG：長押しでログ表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40012"></script>
+  <script src="./script.js?v=40014"></script>
 </body>
 </html>
