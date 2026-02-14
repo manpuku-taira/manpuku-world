@@ -68,8 +68,6 @@ body{
 }
 .logoMain{ font-size:34px; font-weight:1000; letter-spacing:.02em; }
 .logoSub{ margin-top:6px; font-size:14px; color:var(--muted); letter-spacing:.22em; }
-.logoTags{ margin:14px 0 6px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
-.tag{ font-size:12px; color:var(--muted); padding:8px 10px; border-radius:999px; border:1px solid rgba(167,176,217,.18); background:rgba(16,20,38,.35); }
 .mini{ margin-top:10px; font-size:12px; color:var(--muted); }
 
 /* hud */
@@ -94,20 +92,6 @@ body{
   font-weight:1000;
 }
 
-/* announce */
-.announce{
-  min-height: 40px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 1000;
-  letter-spacing: .04em;
-  color: rgba(233,236,255,.95);
-  background: rgba(0,0,0,.28);
-  border-bottom:1px solid rgba(89,242,255,.10);
-}
-.announce.hide{ display:none; }
-.announce.warn{ color: rgba(255,77,109,.95); }
-
 /* enemy hand */
 .enemyHandDock{
   padding:6px 10px;
@@ -117,12 +101,12 @@ body{
   gap:10px;
 }
 .enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
-.enemyHand{ display:flex; gap:6px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
+.enemyHand{ display:flex; gap:7px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
 .handBack{
-  width:22px; height:32px;
+  width:30px; height:42px;
   border-radius:10px;
   border:1px solid rgba(167,176,217,.22);
-  background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
+  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
   box-shadow:0 10px 24px rgba(0,0,0,.25);
   background-size:cover; background-position:center;
 }
@@ -140,7 +124,7 @@ body{
   background:rgba(0,0,0,.22);
 }
 
-/* field images never steal taps */
+/* field images */
 .field{
   position:absolute;
   left:0; right:0;
@@ -149,7 +133,7 @@ body{
   background-position:center;
   background-size:contain;
   opacity:.9;
-  pointer-events:none !important;
+  pointer-events:none;
 }
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
@@ -173,6 +157,7 @@ body{
   position:relative;
 }
 
+/* piles */
 .pile{
   display:flex;
   flex-direction:column;
@@ -183,105 +168,107 @@ body{
 .pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:18px; font-weight:1000; }
 
+/* ★重要：stageRowは必ず高さを確保し、slotsを押せるようにする */
 .stageRow{
   padding:10px;
   display:flex;
   flex-direction:column;
   gap:8px;
-  pointer-events:auto !important;
 }
 .rowTitle{
   font-size:10px;
   letter-spacing:.20em;
   color:var(--muted);
   font-weight:900;
+  pointer-events:none; /* ★タップを邪魔しない */
 }
 
+/* slots area */
 .slots{
   flex:1;
+  min-height:56px;      /* ★高さ確保 */
   display:flex;
   gap:10px;
   align-items:center;
   justify-content:space-between;
-  pointer-events:auto !important;
+  position:relative;
+  z-index:5;            /* ★上に出す */
+  pointer-events:auto;  /* ★必ず拾う */
 }
 
-/* empty slot must be clearly visible */
+/* slot */
 .slot{
   width:calc((100% - 20px)/3);
   aspect-ratio:2/3;
+  min-height:56px; /* ★保険 */
   border-radius:14px;
-  border:1px solid rgba(89,242,255,.38);
-  background:
-    radial-gradient(120px 160px at 40% 30%, rgba(89,242,255,.14), transparent 55%),
-    rgba(6,8,14,.62);
-  box-shadow:
-    inset 0 0 0 1px rgba(179,91,255,.10),
-    0 10px 24px rgba(0,0,0,.28);
+  border:1px solid rgba(167,176,217,.22);
+  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08)); /* ★仮カード見える */
   position:relative;
   overflow:hidden;
-  pointer-events:auto !important;
+  pointer-events:auto;
+  touch-action:manipulation;
 }
-.slot::after{
-  content:"";
-  position:absolute; inset:0;
-  border-radius:14px;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
-  pointer-events:none;
-}
-.slot.glow{ outline:2px solid rgba(89,242,255,.65); transform: translateY(-1px); }
-.slot.sel{ outline:2px solid rgba(179,91,255,.65); transform: translateY(-1px); }
-.slot.need{ outline:2px solid rgba(255,77,109,.65); }
+.slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
+.slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
 .face{
   position:absolute;
   inset:0;
   background-size:cover;
   background-position:center;
-  pointer-events:none;
 }
 .face.fallback{
-  background:linear-gradient(135deg, rgba(89,242,255,.14), rgba(179,91,255,.10));
+  background:linear-gradient(135deg, rgba(89,242,255,.18), rgba(179,91,255,.12));
 }
 
 /* shields */
 .shieldSlot{ padding:10px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
-.sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; }
+.sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; pointer-events:none; }
 .backCard{
   flex:1;
+  min-height:56px;
   border-radius:14px;
-  border:1px solid rgba(89,242,255,.30);
-  background:#070914;
+  border:1px solid rgba(167,176,217,.22);
+  background: #070914;
   background-size:cover; background-position:center;
+}
+.backCard.empty{ opacity:.2; }
+.shieldCount{
+  position:absolute;
+  right:10px;
+  top:10px;
+  font-size:11px;
+  font-weight:1000;
+  padding:4px 6px;
+  border-radius:10px;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(89,242,255,.18);
 }
 
 /* hand */
-.handDock{
-  padding:12px 10px;
-  padding-bottom: calc(18px + env(safe-area-inset-bottom));
-}
+.handDock{ padding:10px; }
 .hand{
   display:flex;
   gap:10px;
   overflow-x:auto;
-  padding:12px;
+  padding:10px;
   border:1px solid rgba(89,242,255,.12);
   border-radius:18px;
   background:var(--panel2);
   box-shadow:var(--shadow);
-  pointer-events:auto !important;
 }
 .handCard{
-  width:92px;
+  width:84px;
   flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
-  border:1px solid rgba(89,242,255,.22);
-  background:rgba(6,8,14,.55);
+  border:1px solid rgba(89,242,255,.18);
+  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
   background-size:cover;
   background-position:center;
   box-shadow:var(--shadow);
-  pointer-events:auto !important;
+  touch-action:manipulation;
 }
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
@@ -290,7 +277,7 @@ body{
 .fab{
   position:fixed;
   right:10px;
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  bottom:12px;
   display:flex;
   gap:10px;
   z-index:10;
@@ -327,17 +314,7 @@ body{
   overflow:hidden;
 }
 .smallBox{ width:min(520px,94vw); }
-.confirmBox{
-  position:absolute;
-  left:50%; top:50%;
-  transform:translate(-50%,-50%);
-  width:min(560px,94vw);
-  background:rgba(10,12,22,.92);
-  border:1px solid rgba(89,242,255,.18);
-  border-radius:18px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
-}
+.confirmBox{ width:min(560px,94vw); }
 
 .boxHead{
   display:flex;
@@ -399,7 +376,3 @@ body{
   color:rgba(233,236,255,.95);
   outline:none;
 }
-
-/* help */
-.help{ padding:12px; display:flex; flex-direction:column; gap:10px; }
-.helpItem{ font-size:13px; color:rgba(233,236,255,.92); line-height:1.5; }
