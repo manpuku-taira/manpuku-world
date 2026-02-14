@@ -1,681 +1,1131 @@
 /* =========================================================
-   MANPUKU WORLD - Stable Restore Build
-   - 画像が無くてもプレイ確認可（枠は必ず出す）
-   - フィールド画像：1枚を上下に表示（上は逆向き）
-   - 手札：No/カード名の文字を表示しない（画像のみ）
-   - 長押し：カード詳細（名前/効果）
-   - 20種類×2枚の40枚デッキ
-   ========================================================= */
+  Manpuku World - v40006a (stable rebuild from v40005)
+  - Fix layout mismatch with index v40006a (span3 rows)
+  - Keep v40005 AI runner + shield facedown + longpress viewer
+  - Enemy hand count label update
+========================================================= */
 
-const $ = (s)=>document.querySelector(s);
-const elTitle = $("#titleScreen");
-const elGame  = $("#gameScreen");
-const startBtn= $("#startBtn");
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const btnNext = $("#btnNextPhase");
-const btnEnd  = $("#btnEndTurn");
-const btnLog  = $("#btnLog");
+/* ---------- Elements ---------- */
+const el = {
+  title: $("title"),
+  game: $("game"),
+  boot: $("boot"),
+  btnStart: $("btnStart"),
 
-const turnBadge = $("#turnBadge");
-const phaseBadge = $("#phaseBadge");
-const whoBadge = $("#whoBadge");
+  chipTurn: $("chipTurn"),
+  chipPhase: $("chipPhase"),
+  chipActive: $("chipActive"),
+  firstInfo: $("firstInfo"),
 
-const handEl = $("#hand");
+  btnHelp: $("btnHelp"),
+  btnSettings: $("btnSettings"),
+  btnNext: $("btnNext"),
+  btnEnd: $("btnEnd"),
+  btnLog: $("btnLog"),
 
-const modalCard = $("#modalCard");
-const modalCardClose = $("#modalCardClose");
-const modalCardTitle = $("#modalCardTitle");
-const modalCardImg = $("#modalCardImg");
-const modalCardText = $("#modalCardText");
+  matRoot: $("matRoot"),
+  fieldTop: $("fieldTop"),
+  fieldBottom: $("fieldBottom"),
 
-const modalLog = $("#modalLog");
-const modalLogClose = $("#modalLogClose");
-const logBox = $("#logBox");
+  aiC: $("aiC"),
+  aiE: $("aiE"),
+  pC: $("pC"),
+  pE: $("pE"),
+  hand: $("hand"),
+  aiHand: $("aiHand"),
+  enemyHandLabel: $("enemyHandLabel"),
 
-const fieldTop = document.querySelector(".fieldTop");
-const fieldBottom = document.querySelector(".fieldBottom");
+  aiDeckN: $("aiDeckN"),
+  aiWingN: $("aiWingN"),
+  aiOutN: $("aiOutN"),
+  pDeckN: $("pDeckN"),
+  pWingN: $("pWingN"),
+  pOutN: $("pOutN"),
 
-const youDeckCount = $("#youDeckCount");
-const enemyDeckCount = $("#enemyDeckCount");
-const youWingCount = $("#youWingCount");
-const enemyWingCount = $("#enemyWingCount");
-const youOutsideCount = $("#youOutsideCount");
-const enemyOutsideCount = $("#enemyOutsideCount");
+  viewerM: $("viewerM"),
+  viewerTitle: $("viewerTitle"),
+  viewerImg: $("viewerImg"),
+  viewerText: $("viewerText"),
 
-const youShieldEl = document.querySelector('[data-zone="you_shield"]');
-const enemyShieldEl = document.querySelector('[data-zone="enemy_shield"]');
+  zoneM: $("zoneM"),
+  zoneTitle: $("zoneTitle"),
+  zoneList: $("zoneList"),
 
-const enemyHandFan = $("#enemyHandFan");
-const enemyHandCount = $("#enemyHandCount");
+  logM: $("logM"),
+  logBody: $("logBody"),
 
-/* --------- GAME DATA (最低限・後で差し替えOK) --------- */
-/* ※あなたの「効果文まとめ」は保留との事なので、ここは最小のデモデータにしてあります */
-const CARD_MASTER = Array.from({length:20}, (_,i)=>({
-  no: i+1,
-  name: `カード${i+1}`,
-  type: (i%3===0) ? "character" : (i%3===1) ? "effect" : "item",
-  effects: []
-}));
+  confirmM: $("confirmM"),
+  confirmTitle: $("confirmTitle"),
+  confirmBody: $("confirmBody"),
+  btnYes: $("btnYes"),
+  btnNo: $("btnNo"),
 
-/* 20種×2枚 = 40枚（Noのみ持つ） */
-function buildStarterDeck(){
-  const deck = [];
-  for(let n=1;n<=20;n++){
-    deck.push({no:n});
-    deck.push({no:n});
+  settingsM: $("settingsM"),
+  repoInput: $("repoInput"),
+  btnRepoSave: $("btnRepoSave"),
+  btnRescan: $("btnRescan"),
+  btnClearCache: $("btnClearCache"),
+
+  helpM: $("helpM"),
+};
+
+/* ---------- Logs ---------- */
+const LOGS = [];
+function log(msg, kind="muted"){
+  LOGS.unshift({msg, kind, t: Date.now()});
+  if(el.logM.classList.contains("show")) renderLogModal();
+}
+window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
+window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
+
+function renderLogModal(){
+  el.logBody.innerHTML = "";
+  if(!LOGS.length){
+    const d = document.createElement("div");
+    d.className = "logLine muted";
+    d.textContent = "（ログはまだありません）";
+    el.logBody.appendChild(d);
+    return;
   }
+  for(const it of LOGS.slice(0, 200)){
+    const d = document.createElement("div");
+    d.className = `logLine ${it.kind}`;
+    d.textContent = it.msg;
+    el.logBody.appendChild(d);
+  }
+}
+
+/* ---------- Storage ---------- */
+const LS_REPO = "mw_repo";
+const LS_IMG_CACHE = "mw_img_cache_v4";
+
+/* ---------- Rules ---------- */
+const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
+const pad2 = (n)=> String(n).padStart(2,"0");
+function normalizeText(t){
+  return (t || "").replaceAll("又は","または").replaceAll("出来る","できる");
+}
+
+/* ---------- Starter deck (20 types x2) ---------- */
+const CardRegistry = Array.from({length:20}, (_,i)=> {
+  const no = i+1;
+  const rank = ((i%5)+1);
+  const atkMax = rank*500;
+  const atk = atkMax;
+  return { no, name:`カード${no}`, rank, atk, type:"character", text: normalizeText("（テキストは後で確定）") };
+});
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+}
+function buildDeck(){
+  const deck = [];
+  for(const c of CardRegistry){ deck.push({...c}); deck.push({...c}); }
   shuffle(deck);
   return deck;
 }
 
-function shuffle(a){
-  for(let i=a.length-1;i>0;i--){
-    const j = (Math.random()*(i+1))|0;
-    [a[i],a[j]]=[a[j],a[i]];
-  }
+/* ---------- State ---------- */
+const state = {
+  started:false,
+  turn:1,
+  phase:"START",
+  activeSide:"P1",
+  firstSide:"P1",
+  normalSummonUsed:false,
+
+  selectedHandIndex:null,
+  selectedAttackerPos:null,
+
+  P1: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
+  AI: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
+
+  img: {
+    fieldUrl:"",
+    backUrl:"",
+    cardUrlByNo:{},
+    cardFileByNo:{},
+    ready:false,
+  },
+
+  aiRunning:false,
+};
+
+/* ---------- UI helpers ---------- */
+function setActiveUI(){
+  const you = (state.activeSide==="P1");
+  el.chipActive.textContent = you ? "YOUR TURN" : "ENEMY TURN";
+  el.chipActive.classList.toggle("enemy", !you);
+
+  // Player buttons disabled on AI turn
+  el.btnNext.disabled = !you;
+  el.btnEnd.disabled  = !you;
+  el.btnNext.style.opacity = you ? "1" : ".45";
+  el.btnEnd.style.opacity  = you ? "1" : ".45";
 }
-
-/* --------- IMAGE RESOLUTION ---------
-   ・jpg/png両対応
-   ・二重拡張子 .png.JPG なども許容（そのままファイル名を使う）
-   ・最終的に「表示できたURL」を覚える（localStorage）
-------------------------------------- */
-
-const LS_KEY = "mw_image_map_v2";
-let imageMap = loadImageMap();
-
-/* 例：01_班目プロデューサー.png.JPG のようなケースに対応
-   ここでは「候補リスト」を作って順番に試す */
-function pad2(n){ return String(n).padStart(2,"0"); }
-
-function makeCardFileCandidates(no){
-  const p = pad2(no);
-  // 画像が手元で "12_班目プロデューサー.png.JPG" みたいに保存される前提に寄せる
-  // ただし、こちらは確実に知らないので、複数候補を試す
-  const candidates = [];
-
-  // 1) ユーザーが設定したURLがあればそれを最優先
-  if(imageMap.cards && imageMap.cards[p]) candidates.push(imageMap.cards[p]);
-
-  // 2) 一般的候補（カード名は未知なので No_*.ext を全部は探索できない）
-  //    → そこで「Noだけ」の画像も許容する（01.jpg / 01.png など）
-  candidates.push(`/assets/cards/${p}.jpg`);
-  candidates.push(`/assets/cards/${p}.png`);
-  candidates.push(`/assets/cards/${p}.jpeg`);
-  candidates.push(`/assets/cards/${p}.png.jpg`);
-  candidates.push(`/assets/cards/${p}.png.JPG`);
-  candidates.push(`/assets/cards/${p}.jpg.png`);
-
-  return candidates;
-}
-
-function makeFieldCandidates(){
-  const c = [];
-  if(imageMap.field) c.push(imageMap.field);
-
-  // よくある候補を広めに
-  c.push(`/assets/field.png`);
-  c.push(`/assets/field.jpg`);
-  c.push(`/assets/field.jpeg`);
-  c.push(`/assets/field.png.jpg`);
-  c.push(`/assets/Field.png`);
-  c.push(`/assets/Field.jpg`);
-  c.push(`/assets/field.PNG`);
-  c.push(`/assets/Field.PNG`);
-  c.push(`/assets/field.png.JPG`);
-  c.push(`/assets/field.png.JPEG`);
-  return c;
-}
-
-function loadImageMap(){
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return { field:"", cards:{} };
-    const obj = JSON.parse(raw);
-    if(!obj.cards) obj.cards = {};
-    return obj;
-  }catch(e){
-    return { field:"", cards:{} };
-  }
-}
-
-function saveImageMap(){
-  localStorage.setItem(LS_KEY, JSON.stringify(imageMap));
-}
-
-/* URL候補を順にimgロードして「最初に成功したURL」を返す */
-function resolveFirstWorkingURL(candidates, timeoutMs=1200){
-  return new Promise((resolve)=>{
-    let done = false;
-    const tryOne = (idx)=>{
-      if(done) return;
-      if(idx>=candidates.length){ done=true; resolve(""); return; }
-      const url = candidates[idx];
-      const img = new Image();
-      let t = setTimeout(()=>{
-        img.onload = null; img.onerror = null;
-        tryOne(idx+1);
-      }, timeoutMs);
-      img.onload = ()=>{
-        if(done) return;
-        clearTimeout(t);
-        done=true;
-        resolve(url);
-      };
-      img.onerror = ()=>{
-        clearTimeout(t);
-        tryOne(idx+1);
-      };
-      img.src = url + (url.includes("?") ? "&" : "?") + "v=" + Date.now(); // cache bust
-    };
-    tryOne(0);
-  });
-}
-
-/* --------- UI HELPERS --------- */
-const LOG = [];
-function log(msg, type=""){
-  const line = {msg, type, t:Date.now()};
-  LOG.push(line);
-  if(LOG.length>300) LOG.shift();
-  renderLog();
-}
-
-function renderLog(){
-  if(!logBox) return;
-  logBox.innerHTML = "";
-  for(const l of LOG.slice().reverse()){
-    const div = document.createElement("div");
-    div.className = "logLine" + (l.type ? ` ${l.type}` : "");
-    div.textContent = l.msg;
-    logBox.appendChild(div);
-  }
-}
-
-/* Long-press */
-function attachLongPress(el, onLong, ms=420){
-  let timer = null;
-  let moved = false;
-
-  const clear = ()=>{
-    if(timer){ clearTimeout(timer); timer=null; }
-  };
-
-  el.addEventListener("touchstart", ()=>{
-    moved = false;
-    clear();
-    timer = setTimeout(()=>{ if(!moved) onLong(); }, ms);
-  }, {passive:true});
-  el.addEventListener("touchmove", ()=>{ moved = true; clear(); }, {passive:true});
-  el.addEventListener("touchend", clear, {passive:true});
-  el.addEventListener("touchcancel", clear, {passive:true});
-
-  // desktop fallback
-  el.addEventListener("mousedown", ()=>{
-    moved=false; clear();
-    timer=setTimeout(()=>{ if(!moved) onLong(); }, ms);
-  });
-  el.addEventListener("mousemove", ()=>{ moved=true; });
-  el.addEventListener("mouseup", clear);
-  el.addEventListener("mouseleave", clear);
-}
-
-/* --------- GAME STATE --------- */
-let state = null;
-
-function newGame(){
-  const deckYou = buildStarterDeck();
-  const deckEnemy = buildStarterDeck();
-
-  state = {
-    turn: 1,
-    phaseIndex: 0,
-    phases: ["START","MAIN","BATTLE","END"],
-    current: Math.random()<0.5 ? "YOU" : "ENEMY",
-    you: {
-      deck: deckYou,
-      hand: [],
-      shield: [],
-      c: [null,null,null],
-      e: [null,null,null],
-      wing: [],
-      outside: []
-    },
-    enemy: {
-      deck: deckEnemy,
-      hand: [],
-      shield: [],
-      c: [null,null,null],
-      e: [null,null,null],
-      wing: [],
-      outside: []
-    },
-    selectedHandIndex: null
-  };
-
-  LOG.length = 0;
-  log("JS起動OK");
-  log("対戦画面：表示OK");
-  log(`先攻：${state.current === "YOU" ? "YOU" : "ENEMY"}`);
-
-  // shield: 3 face-down from deck (as black cards)
-  for(let i=0;i<3;i++){
-    state.you.shield.push(drawFrom(state.you.deck));
-    state.enemy.shield.push(drawFrom(state.enemy.deck));
-  }
-  // opening hand: 4
-  for(let i=0;i<4;i++){
-    state.you.hand.push(drawFrom(state.you.deck));
-    state.enemy.hand.push(drawFrom(state.enemy.deck));
-  }
-
-  syncCounts();
-  renderShields();
-  renderEnemyHandBacks();
-  renderHand();
-  updateHUD();
-
-  // if enemy starts -> simple AI perform then pass
-  if(state.current === "ENEMY"){
-    setTimeout(()=>enemyAITurnStart(), 250);
-  }
-}
-
-/* draw helper */
-function drawFrom(deck){
-  if(deck.length===0) return null;
-  return deck.pop();
-}
-
 function updateHUD(){
-  turnBadge.textContent = `TURN ${state.turn}`;
-  phaseBadge.textContent = state.phases[state.phaseIndex];
-  whoBadge.textContent = state.current;
-  whoBadge.classList.toggle("subtle", false);
+  el.chipTurn.textContent = `TURN ${state.turn}`;
+  el.chipPhase.textContent = state.phase;
+  setActiveUI();
+}
+function updateCounts(){
+  el.aiDeckN.textContent = state.AI.deck.length;
+  el.aiWingN.textContent = state.AI.wing.length;
+  el.aiOutN.textContent = state.AI.outside.length;
+
+  el.pDeckN.textContent = state.P1.deck.length;
+  el.pWingN.textContent = state.P1.wing.length;
+  el.pOutN.textContent = state.P1.outside.length;
+
+  // enemy hand label
+  if(el.enemyHandLabel){
+    el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
+  }
 }
 
-function syncCounts(){
-  youDeckCount.textContent = state.you.deck.length;
-  enemyDeckCount.textContent = state.enemy.deck.length;
-  youWingCount.textContent = state.you.wing.length;
-  enemyWingCount.textContent = state.enemy.wing.length;
-  youOutsideCount.textContent = state.you.outside.length;
-  enemyOutsideCount.textContent = state.enemy.outside.length;
-  enemyHandCount.textContent = state.enemy.hand.filter(Boolean).length;
+/* ---------- GitHub image scan ---------- */
+function getRepo(){ return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world"; }
+function setRepo(v){ localStorage.setItem(LS_REPO, v); }
+function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE) || "{}"); }catch{ return {}; } }
+function setCache(obj){ localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj)); }
+function clearCache(){ localStorage.removeItem(LS_IMG_CACHE); }
+
+async function ghList(path){
+  const repo = getRepo();
+  const url = `https://api.github.com/repos/${repo}/contents/${path}?ref=main`;
+  const res = await fetch(url, { headers: { "Accept":"application/vnd.github+json" }});
+  if(!res.ok) throw new Error(`GitHub API NG: ${res.status}`);
+  const data = await res.json();
+  if(!Array.isArray(data)) return [];
+  return data.filter(x=>x && x.type === "file").map(x=>x.name);
+}
+function encFile(name){ return encodeURIComponent(name); }
+function vercelPathCards(filename){ return `/assets/cards/${encFile(filename)}`; }
+function vercelPathAssets(filename){ return `/assets/${encFile(filename)}`; }
+
+function pickFieldFile(assetFiles){
+  const lowers = assetFiles.map(n=>n.toLowerCase());
+  const idx = lowers.findIndex(n=>n.startsWith("field."));
+  if(idx>=0) return assetFiles[idx];
+  const cand = ["field.png.jpg","field.jpg","field.png","field.jpeg","field.PNG","field.JPG"];
+  for(const c of cand){
+    const k = assetFiles.findIndex(n=>n.toLowerCase() === c.toLowerCase());
+    if(k>=0) return assetFiles[k];
+  }
+  return "";
+}
+function pickBackFile(assetFiles){
+  const lowers = assetFiles.map(n=>n.toLowerCase());
+  const pri = ["card_back.png","card_back.jpg","card_back.jpeg","cardback.png","cardback.jpg","back.png","back.jpg","back.jpeg"];
+  for(const p of pri){
+    const i = lowers.findIndex(n=>n === p);
+    if(i>=0) return assetFiles[i];
+  }
+  const idx = lowers.findIndex(n=>n.startsWith("card_back."));
+  if(idx>=0) return assetFiles[idx];
+  const idx2 = lowers.findIndex(n=>n.startsWith("back."));
+  if(idx2>=0) return assetFiles[idx2];
+  return "";
+}
+function scoreCardFilename(name, no){
+  const s = name.toLowerCase();
+  const p2 = pad2(no).toLowerCase();
+  const p1 = String(no).toLowerCase();
+  let score = 0;
+  if(s.startsWith(`${p2}_`)) score += 100;
+  if(s.startsWith(`${p1}_`)) score += 80;
+  if(s.startsWith(`${p2}.`)) score += 70;
+  if(s.startsWith(`${p1}.`)) score += 60;
+  if(s.includes(`${p2}_`)) score += 30;
+  if(s.includes(`${p1}_`)) score += 20;
+  if(s.includes(".jpg")) score += 5;
+  if(s.includes(".png")) score += 5;
+  if(s.includes(".jpeg")) score += 4;
+  if(s.includes(".png.jpg") || s.includes(".png.jpeg")) score += 6;
+  return score;
+}
+function buildCardMapFromFileList(cardFiles){
+  const map = {};
+  for(let no=1; no<=20; no++){
+    let best = {name:"", score:-1};
+    for(const f of cardFiles){
+      const sc = scoreCardFilename(f, no);
+      if(sc > best.score) best = {name:f, score:sc};
+    }
+    if(best.score >= 60) map[pad2(no)] = best.name;
+  }
+  return map;
+}
+async function validateImage(url){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(true);
+    img.onerror = ()=> resolve(false);
+    img.src = url;
+  });
+}
+function stripExtAll(name){
+  let base = name;
+  for(let i=0;i<3;i++){
+    const dot = base.lastIndexOf(".");
+    if(dot <= 0) break;
+    const ext = base.slice(dot+1).toLowerCase();
+    if(["png","jpg","jpeg","webp","gif"].includes(ext)) base = base.slice(0,dot);
+    else break;
+  }
+  return base;
+}
+function nameFromFilename(filename, no){
+  let base = stripExtAll(filename);
+  base = base.replace(new RegExp(`^${pad2(no)}_`), "");
+  base = base.replace(new RegExp(`^${no}_`), "");
+  base = base.replaceAll("_"," ");
+  base = base.trim();
+  return base || `カード${no}`;
+}
+function applyNamesFromMap(cardMap){
+  for(let no=1; no<=20; no++){
+    const k = pad2(no);
+    const fn = cardMap[k];
+    if(fn) CardRegistry[no-1].name = nameFromFilename(fn, no);
+  }
+}
+
+async function rescanImages(){
+  state.img.ready = false;
+  log("画像スキャン開始：GitHubから assets を取得します…", "muted");
+
+  const cache = {};
+  const repo = getRepo();
+  try{
+    const [assetFiles, cardFiles] = await Promise.all([
+      ghList("assets"),
+      ghList("assets/cards"),
+    ]);
+
+    cache.repo = repo;
+    cache.assetFiles = assetFiles;
+    cache.cardFiles = cardFiles;
+    cache.scannedAt = Date.now();
+
+    cache.fieldFile = pickFieldFile(assetFiles) || "";
+    cache.backFile  = pickBackFile(assetFiles) || "";
+    cache.cardMap   = buildCardMapFromFileList(cardFiles);
+
+    setCache(cache);
+
+    if(cache.fieldFile) log(`OK フィールド検出: ${cache.fieldFile}`, "muted");
+    else log("NG フィールド未検出（assets/field.* を確認）", "warn");
+
+    if(cache.backFile) log(`OK 裏面検出: ${cache.backFile}`, "muted");
+    else log("裏面：未設定（黒い裏面で動作）", "muted");
+
+    const mapped = Object.keys(cache.cardMap || {}).length;
+    if(mapped >= 20) log("OK カード画像：No.01〜20を自動紐付け", "muted");
+    else log(`注意：カード画像自動紐付け不足（${mapped}/20）`, "warn");
+
+  }catch(err){
+    log(`NG GitHub API取得失敗：${String(err.message || err)}`, "warn");
+  }
+
+  await applyImagesFromCache();
+}
+
+async function applyImagesFromCache(){
+  const cache = getCache();
+  if(cache.repo && cache.repo !== getRepo()){
+    log("画像キャッシュは別リポジトリのため破棄します", "warn");
+    clearCache();
+    return;
+  }
+
+  // field
+  if(cache.fieldFile){
+    const u = vercelPathAssets(cache.fieldFile);
+    if(await validateImage(u)){
+      state.img.fieldUrl = u;
+      el.fieldTop.style.backgroundImage = `url("${u}")`;
+      el.fieldBottom.style.backgroundImage = `url("${u}")`;
+      log("OK フィールド読込：上下同時表示", "muted");
+    }else{
+      state.img.fieldUrl = "";
+      el.fieldTop.style.backgroundImage = "";
+      el.fieldBottom.style.backgroundImage = "";
+      log(`NG フィールド読込失敗: ${u}`, "warn");
+    }
+  }else{
+    state.img.fieldUrl = "";
+    el.fieldTop.style.backgroundImage = "";
+    el.fieldBottom.style.backgroundImage = "";
+  }
+
+  // back
+  state.img.backUrl = "";
+  if(cache.backFile){
+    const b = vercelPathAssets(cache.backFile);
+    if(await validateImage(b)){
+      state.img.backUrl = b;
+      log("OK 裏面読込：適用", "muted");
+    }else{
+      log(`NG 裏面読込失敗: ${b}（黒で継続）`, "warn");
+      state.img.backUrl = "";
+    }
+  }
+
+  // cards
+  state.img.cardUrlByNo = {};
+  state.img.cardFileByNo = {};
+  const map = cache.cardMap || {};
+  applyNamesFromMap(map);
+  for(const k of Object.keys(map)){
+    const file = map[k];
+    state.img.cardFileByNo[k] = file;
+    state.img.cardUrlByNo[k] = vercelPathCards(file);
+  }
+
+  state.img.ready = true;
+
+  const miss = [];
+  for(let no=1; no<=20; no++){
+    const key = pad2(no);
+    if(!state.img.cardUrlByNo[key]) miss.push(key);
+  }
+  if(miss.length) log(`カード画像未検出：${miss.join(", ")}`, "warn");
+  else log("カード画像：20種すべて検出", "muted");
+
+  renderAll();
+}
+
+/* ---------- Rendering ---------- */
+function bindLongPress(node, fn, ms=420){
+  let t = null;
+  const start = ()=> { clearTimeout(t); t = setTimeout(fn, ms); };
+  const end = ()=> clearTimeout(t);
+  node.addEventListener("mousedown", start);
+  node.addEventListener("mouseup", end);
+  node.addEventListener("mouseleave", end);
+  node.addEventListener("touchstart", start, {passive:true});
+  node.addEventListener("touchend", end, {passive:true});
+}
+
+function faceForCard(card, isEnemy=false){
+  const face = document.createElement("div");
+  face.className = "face";
+  const url = state.img.cardUrlByNo[pad2(card.no)];
+  if(url){
+    face.style.backgroundImage = `url("${url}")`;
+  }else{
+    face.classList.add("fallback");
+  }
+  if(isEnemy) face.style.transform = "rotate(180deg)";
+  return face;
+}
+
+function makeSlot(card, opts={}){
+  const slot = document.createElement("div");
+  slot.className = "slot";
+  if(opts.glow) slot.classList.add("glow");
+  if(opts.sel) slot.classList.add("sel");
+  if(card){
+    slot.appendChild(faceForCard(card, !!opts.enemy));
+    bindLongPress(slot, ()=> openViewer(card));
+  }
+  return slot;
+}
+
+/* ---------- Modals ---------- */
+function showModal(id){ $(id).classList.add("show"); }
+function hideModal(id){ $(id).classList.remove("show"); }
+
+document.addEventListener("click", (e)=>{
+  const t = e.target;
+  if(!(t instanceof HTMLElement)) return;
+  const close = t.getAttribute("data-close");
+  if(close==="viewer") hideModal("viewerM");
+  if(close==="zone") hideModal("zoneM");
+  if(close==="confirm") hideModal("confirmM");
+  if(close==="settings") hideModal("settingsM");
+  if(close==="help") hideModal("helpM");
+  if(close==="log") hideModal("logM");
+});
+
+function openViewer(card){
+  el.viewerTitle.textContent = `${card.name}`;
+  el.viewerText.textContent = (card.text || "");
+  const url = state.img.cardUrlByNo[pad2(card.no)];
+  el.viewerImg.src = url || "";
+  showModal("viewerM");
+}
+
+function openZone(title, cards){
+  el.zoneTitle.textContent = title;
+  el.zoneList.innerHTML = "";
+
+  if(!cards.length){
+    const empty = document.createElement("div");
+    empty.className = "logLine muted";
+    empty.textContent = "（空です）";
+    el.zoneList.appendChild(empty);
+  }else{
+    cards.forEach((c)=>{
+      const it = document.createElement("div");
+      it.className = "zoneItem";
+
+      const th = document.createElement("div");
+      th.className = "zThumb";
+      const url = state.img.cardUrlByNo[pad2(c.no)];
+      if(url) th.style.backgroundImage = `url("${url}")`;
+
+      const meta = document.createElement("div");
+      meta.className = "zMeta";
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = `${c.name}`;
+      const s = document.createElement("div");
+      s.className = "s";
+      s.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
+
+      meta.appendChild(t); meta.appendChild(s);
+      it.appendChild(th); it.appendChild(meta);
+
+      it.addEventListener("click", ()=> openViewer(c), {passive:true});
+      el.zoneList.appendChild(it);
+    });
+  }
+  showModal("zoneM");
+}
+
+/* ---------- Confirm ---------- */
+let confirmYes = null;
+function askConfirm(title, body, onYes){
+  el.confirmTitle.textContent = title;
+  el.confirmBody.textContent = body;
+  confirmYes = onYes;
+  showModal("confirmM");
+}
+el.btnNo.addEventListener("click", ()=> hideModal("confirmM"), {passive:true});
+el.btnYes.addEventListener("click", ()=>{
+  hideModal("confirmM");
+  if(confirmYes){ const fn = confirmYes; confirmYes=null; fn(); }
+}, {passive:true});
+
+/* ---------- Turn / Phase core ---------- */
+function setActiveSide(side){
+  state.activeSide = side;
+  setActiveUI();
+}
+function setPhase(p){
+  state.phase = p;
+  updateHUD();
+  renderAll();
+}
+
+function draw(side, n=1){
+  const p = state[side];
+  for(let i=0;i<n;i++){
+    if(p.deck.length<=0){
+      log(`${side==="P1"?"あなた":"AI"}：デッキ切れ（ドロー不能）`, "warn");
+      if(side==="P1") log("敗北：デッキ切れ", "warn");
+      else log("勝利：相手デッキ切れ", "muted");
+      return;
+    }
+    p.hand.push(p.deck.shift());
+  }
+}
+
+function enforceHandLimit(side){
+  const p = state[side];
+  while(p.hand.length > 7){
+    const c = p.hand.pop();
+    p.wing.push(c);
+    log(`${side==="P1"?"あなた":"AI"}：手札上限でウイングへ → ${c.name}`, "muted");
+  }
+}
+
+function resolveBattle_CvC(aSide, aPos, dSide, dPos){
+  const A = state[aSide].C[aPos];
+  const D = state[dSide].C[dPos];
+  if(!A || !D) return;
+
+  log(`バトル：${A.name}(${A.atk}) vs ${D.name}(${D.atk})`, "muted");
+
+  if(A.atk === D.atk){
+    state[aSide].C[aPos]=null;
+    state[dSide].C[dPos]=null;
+    state[aSide].wing.push(A);
+    state[dSide].wing.push(D);
+    log("同値処理：相打ち（両方ウイング）", "muted");
+    return;
+  }
+  if(A.atk > D.atk){
+    state[dSide].C[dPos]=null;
+    state[dSide].wing.push(D);
+    log(`破壊：${D.name} → ウイング`, "muted");
+  }else{
+    state[aSide].C[aPos]=null;
+    state[aSide].wing.push(A);
+    log(`破壊：${A.name} → ウイング`, "muted");
+  }
+}
+
+/* ---------- AI logic ---------- */
+function aiMain(){
+  let used = false;
+
+  const empty = state.AI.C.findIndex(x=>!x);
+  if(empty>=0){
+    const idx = state.AI.hand.findIndex(c=>c.rank<=4);
+    if(idx>=0){
+      const c = state.AI.hand.splice(idx,1)[0];
+      state.AI.C[empty]=c;
+      used = true;
+      log(`AI：登場 → ${c.name}`, "muted");
+    }
+  }
+
+  if(!used){
+    const empty2 = state.AI.C.findIndex(x=>!x);
+    const idx5 = state.AI.hand.findIndex(c=>c.rank>=5);
+    if(empty2>=0 && idx5>=0 && state.AI.hand.length>=2){
+      const disc = state.AI.hand.pop();
+      state.AI.wing.push(disc);
+      const c = state.AI.hand.splice(idx5,1)[0];
+      state.AI.C[empty2]=c;
+      log(`AI：見参（仮）→ ${c.name}`, "muted");
+    }
+  }
+}
+
+function aiBattle(){
+  for(let i=0;i<3;i++){
+    const atk = state.AI.C[i];
+    if(!atk) continue;
+
+    const playerIdxs = state.P1.C.map((c,idx)=>c?idx:-1).filter(x=>x>=0);
+    if(playerIdxs.length){
+      const t = playerIdxs[Math.floor(Math.random()*playerIdxs.length)];
+      resolveBattle_CvC("AI", i, "P1", t);
+    }else{
+      const sidx = state.P1.shield.findIndex(x=>!!x);
+      if(sidx>=0){
+        const sh = state.P1.shield[sidx];
+        state.P1.shield[sidx] = null;
+        state.P1.hand.push(sh);
+        log(`AI：シールド破壊 → あなた手札へ ${sh.name}`, "warn");
+      }else{
+        log("敗北：相手のダイレクトアタック（仮）", "warn");
+      }
+    }
+  }
+}
+
+/* ---------- Guaranteed AI Turn Runner ---------- */
+async function runAITurn(){
+  if(state.aiRunning) return;
+  if(state.activeSide !== "AI") return;
+
+  state.aiRunning = true;
+  try{
+    log("相手ターン開始", "warn");
+    state.normalSummonUsed = false;
+    state.selectedHandIndex = null;
+    state.selectedAttackerPos = null;
+
+    setPhase("START");
+    await sleep(260);
+
+    setPhase("DRAW");
+    draw("AI", 1);
+    log("AI：ドロー +1", "muted");
+    renderAll();
+    await sleep(340);
+
+    setPhase("MAIN");
+    aiMain();
+    renderAll();
+    await sleep(420);
+
+    setPhase("BATTLE");
+    aiBattle();
+    renderAll();
+    await sleep(520);
+
+    setPhase("END");
+    enforceHandLimit("AI");
+    renderAll();
+    await sleep(340);
+
+    setActiveSide("P1");
+    state.turn++;
+    state.phase = "START";
+    log(`TURN ${state.turn} あなたのターン開始`, "muted");
+    updateHUD();
+    renderAll();
+
+  }finally{
+    state.aiRunning = false;
+  }
+}
+
+/* ---------- Player actions ---------- */
+function onClickYourC(pos){
+  if(state.activeSide!=="P1") return;
+
+  if(state.phase === "MAIN"){
+    if(state.selectedHandIndex==null) return;
+    if(state.P1.C[pos]) return;
+
+    const card = state.P1.hand[state.selectedHandIndex];
+
+    if(state.normalSummonUsed){
+      log("登場（通常召喚）はターン1回です", "warn");
+      return;
+    }
+    if(card.rank >= 5){
+      log("RANK5以上は見参（空スロット長押し）です", "warn");
+      return;
+    }
+
+    state.P1.C[pos] = card;
+    state.P1.hand.splice(state.selectedHandIndex,1);
+    state.selectedHandIndex = null;
+    state.normalSummonUsed = true;
+    log(`登場：${card.name}`, "muted");
+    renderAll();
+    return;
+  }
+
+  if(state.phase === "BATTLE"){
+    if(!state.P1.C[pos]) return;
+    state.selectedAttackerPos = (state.selectedAttackerPos===pos) ? null : pos;
+    renderAll();
+    return;
+  }
+}
+
+function onLongPressEmptySlotForKenSan(pos){
+  if(state.activeSide!=="P1") return;
+  if(state.phase!=="MAIN") return;
+  if(state.selectedHandIndex==null) return;
+  if(state.P1.C[pos]) return;
+
+  const card = state.P1.hand[state.selectedHandIndex];
+  if(card.rank < 5) return;
+
+  if(state.P1.hand.length < 2){
+    log("見参：仮コスト（手札1枚）が足りません", "warn");
+    return;
+  }
+
+  askConfirm("見参（仮）", `${card.name} を見参しますか？\n仮コスト：手札を1枚ウイングへ送ります`, ()=>{
+    const discIdx = (state.selectedHandIndex===state.P1.hand.length-1) ? 0 : state.P1.hand.length-1;
+    const disc = state.P1.hand.splice(discIdx,1)[0];
+    state.P1.wing.push(disc);
+
+    const c2 = state.P1.hand.splice(state.selectedHandIndex,1)[0];
+    state.P1.C[pos]=c2;
+
+    state.selectedHandIndex=null;
+    log(`見参：${c2.name}`, "muted");
+    renderAll();
+  });
+}
+
+function onClickEnemyCard(enemyPos){
+  if(state.activeSide!=="P1") return;
+  if(state.phase!=="BATTLE") return;
+  if(state.selectedAttackerPos==null) return;
+
+  const atkCard = state.P1.C[state.selectedAttackerPos];
+  const defCard = state.AI.C[enemyPos];
+  if(!atkCard || !defCard) return;
+
+  askConfirm("攻撃確認", `${atkCard.name} → ${defCard.name}\n攻撃しますか？`, ()=>{
+    resolveBattle_CvC("P1", state.selectedAttackerPos, "AI", enemyPos);
+    state.selectedAttackerPos = null;
+    renderAll();
+  });
+}
+
+function onClickEnemyShield(idx){
+  if(state.activeSide!=="P1") return;
+  if(state.phase!=="BATTLE") return;
+  if(state.selectedAttackerPos==null) return;
+
+  const atkCard = state.P1.C[state.selectedAttackerPos];
+  if(!atkCard) return;
+
+  const enemyHasC = state.AI.C.some(Boolean);
+  if(enemyHasC){
+    log("相手キャラがいる間はシールドを攻撃できません", "warn");
+    return;
+  }
+  if(!state.AI.shield[idx]){
+    log("そのシールドは既にありません", "warn");
+    return;
+  }
+
+  askConfirm("攻撃確認", `${atkCard.name} がシールドを攻撃します。\nシールドを破壊（→相手手札）しますか？`, ()=>{
+    const sh = state.AI.shield[idx];
+    state.AI.shield[idx] = null;
+    state.AI.hand.push(sh);
+    log(`シールド破壊：相手手札へ → ${sh.name}`, "muted");
+
+    if(state.AI.shield.every(x=>!x)){
+      log("相手シールド全破壊：次の攻撃でダイレクト可能（仮）", "muted");
+    }
+
+    state.selectedAttackerPos = null;
+    renderAll();
+  });
+}
+
+/* ---------- Render parts ---------- */
+function renderZones(){
+  // E slots
+  el.aiE.innerHTML = "";
+  for(let i=0;i<3;i++){
+    const s = makeSlot(state.AI.E[i], {enemy:true});
+    el.aiE.appendChild(s);
+  }
+
+  // Enemy C slots + click
+  el.aiC.innerHTML = "";
+  for(let i=0;i<3;i++){
+    const c = state.AI.C[i];
+    const slot = makeSlot(c, {enemy:true});
+    slot.addEventListener("click", ()=> onClickEnemyCard(i), {passive:true});
+    el.aiC.appendChild(slot);
+  }
+
+  // Your C slots
+  el.pC.innerHTML = "";
+  for(let i=0;i<3;i++){
+    const c = state.P1.C[i];
+    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed && state.selectedHandIndex!=null && !c);
+    const sel = (state.selectedAttackerPos===i);
+    const slot = makeSlot(c, {glow, sel});
+    slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
+    if(!c) bindLongPress(slot, ()=> onLongPressEmptySlotForKenSan(i));
+    el.pC.appendChild(slot);
+  }
+
+  // Your E slots
+  el.pE.innerHTML = "";
+  for(let i=0;i<3;i++){
+    el.pE.appendChild(makeSlot(state.P1.E[i]));
+  }
+}
+
+function renderHand(){
+  el.hand.innerHTML = "";
+  for(let i=0;i<state.P1.hand.length;i++){
+    const c = state.P1.hand[i];
+    const h = document.createElement("div");
+    h.className = "handCard";
+
+    const playable = (state.activeSide==="P1" && state.phase==="MAIN" && !state.normalSummonUsed);
+    if(playable) h.classList.add("glow");
+    if(state.selectedHandIndex===i) h.classList.add("sel");
+
+    const url = state.img.cardUrlByNo[pad2(c.no)];
+    if(url){
+      h.style.backgroundImage = `url("${url}")`;
+    }
+
+    h.addEventListener("click", ()=>{
+      if(state.activeSide!=="P1") return;
+      state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
+      state.selectedAttackerPos = null;
+      renderAll();
+    }, {passive:true});
+
+    bindLongPress(h, ()=> openViewer(c));
+    el.hand.appendChild(h);
+  }
+}
+
+function renderEnemyHand(){
+  el.aiHand.innerHTML = "";
+  const n = state.AI.hand.length;
+  const show = Math.min(n, 12);
+  for(let i=0;i<show;i++){
+    const b = document.createElement("div");
+    b.className = "handBack";
+    if(state.img.backUrl) b.style.backgroundImage = `url("${state.img.backUrl}")`;
+    el.aiHand.appendChild(b);
+  }
+  if(n > show){
+    const more = document.createElement("div");
+    more.className = "handBack";
+    more.textContent = `+${n-show}`;
+    more.style.display = "flex";
+    more.style.alignItems = "center";
+    more.style.justifyContent = "center";
+    more.style.fontWeight = "1000";
+    more.style.color = "rgba(233,236,255,.92)";
+    el.aiHand.appendChild(more);
+  }
+  updateCounts();
+}
+
+function ensureShieldCountBadge(cell){
+  let b = cell.querySelector(".shieldCount");
+  if(!b){
+    b = document.createElement("div");
+    b.className = "shieldCount";
+    cell.appendChild(b);
+  }
+  return b;
 }
 
 function renderShields(){
-  youShieldEl.innerHTML = "";
-  enemyShieldEl.innerHTML = "";
+  const nodes = document.querySelectorAll(".shieldSlot");
+  nodes.forEach((cell)=>{
+    const side = cell.getAttribute("data-side");
+    const idx = Number(cell.getAttribute("data-idx") || "0");
+    const back = cell.querySelector(".backCard");
+    const sh = state[side].shield[idx];
+    const exists = !!sh;
 
-  for(let i=0;i<3;i++){
-    const y = document.createElement("div");
-    y.className = "shieldCard";
-    if(!state.you.shield[i]) y.style.opacity = "0.15";
-    youShieldEl.appendChild(y);
+    back.classList.toggle("empty", !exists);
 
-    const e = document.createElement("div");
-    e.className = "shieldCard";
-    if(!state.enemy.shield[i]) e.style.opacity = "0.15";
-    enemyShieldEl.appendChild(e);
-  }
-}
-
-function renderEnemyHandBacks(){
-  enemyHandFan.innerHTML = "";
-  const count = state.enemy.hand.filter(Boolean).length;
-  for(let i=0;i<count;i++){
-    const b = document.createElement("div");
-    b.className = "enemyBack";
-    enemyHandFan.appendChild(b);
-  }
-}
-
-/* --------- ZONES RENDER (C/E slots) --------- */
-function ensureSlots(){
-  // create 3 slots per zone container if not created
-  document.querySelectorAll(".slots").forEach(container=>{
-    if(container.children.length===0){
-      for(let i=0;i<3;i++){
-        const s = document.createElement("div");
-        s.className = "slot";
-        s.dataset.index = String(i);
-        const img = document.createElement("div");
-        img.className = "img";
-        s.appendChild(img);
-        container.appendChild(s);
+    if(exists){
+      if(state.img.backUrl){
+        back.style.backgroundImage = `url("${state.img.backUrl}")`;
+        back.style.backgroundColor = "";
+      }else{
+        back.style.backgroundImage = "";
+        back.style.backgroundColor = "#070914";
       }
-    }
-  });
-}
-
-function renderZones(){
-  ensureSlots();
-
-  renderZoneSet("you_c", state.you.c);
-  renderZoneSet("you_e", state.you.e);
-  renderZoneSet("enemy_c", state.enemy.c, true);
-  renderZoneSet("enemy_e", state.enemy.e, true);
-}
-
-function renderZoneSet(zoneName, arr, isEnemy=false){
-  const container = document.querySelector(`[data-zone="${zoneName}"]`);
-  if(!container) return;
-
-  [...container.children].forEach((slotEl, idx)=>{
-    const card = arr[idx];
-    slotEl.classList.toggle("selected", false);
-    const img = slotEl.querySelector(".img");
-    if(!card){
-      img.style.backgroundImage = "";
-      img.style.opacity = "0.0";
-      slotEl.style.borderColor = "rgba(89,242,255,.18)";
-      return;
-    }
-    img.style.opacity = "1.0";
-    // enemy cards are hidden (face-down black) for now to keep rules safe
-    if(isEnemy){
-      img.style.backgroundImage = "";
-      img.style.backgroundColor = "rgba(0,0,0,.88)";
-      img.style.filter = "none";
-      slotEl.style.borderColor = "rgba(233,236,255,.22)";
     }else{
-      img.style.backgroundColor = "transparent";
-      slotEl.style.borderColor = "rgba(89,242,255,.18)";
-      setCardImageTo(img, card.no);
+      back.style.backgroundImage = "";
+      back.style.backgroundColor = "";
     }
+
+    const count = state[side].shield.filter(Boolean).length;
+    const badge = ensureShieldCountBadge(cell);
+    badge.textContent = `${count}/3`;
+
+    cell.onclick = ()=> { if(side==="AI") onClickEnemyShield(idx); };
   });
 }
 
-/* --------- HAND RENDER --------- */
-function renderHand(){
-  handEl.innerHTML = "";
-  state.you.hand.forEach((card, idx)=>{
-    if(!card) return;
-    const h = document.createElement("div");
-    h.className = "handCard";
-    if(state.selectedHandIndex === idx) h.classList.add("selected");
-
-    const img = document.createElement("div");
-    img.className = "img";
-    h.appendChild(img);
-
-    // 手札は「文字表示しない」ので、画像のみ
-    // 画像が無い場合は missing 表示
-    setCardImageTo(img, card.no).then(ok=>{
-      if(!ok) h.classList.add("missing");
-    });
-
-    h.addEventListener("click", ()=>{
-      if(state.current !== "YOU") return;
-      state.selectedHandIndex = (state.selectedHandIndex === idx) ? null : idx;
-      renderHand();
-    });
-
-    attachLongPress(h, ()=>{
-      openCardModal(card.no, false);
-    });
-
-    handEl.appendChild(h);
-  });
+function renderAll(){
+  updateCounts();
+  renderZones();
+  renderHand();
+  renderEnemyHand();
+  renderShields();
 }
 
-/* --------- IMAGE SETTERS --------- */
-async function setCardImageTo(imgEl, no){
-  const candidates = makeCardFileCandidates(no);
-  const url = await resolveFirstWorkingURL(candidates);
-  if(!url){
-    imgEl.style.backgroundImage = "";
-    return false;
-  }
-  // remember the first working url as mapping for this no
-  const key = pad2(no);
-  imageMap.cards[key] = url;
-  saveImageMap();
+/* ---------- Board clicks (wing/outside) ---------- */
+function bindBoardClicks(){
+  const grid = $("grid");
+  grid.addEventListener("click", (e)=>{
+    const cell = e.target.closest(".cell");
+    if(!cell) return;
+    const act = cell.getAttribute("data-click");
+    if(!act) return;
 
-  imgEl.style.backgroundImage = `url("${url}")`;
-  return true;
+    if(act==="aiWing") openZone("ENEMY WING", state.AI.wing.slice().reverse());
+    if(act==="aiOutside") openZone("ENEMY OUTSIDE", state.AI.outside.slice().reverse());
+    if(act==="pWing") openZone("YOUR WING", state.P1.wing.slice().reverse());
+    if(act==="pOutside") openZone("YOUR OUTSIDE", state.P1.outside.slice().reverse());
+  }, {passive:true});
 }
 
-async function applyFieldImage(){
-  const url = await resolveFirstWorkingURL(makeFieldCandidates(), 1400);
-  if(!url){
-    log("NG フィールド画像が見つかりません（assets/field.* を確認）", "warn");
-    // keep dark background, but game works
-    fieldTop.style.backgroundImage = "";
-    fieldBottom.style.backgroundImage = "";
-    return;
-  }
-  imageMap.field = url;
-  saveImageMap();
-  fieldTop.style.backgroundImage = `url("${url}")`;
-  fieldBottom.style.backgroundImage = `url("${url}")`;
-  log(`OK フィールド：${url}`);
-}
-
-/* --------- INTERACTION: PLAY FROM HAND TO ZONE --------- */
-function bindZoneInteractions(){
-  // place to YOU C or YOU E only
-  document.querySelectorAll(".slots").forEach(container=>{
-    container.addEventListener("click", async (ev)=>{
-      const zone = container.dataset.zone; // you_c etc
-      if(!zone || !zone.startsWith("you_")) return;
-      if(state.current !== "YOU") return;
-
-      const slotEl = ev.target.closest(".slot");
-      if(!slotEl) return;
-      const idx = Number(slotEl.dataset.index);
-
-      // long press on field card -> open modal
-      const isC = zone === "you_c";
-      const isE = zone === "you_e";
-
-      // if no card selected, longpress already exists, but click can open if card exists
-      const arr = isC ? state.you.c : isE ? state.you.e : null;
-      if(!arr) return;
-
-      const existing = arr[idx];
-
-      if(state.selectedHandIndex == null){
-        if(existing){
-          openCardModal(existing.no, false);
-        }
-        return;
-      }
-
-      // place selected hand card if empty
-      if(existing){
-        log("そこにはすでにカードがあります", "muted");
-        return;
-      }
-
-      const handCard = state.you.hand[state.selectedHandIndex];
-      if(!handCard) return;
-
-      // simple rule: character -> C, item/effect -> E
-      const meta = CARD_MASTER[handCard.no-1];
-      if(isC && meta.type !== "character"){
-        log("ここはキャラクター枠です（E枠へ）", "muted");
-        return;
-      }
-      if(isE && meta.type === "character"){
-        log("ここはE（エフェクト/アイテム）枠です（C枠へ）", "muted");
-        return;
-      }
-
-      arr[idx] = handCard;
-      state.you.hand[state.selectedHandIndex] = null;
-      state.selectedHandIndex = null;
-
-      log(`配置：${meta.name}`);
-      renderHand();
-      renderZones();
-      syncCounts();
-    });
-
-    // long-press slot for details (YOU side only)
-    [...container.children].forEach(slotEl=>{
-      attachLongPress(slotEl, ()=>{
-        const zone = container.dataset.zone;
-        if(!zone || !zone.startsWith("you_")) return;
-        const idx = Number(slotEl.dataset.index);
-        const arr = zone==="you_c" ? state.you.c : zone==="you_e" ? state.you.e : null;
-        const card = arr ? arr[idx] : null;
-        if(card) openCardModal(card.no, false);
-      });
-    });
-  });
-}
-
-/* --------- MODALS --------- */
-function openCardModal(no, isHidden){
-  const meta = CARD_MASTER[no-1] || {name:`カード${no}`, effects:[]};
-  modalCardTitle.textContent = meta.name;
-
-  // image
-  modalCardImg.src = ""; // reset
-  modalCardImg.alt = meta.name;
-
-  // hidden card uses black
-  if(isHidden){
-    modalCardImg.style.background = "rgba(0,0,0,.88)";
-    modalCardImg.removeAttribute("src");
-  }else{
-    modalCardImg.style.background = "rgba(6,8,14,.55)";
-    // try resolved mapping; if missing then show blank
-    const key = pad2(no);
-    const url = imageMap.cards[key] || "";
-    if(url) modalCardImg.src = url;
-  }
-
-  // text (Noは出さない方針)
-  const lines = [];
-  lines.push(`タイプ：${meta.type || "unknown"}`);
-  if(meta.effects && meta.effects.length){
-    lines.push("");
-    for(const e of meta.effects) lines.push(`・${e}`);
-  }else{
-    lines.push("");
-    lines.push("（効果テキスト未登録）");
-  }
-  modalCardText.textContent = lines.join("\n");
-
-  modalCard.classList.add("show");
-}
-
-function closeCardModal(){ modalCard.classList.remove("show"); }
-function openLogModal(){ modalLog.classList.add("show"); }
-function closeLogModal(){ modalLog.classList.remove("show"); }
-
-/* --------- PHASE/TURN --------- */
+/* ---------- Phase Buttons ---------- */
 function nextPhase(){
-  if(!state) return;
-  state.phaseIndex = (state.phaseIndex + 1) % state.phases.length;
+  const i = PHASES.indexOf(state.phase);
+  const next = PHASES[(i+1)%PHASES.length];
+  state.phase = next;
+
+  if(next==="START"){
+    state.normalSummonUsed = false;
+    state.selectedHandIndex = null;
+    state.selectedAttackerPos = null;
+  }
+  if(next==="DRAW"){
+    draw(state.activeSide, 1);
+    log(`${state.activeSide==="P1"?"あなた":"AI"}：ドロー +1`, "muted");
+  }
+  if(next==="END"){
+    enforceHandLimit(state.activeSide);
+  }
+
   updateHUD();
-  log(`PHASE: ${state.phases[state.phaseIndex]}`, "muted");
+  renderAll();
 }
 
 function endTurn(){
-  if(!state) return;
+  enforceHandLimit(state.activeSide);
 
-  // force end phase to END
-  state.phaseIndex = 0;
-
-  // swap
-  if(state.current === "YOU"){
-    state.current = "ENEMY";
-    state.turn += 1;
+  if(state.activeSide==="P1"){
+    setActiveSide("AI");
+    state.phase = "START";
     updateHUD();
-    log("ENEMY TURN", "muted");
-    setTimeout(()=>enemyAITurnStart(), 250);
+    renderAll();
+    runAITurn();
   }else{
-    state.current = "YOU";
+    setActiveSide("P1");
+    state.turn++;
+    state.phase = "START";
+    log(`TURN ${state.turn} あなたのターン開始`, "muted");
     updateHUD();
-    log("YOU TURN", "muted");
+    renderAll();
+  }
+}
+
+/* ---------- Start Game ---------- */
+function startGame(){
+  state.turn = 1;
+  state.phase = "START";
+  state.normalSummonUsed = false;
+  state.selectedHandIndex = null;
+  state.selectedAttackerPos = null;
+  state.aiRunning = false;
+
+  state.P1.deck = buildDeck();
+  state.AI.deck = buildDeck();
+
+  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
+  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
+
+  state.P1.hand = [];
+  state.AI.hand = [];
+  draw("P1", 4);
+  draw("AI", 4);
+
+  state.P1.C = [null,null,null];
+  state.AI.C = [null,null,null];
+  state.P1.E = [null,null,null];
+  state.AI.E = [null,null,null];
+  state.P1.wing = [];
+  state.AI.wing = [];
+  state.P1.outside = [];
+  state.AI.outside = [];
+
+  state.firstSide = (Math.random() < 0.5) ? "P1" : "AI";
+  setActiveSide(state.firstSide);
+
+  if(state.firstSide==="P1"){
+    el.firstInfo.textContent = "先攻：あなた";
+    log("先攻：あなた", "muted");
+    log("あなたのターン開始", "muted");
+  }else{
+    el.firstInfo.textContent = "先攻：相手";
+    log("先攻：相手", "warn");
   }
 
-  // redraw UI
-  renderZones();
-  renderHand();
-  renderShields();
-  renderEnemyHandBacks();
-  syncCounts();
+  log("ゲーム開始：シールド3（裏向き）/ 初手4", "muted");
+
+  updateHUD();
+  renderAll();
+
+  if(state.activeSide==="AI"){
+    runAITurn();
+  }
 }
 
-function drawFor(who){
-  const p = (who==="YOU") ? state.you : state.enemy;
-  const c = drawFrom(p.deck);
-  if(!c){ log(`${who}: デッキ切れ`, "warn"); return; }
-  p.hand.push(c);
-  if(who==="YOU") renderHand();
-  syncCounts();
-  if(who==="ENEMY") renderEnemyHandBacks();
+/* ---------- Start / Buttons / Settings ---------- */
+function bindStart(){
+  el.boot.textContent = "JS: OK（読み込み成功）";
+  const go = ()=>{
+    if(state.started) return;
+    state.started=true;
+    el.title.classList.remove("active");
+    el.game.classList.add("active");
+    log("対戦画面：表示OK", "muted");
+    startGame();
+  };
+  el.btnStart.addEventListener("click", go, {passive:true});
+  el.title.addEventListener("click", go, {passive:true});
 }
 
-/* --------- ENEMY AI (最低限) --------- */
-function enemyAITurnStart(){
-  // enemy draw 1
-  drawFor("ENEMY");
+function bindHUDButtons(){
+  el.btnHelp.addEventListener("click", ()=> showModal("helpM"), {passive:true});
+  el.btnSettings.addEventListener("click", ()=>{
+    el.repoInput.value = getRepo();
+    showModal("settingsM");
+  }, {passive:true});
+}
 
-  // AI: if has a character and has empty C slot -> play first
-  const enemy = state.enemy;
-  const firstCharIndex = enemy.hand.findIndex(h=>{
-    if(!h) return false;
-    const meta = CARD_MASTER[h.no-1];
-    return meta && meta.type === "character";
-  });
-  if(firstCharIndex >= 0){
-    const empty = enemy.c.findIndex(x=>!x);
-    if(empty >= 0){
-      enemy.c[empty] = enemy.hand[firstCharIndex];
-      enemy.hand[firstCharIndex] = null;
-      log("ENEMY: キャラクターを配置", "muted");
+function bindSettings(){
+  el.btnRepoSave.addEventListener("click", async ()=>{
+    const v = (el.repoInput.value || "").trim();
+    if(!v.includes("/")){
+      log("設定NG：owner/repo 形式で入力してください", "warn");
+      return;
     }
-  }
+    setRepo(v);
+    clearCache();
+    log(`設定：リポジトリ = ${v}`, "muted");
+    await rescanImages();
+  }, {passive:true});
 
-  // end enemy turn automatically (so game never freezes)
-  setTimeout(()=>{
-    renderZones();
-    renderShields();
-    syncCounts();
-    renderEnemyHandBacks();
+  el.btnRescan.addEventListener("click", async ()=>{ await rescanImages(); }, {passive:true});
+
+  el.btnClearCache.addEventListener("click", ()=>{
+    clearCache();
+    log("画像キャッシュを消去しました", "muted");
+    state.img.ready=false;
+    el.fieldTop.style.backgroundImage = "";
+    el.fieldBottom.style.backgroundImage = "";
+    state.img.cardUrlByNo = {};
+    state.img.cardFileByNo = {};
+    state.img.backUrl = "";
+    renderAll();
+  }, {passive:true});
+}
+
+function bindPhaseButtons(){
+  el.btnNext.addEventListener("click", ()=>{
+    if(state.activeSide!=="P1") return;
+    nextPhase();
+  }, {passive:true});
+
+  el.btnEnd.addEventListener("click", ()=>{
+    if(state.activeSide!=="P1") return;
     endTurn();
-  }, 400);
+  }, {passive:true});
 }
 
-/* --------- BOOT --------- */
-function showGame(){
-  elTitle.classList.remove("active");
-  elGame.classList.add("active");
+function bindLogButton(){
+  bindLongPress(el.btnLog, ()=>{
+    renderLogModal();
+    showModal("logM");
+  }, 360);
 }
 
-startBtn.addEventListener("click", async ()=>{
-  showGame();
-  ensureSlots();
-  renderZones();
-  bindZoneInteractions();
+/* ---------- init ---------- */
+async function init(){
+  el.boot.textContent = "JS: OK（初期化中…）";
+  updateHUD();
 
-  await applyFieldImage(); // field load (works or fails safely)
-  newGame();
-  renderZones();
-});
+  bindStart();
+  bindHUDButtons();
+  bindSettings();
+  bindPhaseButtons();
+  bindBoardClicks();
+  bindLogButton();
 
-btnNext.addEventListener("click", ()=>nextPhase());
-btnEnd.addEventListener("click", ()=>{
-  if(state.current !== "YOU"){
-    log("相手ターン中です", "muted");
-    return;
+  const cache = getCache();
+  if(cache && cache.assetFiles && cache.cardFiles && cache.repo === getRepo()){
+    log("画像：キャッシュを使用（必要なら設定→再取得）", "muted");
+    await applyImagesFromCache();
+  }else{
+    await rescanImages();
   }
-  endTurn();
-});
 
-btnLog.addEventListener("click", ()=>openLogModal());
+  el.boot.textContent = "JS: OK（準備完了）";
+  log("盤面は常時フル表示／詳細は長押し／シールドは裏向きで表示", "muted");
+}
 
-modalCardClose.addEventListener("click", closeCardModal);
-modalLogClose.addEventListener("click", closeLogModal);
-modalCard.querySelector(".modalBack").addEventListener("click", closeCardModal);
-modalLog.querySelector(".modalBack").addEventListener("click", closeLogModal);
-
-/* 初期ログ（ゲーム起動確認） */
-log("READY");
-log("タイトルの START を押してください", "muted");
+document.addEventListener("DOMContentLoaded", init);
