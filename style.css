@@ -13,29 +13,32 @@
   --enemyH: 58px;
 
   /* =================================================
-    SCALE v40009
-    - Board(grid/slots) さらに約 -20%
-    - Hand area 約 -30% (height + card size)
-    - Shield = card size (slot準拠)
+    SCALE v40010
+    - Board cards (C/E/Shield) : ~40% smaller feeling
+    - Hand cards: further smaller to emphasize long-press viewer
   ================================================= */
 
-  /* ===== board/grid ===== */
-  --gridPad: 6px;     /* 8 -> 6 */
-  --gridGap: 6px;     /* 8 -> 6 */
-  --cellRad: 12px;    /* 14 -> 12 */
+  /* grid */
+  --gridPad: 6px;
+  --gridGap: 6px;
+  --cellRad: 12px;
 
-  /* slot size feeling (C/E + Shield) */
-  --slotRad: 10px;    /* 12 -> 10 */
-  --slotGap: 6px;     /* 8 -> 6 */
+  /* slot (board cards) */
+  --slotRad: 10px;
+  --slotGap: 8px;      /* gap a bit larger so small cards breathe */
   --slotBorder: 1px;
 
-  /* row title tighten */
-  --rowTitleMb: 4px;  /* 5 -> 4 */
+  /* board-card shrink key:
+     make the 3 slots NOT fill full width: use slotW factor */
+  --slotW: 0.60;       /* <<< about 40% smaller than full-fit */
 
-  /* ===== hand (dock + cards) -30% ===== */
-  --handH: 78px;      /* 112 -> 78 (約-30%) */
-  --handPad: 8px;     /* 10 -> 8 */
-  --handCardW: 64px;  /* 92 -> 64 (約-30%) */
+  /* row title tighten */
+  --rowTitleMb: 4px;
+
+  /* hand: smaller than v40009 */
+  --handH: 62px;        /* 78 -> 62 */
+  --handPad: 6px;       /* 8 -> 6 */
+  --handCardW: 52px;    /* 64 -> 52 */
 }
 
 *{ box-sizing:border-box; }
@@ -152,7 +155,7 @@ body{
 .enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
 .enemyHand{ display:flex; gap:8px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
 .handBack{
-  width:30px; height:42px; /* 少し小さく */
+  width:28px; height:40px;
   border-radius:10px;
   border:1px solid rgba(167,176,217,.22);
   background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
@@ -160,13 +163,13 @@ body{
   background-size:cover; background-position:center;
 }
 
-/* stage fills remaining space */
+/* stage */
 .stage{
   position:absolute;
   left:0; right:0;
   top:calc(var(--hudH) + var(--enemyH) + env(safe-area-inset-top));
   bottom:calc(var(--handH) + env(safe-area-inset-bottom));
-  padding:6px; /* 8 -> 6 */
+  padding:6px;
   min-height:0;
 }
 .mat{
@@ -174,7 +177,7 @@ body{
   width:100%;
   height:100%;
   border:1px solid rgba(89,242,255,.12);
-  border-radius:14px; /* 16 -> 14 */
+  border-radius:14px;
   overflow:hidden;
   box-shadow:var(--shadow);
   background:rgba(0,0,0,.22);
@@ -205,7 +208,6 @@ body{
   padding:var(--gridPad);
 }
 
-/* cells */
 .cell{
   background: rgba(10,12,22,.62);
   border: 1px solid rgba(89,242,255,.12);
@@ -220,14 +222,14 @@ body{
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:4px; /* 6 -> 4 */
+  gap:4px;
 }
 .pile .z{ font-size:11px; letter-spacing:.20em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:16px; font-weight:1000; }
 
 /* stage rows */
 .stageRow{
-  padding:5px; /* 6 -> 5 */
+  padding:5px;
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -240,18 +242,20 @@ body{
   font-weight:900;
   line-height:1.05;
 }
+
+/* IMPORTANT: center the 3 small cards */
 .slots{
   display:flex;
   gap:var(--slotGap);
   align-items:center;
-  justify-content:space-between;
+  justify-content:center; /* <<< was space-between */
   flex:1;
   min-height:0;
 }
 
-/* slots: C/E & Shield should match */
+/* slot ~40% smaller than full width */
 .slot{
-  width:calc((100% - (var(--slotGap) * 2))/3);
+  width:calc(((100% - (var(--slotGap) * 2)) / 3) * var(--slotW));
   aspect-ratio:2/3;
   border-radius:var(--slotRad);
   border:var(--slotBorder) solid rgba(167,176,217,.22);
@@ -272,7 +276,7 @@ body{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
 }
 
-/* shields -> card size */
+/* shields (match slot size) */
 .shieldSlot{
   padding:5px;
   display:flex;
@@ -308,7 +312,7 @@ body{
   border:1px solid rgba(89,242,255,.18);
 }
 
-/* hand fixed bottom (30%縮小) */
+/* hand fixed bottom (more smaller) */
 .handDock{
   position:fixed;
   left:0; right:0;
@@ -317,13 +321,13 @@ body{
   padding-bottom:env(safe-area-inset-bottom);
   padding-left:10px;
   padding-right:10px;
-  padding-top:8px;
+  padding-top:6px;
   background:rgba(0,0,0,.22);
   backdrop-filter: blur(10px);
   z-index:25;
 }
 .hand{
-  height:calc(var(--handH) - 16px);
+  height:calc(var(--handH) - 12px);
   display:flex;
   gap:8px;
   overflow-x:auto;
@@ -338,7 +342,7 @@ body{
   width:var(--handCardW);
   flex:0 0 auto;
   aspect-ratio:2/3;
-  border-radius:12px;
+  border-radius:10px;
   border:1px solid rgba(89,242,255,.18);
   background:rgba(6,8,14,.55);
   background-size:cover;
@@ -361,7 +365,7 @@ body{
   border:1px solid rgba(89,242,255,.22);
   background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
   color:var(--text);
-  padding:11px 12px; /* 少し小さく */
+  padding:11px 12px;
   border-radius:14px;
   font-weight:1000;
   letter-spacing:.08em;
