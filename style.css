@@ -140,7 +140,7 @@ body{
   background:rgba(0,0,0,.22);
 }
 
-/* field images (never steal taps) */
+/* field images never steal taps */
 .field{
   position:absolute;
   left:0; right:0;
@@ -183,7 +183,6 @@ body{
 .pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:18px; font-weight:1000; }
 
-/* IMPORTANT: stageRow should always layout slots clearly */
 .stageRow{
   padding:10px;
   display:flex;
@@ -207,12 +206,12 @@ body{
   pointer-events:auto !important;
 }
 
-/* ★ FIX: empty slot must be clearly visible */
+/* empty slot must be clearly visible */
 .slot{
   width:calc((100% - 20px)/3);
   aspect-ratio:2/3;
   border-radius:14px;
-  border:1px solid rgba(89,242,255,.38); /* stronger */
+  border:1px solid rgba(89,242,255,.38);
   background:
     radial-gradient(120px 160px at 40% 30%, rgba(89,242,255,.14), transparent 55%),
     rgba(6,8,14,.62);
@@ -239,7 +238,7 @@ body{
   inset:0;
   background-size:cover;
   background-position:center;
-  pointer-events:none; /* face does not steal taps */
+  pointer-events:none;
 }
 .face.fallback{
   background:linear-gradient(135deg, rgba(89,242,255,.14), rgba(179,91,255,.10));
@@ -255,20 +254,8 @@ body{
   background:#070914;
   background-size:cover; background-position:center;
 }
-.backCard.empty{ opacity:.2; }
-.shieldCount{
-  position:absolute;
-  right:10px;
-  top:10px;
-  font-size:11px;
-  font-weight:1000;
-  padding:4px 6px;
-  border-radius:10px;
-  background:rgba(0,0,0,.55);
-  border:1px solid rgba(89,242,255,.18);
-}
 
-/* hand (keep OK sizing) */
+/* hand */
 .handDock{
   padding:12px 10px;
   padding-bottom: calc(18px + env(safe-area-inset-bottom));
@@ -298,7 +285,6 @@ body{
 }
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
-.handCard.need{ outline:2px solid rgba(255,77,109,.55); }
 
 /* fab */
 .fab{
