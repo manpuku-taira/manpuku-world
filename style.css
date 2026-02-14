@@ -23,14 +23,7 @@ body{
 
 /* screens */
 .screen{ display:none; height:100%; }
-.screen.active{ display:flex; flex-direction:column; }
-
-/* keep game layout stable */
-#game.screen.active{
-  height:100dvh;
-  min-height:100dvh;
-  overflow:hidden;
-}
+.screen.active{ display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
 
 /* buttons */
 .btn{
@@ -101,20 +94,20 @@ body{
   font-weight:1000;
 }
 
-/* enemy hand */
+/* enemy hand (縮小して縦を返す) */
 .enemyHandDock{
-  padding:6px 10px;
+  padding:4px 10px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
   flex:0 0 auto;
 }
-.enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
-.enemyHand{ display:flex; gap:8px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
+.enemyHandLabel{ font-weight:900; font-size:11px; color:var(--muted); letter-spacing:.14em; white-space:nowrap; }
+.enemyHand{ display:flex; gap:6px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
 .handBack{
-  width:30px; height:42px;
-  border-radius:10px;
+  width:24px; height:34px;
+  border-radius:9px;
   border:1px solid rgba(167,176,217,.22);
   background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
   box-shadow:0 10px 24px rgba(0,0,0,.25);
@@ -124,12 +117,9 @@ body{
 /* stage */
 .stage{
   flex:1 1 auto;
-  min-height:520px;
   padding:10px;
+  min-height:0;
   overflow:hidden;
-}
-@media (max-height: 740px){
-  .stage{ min-height:460px; }
 }
 .mat{
   position:relative;
@@ -175,8 +165,6 @@ body{
   position:relative;
   min-height:0;
 }
-
-/* ★ span3：横3マス結合（C/E行を広くする） */
 .span3{ grid-column: span 3; }
 
 .pile{
@@ -198,7 +186,6 @@ body{
   align-items:center;
   justify-content:space-between;
   width:100%;
-  flex:1 1 auto;
   min-height:0;
 }
 
@@ -249,7 +236,7 @@ body{
   border:1px solid rgba(89,242,255,.18);
 }
 
-/* hand */
+/* hand（縦スペース確保） */
 .handDock{ padding:10px; flex:0 0 auto; }
 .hand{
   display:flex;
@@ -262,7 +249,7 @@ body{
   box-shadow:var(--shadow);
 }
 .handCard{
-  width:74px;
+  width:72px;
   flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
