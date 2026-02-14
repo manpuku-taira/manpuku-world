@@ -11,16 +11,31 @@
 
   --hudH: 56px;
   --enemyH: 58px;
-  --handH: 112px;
 
-  /* ===== SCALE (-15% target) ===== */
-  --gridPad: 8px;     /* 10 -> 8 */
-  --gridGap: 8px;     /* 10 -> 8 */
-  --cellRad: 14px;    /* 16 -> 14 */
-  --slotRad: 12px;    /* 14 -> 12 */
-  --slotGap: 8px;     /* 10 -> 8 */
-  --rowTitleMb: 5px;  /* 6 -> 5 */
+  /* =================================================
+    SCALE v40009
+    - Board(grid/slots) さらに約 -20%
+    - Hand area 約 -30% (height + card size)
+    - Shield = card size (slot準拠)
+  ================================================= */
+
+  /* ===== board/grid ===== */
+  --gridPad: 6px;     /* 8 -> 6 */
+  --gridGap: 6px;     /* 8 -> 6 */
+  --cellRad: 12px;    /* 14 -> 12 */
+
+  /* slot size feeling (C/E + Shield) */
+  --slotRad: 10px;    /* 12 -> 10 */
+  --slotGap: 6px;     /* 8 -> 6 */
   --slotBorder: 1px;
+
+  /* row title tighten */
+  --rowTitleMb: 4px;  /* 5 -> 4 */
+
+  /* ===== hand (dock + cards) -30% ===== */
+  --handH: 78px;      /* 112 -> 78 (約-30%) */
+  --handPad: 8px;     /* 10 -> 8 */
+  --handCardW: 64px;  /* 92 -> 64 (約-30%) */
 }
 
 *{ box-sizing:border-box; }
@@ -137,7 +152,7 @@ body{
 .enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
 .enemyHand{ display:flex; gap:8px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
 .handBack{
-  width:34px; height:48px;
+  width:30px; height:42px; /* 少し小さく */
   border-radius:10px;
   border:1px solid rgba(167,176,217,.22);
   background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
@@ -151,7 +166,7 @@ body{
   left:0; right:0;
   top:calc(var(--hudH) + var(--enemyH) + env(safe-area-inset-top));
   bottom:calc(var(--handH) + env(safe-area-inset-bottom));
-  padding:8px; /* 10 -> 8 */
+  padding:6px; /* 8 -> 6 */
   min-height:0;
 }
 .mat{
@@ -159,7 +174,7 @@ body{
   width:100%;
   height:100%;
   border:1px solid rgba(89,242,255,.12);
-  border-radius:16px; /* 18 -> 16 */
+  border-radius:14px; /* 16 -> 14 */
   overflow:hidden;
   box-shadow:var(--shadow);
   background:rgba(0,0,0,.22);
@@ -205,25 +220,25 @@ body{
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:6px;
+  gap:4px; /* 6 -> 4 */
 }
-.pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
-.pile .n{ font-size:18px; font-weight:1000; }
+.pile .z{ font-size:11px; letter-spacing:.20em; color:var(--muted); font-weight:1000; }
+.pile .n{ font-size:16px; font-weight:1000; }
 
 /* stage rows */
 .stageRow{
-  padding:6px; /* 8 -> 6 */
+  padding:5px; /* 6 -> 5 */
   display:flex;
   flex-direction:column;
   justify-content:center;
 }
 .rowTitle{
-  font-size:10px;
-  letter-spacing:.18em;
+  font-size:9px;
+  letter-spacing:.16em;
   color:var(--muted);
   margin:0 0 var(--rowTitleMb) 0;
   font-weight:900;
-  line-height:1.1;
+  line-height:1.05;
 }
 .slots{
   display:flex;
@@ -234,7 +249,7 @@ body{
   min-height:0;
 }
 
-/* slots (shrink) */
+/* slots: C/E & Shield should match */
 .slot{
   width:calc((100% - (var(--slotGap) * 2))/3);
   aspect-ratio:2/3;
@@ -257,19 +272,25 @@ body{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
 }
 
-/* shields */
+/* shields -> card size */
 .shieldSlot{
-  padding:6px;
+  padding:5px;
   display:flex;
   flex-direction:column;
   justify-content:center;
-  gap:6px;
+  gap:5px;
 }
-.sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; line-height:1.1; }
+.sTag{
+  font-size:9px;
+  letter-spacing:.16em;
+  color:var(--muted);
+  font-weight:900;
+  line-height:1.05;
+}
 .backCard{
   flex:1;
   border-radius:var(--slotRad);
-  border:1px solid rgba(167,176,217,.22);
+  border:var(--slotBorder) solid rgba(167,176,217,.22);
   background:#070914;
   background-size:cover;
   background-position:center;
@@ -277,17 +298,17 @@ body{
 .backCard.empty{ opacity:.2; }
 .shieldCount{
   position:absolute;
-  right:8px;
-  top:8px;
-  font-size:11px;
+  right:6px;
+  top:6px;
+  font-size:10px;
   font-weight:1000;
-  padding:4px 6px;
+  padding:3px 5px;
   border-radius:10px;
   background:rgba(0,0,0,.55);
   border:1px solid rgba(89,242,255,.18);
 }
 
-/* hand fixed bottom */
+/* hand fixed bottom (30%縮小) */
 .handDock{
   position:fixed;
   left:0; right:0;
@@ -296,28 +317,28 @@ body{
   padding-bottom:env(safe-area-inset-bottom);
   padding-left:10px;
   padding-right:10px;
-  padding-top:10px;
+  padding-top:8px;
   background:rgba(0,0,0,.22);
   backdrop-filter: blur(10px);
   z-index:25;
 }
 .hand{
-  height:calc(var(--handH) - 20px);
+  height:calc(var(--handH) - 16px);
   display:flex;
-  gap:10px;
+  gap:8px;
   overflow-x:auto;
-  padding:10px;
+  padding:var(--handPad);
   border:1px solid rgba(89,242,255,.12);
-  border-radius:18px;
+  border-radius:16px;
   background:var(--panel2);
   box-shadow:var(--shadow);
   align-items:center;
 }
 .handCard{
-  width:92px;
+  width:var(--handCardW);
   flex:0 0 auto;
   aspect-ratio:2/3;
-  border-radius:14px;
+  border-radius:12px;
   border:1px solid rgba(89,242,255,.18);
   background:rgba(6,8,14,.55);
   background-size:cover;
@@ -340,8 +361,8 @@ body{
   border:1px solid rgba(89,242,255,.22);
   background:linear-gradient(180deg, rgba(18,24,48,.92), rgba(10,12,22,.92));
   color:var(--text);
-  padding:12px 14px;
-  border-radius:16px;
+  padding:11px 12px; /* 少し小さく */
+  border-radius:14px;
   font-weight:1000;
   letter-spacing:.08em;
   box-shadow:var(--shadow);
