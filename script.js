@@ -1,9 +1,9 @@
 /* =========================================================
-  Manpuku World - v40014
+  Manpuku World - v40015
   FIX:
-   - YOUR C / YOUR E の枠が見えない&押せない問題を修正
-     → 常に3スロットを生成（空でもDOMとして存在）
-     → ステージが潰れても最小高さはCSSで担保（style側）
+   - C/E枠が極小(半円)になる問題
+     → HTMLを横3マス結合(span3)にし、幅を確保
+   - 画像が見えない/枠が見えないの副作用を解消
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -379,15 +379,6 @@ async function applyImagesFromCache(){
   }
 
   state.img.ready = true;
-
-  const miss = [];
-  for(let no=1; no<=20; no++){
-    const key = pad2(no);
-    if(!state.img.cardUrlByNo[key]) miss.push(key);
-  }
-  if(miss.length) log(`カード画像未検出：${miss.join(", ")}`, "warn");
-  else log("カード画像：20種すべて検出", "muted");
-
   renderAll();
 }
 
@@ -416,7 +407,6 @@ function faceForCard(card, isEnemy=false){
   return face;
 }
 
-/* ★常に slot を作る（空でも作る） */
 function makeSlot(card, opts={}){
   const slot = document.createElement("div");
   slot.className = "slot";
@@ -427,7 +417,6 @@ function makeSlot(card, opts={}){
     slot.appendChild(faceForCard(card, !!opts.enemy));
     bindLongPress(slot, ()=> openViewer(card));
   }else{
-    // 空でもタップ対象として残す（押せない問題の予防）
     slot.dataset.empty = "1";
   }
   return slot;
@@ -613,7 +602,6 @@ async function runAITurn(){
     setActiveSide("P1");
     state.turn++;
     state.phase = "START";
-    updateHUD();
     renderAll();
   }finally{
     state.aiRunning = false;
@@ -661,7 +649,6 @@ function onClickYourE(pos){
   if(state.P1.E[pos]) return;
 
   const card = state.P1.hand[state.selectedHandIndex];
-  // ここでは簡易：effect/itemをEへ。characterは弾く。
   if(card.type === "character"){
     log("E（エフェクト/アイテム）にキャラクターは置けません", "warn");
     return;
@@ -688,7 +675,6 @@ function onLongPressEmptySlotForKenSan(pos){
   }
 
   askConfirm("見参", `${card.name} を見参しますか？\nコスト：手札のカード1枚をウイングへ送ります`, ()=>{
-    // コスト：手札から1枚（簡易）
     const discIdx = (state.selectedHandIndex===state.P1.hand.length-1) ? 0 : state.P1.hand.length-1;
     const disc = state.P1.hand.splice(discIdx,1)[0];
     state.P1.wing.push(disc);
@@ -748,17 +734,14 @@ function onClickEnemyShield(idx){
 
 /* ---------- Render parts ---------- */
 function renderZones(){
-  // ★必ず3枠生成（空でも）
   el.aiE.innerHTML = "";
   for(let i=0;i<3;i++){
-    const slot = makeSlot(state.AI.E[i], {enemy:true});
-    el.aiE.appendChild(slot);
+    el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
   }
 
   el.aiC.innerHTML = "";
   for(let i=0;i<3;i++){
-    const c = state.AI.C[i];
-    const slot = makeSlot(c, {enemy:true});
+    const slot = makeSlot(state.AI.C[i], {enemy:true});
     slot.addEventListener("click", ()=> onClickEnemyCard(i), {passive:true});
     el.aiC.appendChild(slot);
   }
@@ -797,7 +780,6 @@ function renderHand(){
     if(url){
       h.style.backgroundImage = `url("${url}")`;
     }else{
-      // 画像がなくても見えるように（暗いプレースホルダ）
       h.style.backgroundImage = "linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08))";
     }
 
@@ -886,7 +868,7 @@ function renderAll(){
   renderShields();
 }
 
-/* ---------- Board clicks (wing/outside) ---------- */
+/* ---------- Board clicks ---------- */
 function bindBoardClicks(){
   const grid = $("grid");
   grid.addEventListener("click", (e)=>{
@@ -897,7 +879,6 @@ function bindBoardClicks(){
 
     if(act==="aiWing") openZone("ENEMY WING", state.AI.wing.slice().reverse());
     if(act==="aiOutside") openZone("ENEMY OUTSIDE", state.AI.outside.slice().reverse());
-
     if(act==="pWing") openZone("YOUR WING", state.P1.wing.slice().reverse());
     if(act==="pOutside") openZone("YOUR OUTSIDE", state.P1.outside.slice().reverse());
   }, {passive:true});
@@ -982,7 +963,6 @@ function startGame(){
   }
 
   log("ゲーム開始：シールド3（裏向き）/ 初手4", "muted");
-
   renderAll();
 
   if(state.activeSide==="AI"){
