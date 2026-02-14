@@ -1,12 +1,8 @@
 /* =========================================================
-  Manpuku World - v40008 (SAFE REBUILD on v40006 layout)
-  FIX:
-   - C/Eスロットが確実に描画される（枠が出ない問題を潰す）
-   - 置ける場所をルールで固定：
-        character -> Cのみ / effect,item -> Eのみ
-   - E配置クリック実装（v40005で弱かった所を補強）
-   - iPhoneでSEが鳴らない問題：
-        初回ユーザー操作でAudioContext解放 + 音量アップ
+  Manpuku World - v40010
+  - 枠が必ず出るCSSセット前提
+  - 置ける場所ルール導入（character→C / effect,item→E）
+  - iPhoneでSEが鳴る：最初のタップでAudioContext解放
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -21,7 +17,7 @@ const el = {
 
   chipTurn: $("chipTurn"),
   chipPhase: $("chipPhase"),
-  chipActive: $("chipActive"),       // v40006に存在
+  chipActive: $("chipActive"),
   firstInfo: $("firstInfo"),
 
   btnHelp: $("btnHelp"),
@@ -30,7 +26,6 @@ const el = {
   btnEnd: $("btnEnd"),
   btnLog: $("btnLog"),
 
-  matRoot: $("matRoot"),
   fieldTop: $("fieldTop"),
   fieldBottom: $("fieldBottom"),
 
@@ -72,31 +67,21 @@ const el = {
   btnRepoSave: $("btnRepoSave"),
   btnRescan: $("btnRescan"),
   btnClearCache: $("btnClearCache"),
+  btnSound: $("btnSound"),
 
   helpM: $("helpM"),
 };
-
-/* ---------- Guard (important) ---------- */
-function must(id){
-  if(!id) throw new Error("DOM不足：index.html が想定と違います（丸ごと置換漏れの可能性）");
-}
-function guardDOM(){
-  // 盤面の根幹だけチェック
-  must(el.grid = $("grid"));
-  must(el.pC); must(el.pE); must(el.aiC); must(el.aiE);
-  must(el.hand);
-}
-window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
-window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
 
 /* ---------- Logs ---------- */
 const LOGS = [];
 function log(msg, kind="muted"){
   LOGS.unshift({msg, kind, t: Date.now()});
-  if(el.logM && el.logM.classList.contains("show")) renderLogModal();
+  if(el.logM.classList.contains("show")) renderLogModal();
 }
+window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
+window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
+
 function renderLogModal(){
-  if(!el.logBody) return;
   el.logBody.innerHTML = "";
   if(!LOGS.length){
     const d = document.createElement("div");
@@ -125,7 +110,7 @@ function normalizeText(t){
   return (t || "").replaceAll("又は","または").replaceAll("出来る","できる");
 }
 
-/* ---------- Sound (LOUD + iOS unlock) ---------- */
+/* ---------- Sound (iOS unlock) ---------- */
 let soundOn = (localStorage.getItem(LS_SOUND) ?? "1") === "1";
 let audioCtx = null;
 let audioUnlocked = false;
@@ -140,7 +125,6 @@ function unlockAudioOnce(){
   audioUnlocked = true;
   try{
     ensureAudio();
-    // 超短い無音再生で解放（iOS対策）
     const t0 = audioCtx.currentTime;
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
@@ -150,7 +134,7 @@ function unlockAudioOnce(){
     o.stop(t0 + 0.01);
   }catch{}
 }
-function beep(freq=440, dur=0.10, gain=0.12, type="square"){
+function beep(freq=440, dur=0.08, gain=0.12, type="square"){
   if(!soundOn) return;
   ensureAudio();
   const t0 = audioCtx.currentTime;
@@ -165,20 +149,15 @@ function beep(freq=440, dur=0.10, gain=0.12, type="square"){
   o.stop(t0 + dur);
 }
 const SE = {
-  ui(){ beep(740, 0.05, 0.10, "square"); },
-  place(){ beep(520, 0.08, 0.13, "triangle"); },
-  attack(){ beep(220, 0.12, 0.15, "sawtooth"); },
-  break(){ beep(140, 0.14, 0.16, "square"); },
-  phase(){ beep(980, 0.05, 0.10, "sine"); },
+  ui(){ beep(740, .05, .10, "square"); },
+  place(){ beep(520, .08, .14, "triangle"); },
+  phase(){ beep(980, .05, .10, "sine"); },
+  attack(){ beep(240, .10, .16, "sawtooth"); },
+  brk(){ beep(140, .14, .16, "square"); },
 };
 
 /* ---------- Starter deck (20 types x2) ---------- */
-/*
-  ※タイプが未確定なので、暫定で
-    01-14 = character
-    15-20 = effect
-  後で康臣さんの本当の区分に合わせてここだけ差し替えればOKです。
-*/
+/* 暫定：01-14=character / 15-20=effect（後で確定データに置換） */
 const CardRegistry = Array.from({length:20}, (_,i)=> {
   const no = i+1;
   const rank = ((i%5)+1);
@@ -223,37 +202,32 @@ const state = {
 /* ---------- UI helpers ---------- */
 function setActiveUI(){
   const you = (state.activeSide==="P1");
-  if(el.chipActive){
-    el.chipActive.textContent = you ? "YOUR TURN" : "ENEMY TURN";
-    el.chipActive.classList.toggle("enemy", !you);
-  }
-  if(el.btnNext){
-    el.btnNext.disabled = !you;
-    el.btnNext.style.opacity = you ? "1" : ".45";
-  }
-  if(el.btnEnd){
-    el.btnEnd.disabled = !you;
-    el.btnEnd.style.opacity = you ? "1" : ".45";
-  }
+  el.chipActive.textContent = you ? "YOUR TURN" : "ENEMY TURN";
+  el.chipActive.classList.toggle("enemy", !you);
+
+  el.btnNext.disabled = !you;
+  el.btnEnd.disabled  = !you;
+  el.btnNext.style.opacity = you ? "1" : ".45";
+  el.btnEnd.style.opacity  = you ? "1" : ".45";
 }
 function updateHUD(){
-  if(el.chipTurn) el.chipTurn.textContent = `TURN ${state.turn}`;
-  if(el.chipPhase) el.chipPhase.textContent = state.phase;
+  el.chipTurn.textContent = `TURN ${state.turn}`;
+  el.chipPhase.textContent = state.phase;
   setActiveUI();
 }
 function updateCounts(){
-  if(el.aiDeckN) el.aiDeckN.textContent = state.AI.deck.length;
-  if(el.aiWingN) el.aiWingN.textContent = state.AI.wing.length;
-  if(el.aiOutN)  el.aiOutN.textContent  = state.AI.outside.length;
+  el.aiDeckN.textContent = state.AI.deck.length;
+  el.aiWingN.textContent = state.AI.wing.length;
+  el.aiOutN.textContent = state.AI.outside.length;
 
-  if(el.pDeckN) el.pDeckN.textContent = state.P1.deck.length;
-  if(el.pWingN) el.pWingN.textContent = state.P1.wing.length;
-  if(el.pOutN)  el.pOutN.textContent  = state.P1.outside.length;
+  el.pDeckN.textContent = state.P1.deck.length;
+  el.pWingN.textContent = state.P1.wing.length;
+  el.pOutN.textContent = state.P1.outside.length;
 
-  if(el.enemyHandLabel) el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
+  el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
 }
 
-/* ---------- GitHub image scan (v40005踏襲) ---------- */
+/* ---------- GitHub image scan ---------- */
 function getRepo(){ return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world"; }
 function setRepo(v){ localStorage.setItem(LS_REPO, v); }
 function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE) || "{}"); }catch{ return {}; } }
@@ -414,13 +388,13 @@ async function applyImagesFromCache(){
     const u = vercelPathAssets(cache.fieldFile);
     if(await validateImage(u)){
       state.img.fieldUrl = u;
-      if(el.fieldTop) el.fieldTop.style.backgroundImage = `url("${u}")`;
-      if(el.fieldBottom) el.fieldBottom.style.backgroundImage = `url("${u}")`;
+      el.fieldTop.style.backgroundImage = `url("${u}")`;
+      el.fieldBottom.style.backgroundImage = `url("${u}")`;
       log("OK フィールド読込：上下同時表示", "muted");
     }else{
       state.img.fieldUrl = "";
-      if(el.fieldTop) el.fieldTop.style.backgroundImage = "";
-      if(el.fieldBottom) el.fieldBottom.style.backgroundImage = "";
+      el.fieldTop.style.backgroundImage = "";
+      el.fieldBottom.style.backgroundImage = "";
       log(`NG フィールド読込失敗: ${u}`, "warn");
     }
   }
@@ -486,7 +460,6 @@ function faceForCard(card, isEnemy=false){
   if(isEnemy) face.style.transform = "rotate(180deg)";
   return face;
 }
-
 function makeSlot(card, opts={}){
   const slot = document.createElement("div");
   slot.className = "slot";
@@ -500,8 +473,8 @@ function makeSlot(card, opts={}){
 }
 
 /* ---------- Modals ---------- */
-function showModal(id){ const m=$(id); if(m) m.classList.add("show"); }
-function hideModal(id){ const m=$(id); if(m) m.classList.remove("show"); }
+function showModal(id){ $(id).classList.add("show"); }
+function hideModal(id){ $(id).classList.remove("show"); }
 
 document.addEventListener("click", (e)=>{
   const t = e.target;
@@ -549,7 +522,7 @@ function openZone(title, cards){
       tt.textContent = `${c.name}`;
       const ss = document.createElement("div");
       ss.className = "s";
-      ss.textContent = `${c.type.toUpperCase()} / RANK ${c.rank} / ATK ${c.atk}`;
+      ss.textContent = `RANK ${c.rank} / ATK ${c.atk}`;
 
       meta.appendChild(tt); meta.appendChild(ss);
       it.appendChild(th); it.appendChild(meta);
@@ -594,7 +567,6 @@ function enforceHandLimit(side){
     log(`${side==="P1"?"あなた":"AI"}：手札上限でウイングへ → ${c.name}`, "muted");
   }
 }
-
 function resolveBattle_CvC(aSide, aPos, dSide, dPos){
   const A = state[aSide].C[aPos];
   const D = state[dSide].C[dPos];
@@ -608,26 +580,26 @@ function resolveBattle_CvC(aSide, aPos, dSide, dPos){
     state[dSide].C[dPos]=null;
     state[aSide].wing.push(A);
     state[dSide].wing.push(D);
-    SE.break();
+    SE.brk();
     log("同値処理：相打ち（両方ウイング）", "muted");
     return;
   }
   if(A.atk > D.atk){
     state[dSide].C[dPos]=null;
     state[dSide].wing.push(D);
-    SE.break();
+    SE.brk();
     log(`破壊：${D.name} → ウイング`, "muted");
   }else{
     state[aSide].C[aPos]=null;
     state[aSide].wing.push(A);
-    SE.break();
+    SE.brk();
     log(`破壊：${A.name} → ウイング`, "muted");
   }
 }
 
-/* ---------- AI logic (simple but guaranteed) ---------- */
+/* ---------- AI (simple) ---------- */
 function aiMain(){
-  // C: character優先
+  // キャラを出す
   const emptyC = state.AI.C.findIndex(x=>!x);
   if(emptyC>=0){
     const idx = state.AI.hand.findIndex(c=>c.type==="character" && c.rank<=4);
@@ -638,7 +610,7 @@ function aiMain(){
       log(`AI：登場 → ${c.name}`, "muted");
     }
   }
-  // E: effect/item があれば置く（仮）
+  // Eに置く（仮）
   const emptyE = state.AI.E.findIndex(x=>!x);
   if(emptyE>=0){
     const idx2 = state.AI.hand.findIndex(c=>c.type!=="character");
@@ -665,7 +637,7 @@ function aiBattle(){
         const sh = state.P1.shield[sidx];
         state.P1.shield[sidx] = null;
         state.P1.hand.push(sh);
-        SE.break();
+        SE.brk();
         log(`AI：シールド破壊 → あなた手札へ ${sh.name}`, "warn");
       }else{
         log("敗北：相手のダイレクトアタック（仮）", "warn");
@@ -673,17 +645,13 @@ function aiBattle(){
     }
   }
 }
-
 async function runAITurn(){
   if(state.aiRunning) return;
   if(state.activeSide !== "AI") return;
-
   state.aiRunning = true;
+
   try{
     log("相手ターン開始", "warn");
-    state.normalSummonUsed = false;
-    state.selectedHandIndex = null;
-    state.selectedAttackerPos = null;
 
     state.phase = "START"; updateHUD(); renderAll();
     await sleep(220);
@@ -768,7 +736,7 @@ function onClickYourC(pos){
 
 function onClickYourE(pos){
   if(state.activeSide!=="P1") return;
-  if(state.phase!=="MAIN") return;
+  if(state.phase !== "MAIN") return;
 
   const card = selectedCard();
   if(!card) return;
@@ -825,14 +793,14 @@ function onClickEnemyShield(idx){
     const sh = state.AI.shield[idx];
     state.AI.shield[idx] = null;
     state.AI.hand.push(sh);
-    SE.break();
+    SE.brk();
     log(`シールド破壊：相手手札へ → ${sh.name}`, "muted");
     state.selectedAttackerPos = null;
     renderAll();
   });
 }
 
-/* ---------- Render parts (CRITICAL: always draw 3 slots) ---------- */
+/* ---------- Render parts ---------- */
 function renderZones(){
   // AI E
   el.aiE.innerHTML = "";
@@ -849,7 +817,7 @@ function renderZones(){
     el.aiC.appendChild(slot);
   }
 
-  // Your C
+  // YOUR C
   el.pC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.P1.C[i];
@@ -861,7 +829,7 @@ function renderZones(){
     el.pC.appendChild(slot);
   }
 
-  // Your E
+  // YOUR E
   el.pE.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.P1.E[i];
@@ -870,11 +838,6 @@ function renderZones(){
     const slot = makeSlot(c, {glow});
     slot.addEventListener("click", ()=> onClickYourE(i), {passive:true});
     el.pE.appendChild(slot);
-  }
-
-  // ※枠が出ない系はここで検知できる
-  if(el.pC.children.length !== 3 || el.pE.children.length !== 3){
-    log("警告：スロット描画数が不正（index.html/style.css が別版の可能性）", "warn");
   }
 }
 
@@ -892,8 +855,6 @@ function renderHand(){
     const url = state.img.cardUrlByNo[pad2(c.no)];
     if(url){
       h.style.backgroundImage = `url("${url}")`;
-      h.style.backgroundSize = "cover";
-      h.style.backgroundPosition = "center";
     }
 
     h.addEventListener("click", ()=>{
@@ -910,7 +871,6 @@ function renderHand(){
 }
 
 function renderEnemyHand(){
-  if(!el.aiHand) return;
   el.aiHand.innerHTML = "";
   const n = state.AI.hand.length;
   const show = Math.min(n, 12);
@@ -994,6 +954,7 @@ function bindBoardClicks(){
     SE.ui();
     if(act==="aiWing") openZone("ENEMY WING", state.AI.wing.slice().reverse());
     if(act==="aiOutside") openZone("ENEMY OUTSIDE", state.AI.outside.slice().reverse());
+
     if(act==="pWing") openZone("YOUR WING", state.P1.wing.slice().reverse());
     if(act==="pOutside") openZone("YOUR OUTSIDE", state.P1.outside.slice().reverse());
   }, {passive:true});
@@ -1097,7 +1058,7 @@ function startGame(){
 function bindStart(){
   el.boot.textContent = "JS: OK（読み込み成功）";
   const go = ()=>{
-    unlockAudioOnce(); // iOS対策：最初の操作で音を解放
+    unlockAudioOnce();
     if(state.started) return;
     state.started=true;
     el.title.classList.remove("active");
@@ -1119,14 +1080,12 @@ function bindHUDButtons(){
 }
 
 function bindSettings(){
-  // 既存UIに音ボタンが無い可能性があるので、ある時だけ
-  const btnSound = $("btnSound");
-  if(btnSound){
-    btnSound.textContent = soundOn ? "SE: ON" : "SE: OFF";
-    btnSound.addEventListener("click", ()=>{
+  if(el.btnSound){
+    el.btnSound.textContent = soundOn ? "SE: ON" : "SE: OFF";
+    el.btnSound.addEventListener("click", ()=>{
       soundOn = !soundOn;
       localStorage.setItem(LS_SOUND, soundOn ? "1" : "0");
-      btnSound.textContent = soundOn ? "SE: ON" : "SE: OFF";
+      el.btnSound.textContent = soundOn ? "SE: ON" : "SE: OFF";
       SE.ui();
     }, {passive:true});
   }
@@ -1150,8 +1109,8 @@ function bindSettings(){
     clearCache();
     log("画像キャッシュを消去しました", "muted");
     state.img.ready=false;
-    if(el.fieldTop) el.fieldTop.style.backgroundImage = "";
-    if(el.fieldBottom) el.fieldBottom.style.backgroundImage = "";
+    el.fieldTop.style.backgroundImage = "";
+    el.fieldBottom.style.backgroundImage = "";
     state.img.cardUrlByNo = {};
     state.img.cardFileByNo = {};
     state.img.backUrl = "";
@@ -1182,12 +1141,9 @@ function bindLogButton(){
 
 /* ---------- init ---------- */
 async function init(){
-  guardDOM();
-
   el.boot.textContent = "JS: OK（初期化中…）";
   updateHUD();
 
-  // 画面内どこでも最初のタップで音を解放（iOS対策）
   document.addEventListener("pointerdown", unlockAudioOnce, { once:true });
 
   bindStart();
@@ -1206,7 +1162,7 @@ async function init(){
   }
 
   el.boot.textContent = "JS: OK（準備完了）";
-  log("C/E枠は常時表示（3スロット）／詳細は長押し", "muted");
+  log("C/E枠は常時表示（各3）／詳細は長押し", "muted");
 }
 
 document.addEventListener("DOMContentLoaded", init);
