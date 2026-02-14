@@ -1,11 +1,3 @@
-/* style.css（丸ごと置換・v40008）
-  FIX:
-  - フィールド上カードが選択できない問題：クリックを奪う層を明示的に透過
-  KEEP:
-  - 手札サイズ感は前回OKを維持
-  - 相手ハンドも縮小のまま維持
-*/
-
 :root{
   --bg:#05060a;
   --text:#e9ecff;
@@ -116,7 +108,7 @@ body{
 .announce.hide{ display:none; }
 .announce.warn{ color: rgba(255,77,109,.95); }
 
-/* enemy hand (縮小維持) */
+/* enemy hand */
 .enemyHandDock{
   padding:6px 10px;
   display:flex;
@@ -148,7 +140,7 @@ body{
   background:rgba(0,0,0,.22);
 }
 
-/* field images (top/bottom) */
+/* field images (never steal taps) */
 .field{
   position:absolute;
   left:0; right:0;
@@ -157,7 +149,7 @@ body{
   background-position:center;
   background-size:contain;
   opacity:.9;
-  pointer-events:none; /* クリック奪い防止 */
+  pointer-events:none !important;
 }
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
@@ -191,36 +183,66 @@ body{
 .pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:18px; font-weight:1000; }
 
-.stageRow{ padding:10px; }
-.rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; font-weight:900; }
+/* IMPORTANT: stageRow should always layout slots clearly */
+.stageRow{
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  pointer-events:auto !important;
+}
+.rowTitle{
+  font-size:10px;
+  letter-spacing:.20em;
+  color:var(--muted);
+  font-weight:900;
+}
 
-.slots{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
+.slots{
+  flex:1;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+  pointer-events:auto !important;
+}
 
-/* FIX: クリック可能保証（被せ層の影響を受けないよう明示） */
-.stageRow, .slots, .slot, .face, .hand, .handCard { pointer-events:auto; }
-
-/* IMPORTANT: empty slot visible */
+/* ★ FIX: empty slot must be clearly visible */
 .slot{
   width:calc((100% - 20px)/3);
   aspect-ratio:2/3;
   border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
-  background:rgba(6,8,14,.55);
+  border:1px solid rgba(89,242,255,.38); /* stronger */
+  background:
+    radial-gradient(120px 160px at 40% 30%, rgba(89,242,255,.14), transparent 55%),
+    rgba(6,8,14,.62);
+  box-shadow:
+    inset 0 0 0 1px rgba(179,91,255,.10),
+    0 10px 24px rgba(0,0,0,.28);
   position:relative;
   overflow:hidden;
+  pointer-events:auto !important;
 }
-.slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
-.slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
-.slot.need{ outline:2px solid rgba(255,77,109,.55); }
+.slot::after{
+  content:"";
+  position:absolute; inset:0;
+  border-radius:14px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+  pointer-events:none;
+}
+.slot.glow{ outline:2px solid rgba(89,242,255,.65); transform: translateY(-1px); }
+.slot.sel{ outline:2px solid rgba(179,91,255,.65); transform: translateY(-1px); }
+.slot.need{ outline:2px solid rgba(255,77,109,.65); }
 
 .face{
   position:absolute;
   inset:0;
   background-size:cover;
   background-position:center;
+  pointer-events:none; /* face does not steal taps */
 }
 .face.fallback{
-  background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
+  background:linear-gradient(135deg, rgba(89,242,255,.14), rgba(179,91,255,.10));
 }
 
 /* shields */
@@ -229,8 +251,8 @@ body{
 .backCard{
   flex:1;
   border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
-  background: #070914;
+  border:1px solid rgba(89,242,255,.30);
+  background:#070914;
   background-size:cover; background-position:center;
 }
 .backCard.empty{ opacity:.2; }
@@ -246,7 +268,7 @@ body{
   border:1px solid rgba(89,242,255,.18);
 }
 
-/* hand (前回OKのまま) */
+/* hand (keep OK sizing) */
 .handDock{
   padding:12px 10px;
   padding-bottom: calc(18px + env(safe-area-inset-bottom));
@@ -260,17 +282,19 @@ body{
   border-radius:18px;
   background:var(--panel2);
   box-shadow:var(--shadow);
+  pointer-events:auto !important;
 }
 .handCard{
   width:92px;
   flex:0 0 auto;
   aspect-ratio:2/3;
   border-radius:14px;
-  border:1px solid rgba(89,242,255,.18);
+  border:1px solid rgba(89,242,255,.22);
   background:rgba(6,8,14,.55);
   background-size:cover;
   background-position:center;
   box-shadow:var(--shadow);
+  pointer-events:auto !important;
 }
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
