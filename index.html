@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40009" />
+  <link rel="stylesheet" href="./style.css?v=40010" />
 </head>
 <body>
 
@@ -49,7 +49,7 @@
     </div>
 
     <!-- ANNOUNCE -->
-    <div id="announce" class="announce"></div>
+    <div id="announce" class="announce hide"></div>
 
     <!-- Enemy Hand -->
     <div class="enemyHandDock">
@@ -63,9 +63,10 @@
         <div id="fieldTop" class="field fieldTop"></div>
         <div id="fieldBottom" class="field fieldBottom"></div>
 
+        <!-- Grid (6 rows × 4 cols) -->
         <div id="grid" class="grid">
 
-          <!-- ENEMY row1 -->
+          <!-- ENEMY: row 1 (D + SSS) -->
           <div class="cell pile">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
@@ -79,7 +80,7 @@
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
 
-          <!-- ENEMY row2 -->
+          <!-- ENEMY: row 2 (W + EEE) -->
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
@@ -90,7 +91,7 @@
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
 
-          <!-- ENEMY row3 -->
+          <!-- ENEMY: row 3 (O + CCC) -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
@@ -101,7 +102,7 @@
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
 
-          <!-- YOUR row4 -->
+          <!-- YOUR: row 4 (CCC + O) -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
@@ -112,7 +113,7 @@
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
-          <!-- YOUR row5 -->
+          <!-- YOUR: row 5 (EEE + W) -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
@@ -123,7 +124,7 @@
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
 
-          <!-- YOUR row6 -->
+          <!-- YOUR: row 6 (SSS + D) -->
           <div class="cell shieldSlot" data-side="P1" data-idx="0">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
@@ -250,6 +251,6 @@
     </div>
   </div>
 
-  <script src="./script.js?v=40009"></script>
+  <script src="./script.js?v=40010"></script>
 </body>
 </html>
