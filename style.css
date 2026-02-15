@@ -8,9 +8,17 @@
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
 
-  /* ステージスロットサイズ（手札相当まで上げる） */
-  --stageGap: 10px;
-  --stageSlotMaxW: 72px; /* 手札幅と同等 */
+  /* スロットサイズ（手札相当） */
+  --stageSlotMaxW: 72px;
+
+  /* 盤面縮尺（iPhoneで“引く”） */
+  --matScale: 1;
+
+  /* C/Eのカード間隔（詰める） */
+  --stageGap: 6px;
+
+  /* D/W/O列をより細く */
+  --sideColMin: 44px;
 }
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
@@ -27,7 +35,7 @@ body{
 
 /* screens */
 .screen{ display:none; height:100%; }
-.screen.active{ display:flex; flex-direction:column; height:100svh; overflow:hidden; } /* iPhone Safari対策 */
+.screen.active{ display:flex; flex-direction:column; height:100svh; overflow:hidden; }
 
 /* buttons */
 .btn{
@@ -127,7 +135,7 @@ body{
 .enemyHandLabel{ font-weight:900; font-size:11px; color:var(--muted); letter-spacing:.14em; white-space:nowrap; }
 .enemyHand{ display:flex; gap:6px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
 .handBack{
-  width:24px; height:34px;
+  width:22px; height:32px;
   border-radius:9px;
   border:1px solid rgba(167,176,217,.22);
   background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
@@ -137,6 +145,15 @@ body{
 
 /* stage */
 .stage{ flex:1 1 auto; padding:10px; min-height:0; overflow:hidden; }
+
+/* ★盤面を“引く”ためのラッパー */
+.matWrap{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 .mat{
   position:relative;
   width:100%;
@@ -146,7 +163,12 @@ body{
   overflow:hidden;
   box-shadow:var(--shadow);
   background:rgba(0,0,0,.22);
+
+  transform: scale(var(--matScale));
+  transform-origin: center;
 }
+
+/* field images (top/bottom) */
 .field{
   position:absolute;
   left:0; right:0;
@@ -160,26 +182,26 @@ body{
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
 
-/* ★ iPhoneで潰れないようにminmaxで最低高さを保証 */
+/* grid */
 .grid{
   position:absolute;
   inset:0;
   display:grid;
 
-  /* D/W/O列を細めてC/Eの横幅を確保 */
-  grid-template-columns: minmax(58px, .55fr) 1fr 1fr 1fr;
+  /* ★ D/W/O列をさらに細く（iPadでも狭く、C/Eへ寄せる） */
+  grid-template-columns: minmax(var(--sideColMin), .42fr) 1fr 1fr 1fr;
 
-  /* 6行：最低高さを保証（ここがiPhoneの枠消失を止める） */
+  /* ★ iPhoneで行が潰れない minmax */
   grid-template-rows:
-    minmax(74px, 1fr)
-    minmax(86px, 1.2fr)
-    minmax(86px, 1.2fr)
-    minmax(96px, 1.35fr)
-    minmax(96px, 1.35fr)
-    minmax(74px, 1fr);
+    minmax(68px, 1fr)
+    minmax(78px, 1.15fr)
+    minmax(78px, 1.15fr)
+    minmax(86px, 1.3fr)
+    minmax(86px, 1.3fr)
+    minmax(68px, 1fr);
 
-  gap:10px;
-  padding:10px;
+  gap:8px;
+  padding:8px;
 }
 
 .cell{
@@ -206,20 +228,16 @@ body{
 .stageRow{ padding:8px; display:flex; flex-direction:column; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:6px; font-weight:900; }
 
+/* ★ 3枚を中央寄せで “詰めて” 並べる */
 .slots{
   display:flex;
   gap:var(--stageGap);
   align-items:center;
-
-  /* 3枠が必ず見える */
-  justify-content:space-between;
-
-  /* 行が潰れても最低限見える */
-  min-height:58px;
+  justify-content:center;
+  min-height:56px;
 }
 
-/* ====== SLOT：手札と同等サイズまで拡大 ======
-   3枚が必ず入るよう、行幅から自動算出して上限を手札幅に */
+/* slot */
 .slot{
   width: min(var(--stageSlotMaxW), calc((100% - (var(--stageGap) * 2)) / 3));
   aspect-ratio: 2 / 3;
@@ -334,7 +352,9 @@ body{
 /* modals */
 .modal{ display:none; position:fixed; inset:0; z-index:50; }
 .modal.show{ display:block; }
-.back{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
+.modal .back{ position:absolute; inset:0; background:rgba(0,0,0,.65); z-index:0; }
+.modal .box{ z-index:1; }
+
 .box{
   position:absolute;
   left:50%; top:50%;
@@ -442,11 +462,21 @@ body{
   outline:none;
 }
 
-/* iPhone向け：さらに圧縮してC/E行を守る */
-@media (max-width: 420px){
-  :root{ --stageGap: 8px; }
-  .grid{ gap:8px; padding:8px; grid-template-columns: minmax(54px, .52fr) 1fr 1fr 1fr; }
-  .pile .n{ font-size:15px; }
-  .rowTitle{ margin-bottom:5px; }
-  .slots{ min-height:54px; }
+/* ===== iPhone向け：盤面を“引く”＋手札を圧縮して上下両フィールドを必ず表示 ===== */
+@media (max-width: 440px){
+  :root{
+    --matScale: 0.86;
+    --stageGap: 5px;
+    --sideColMin: 40px;
+  }
+  .handDock{ padding:8px; }
+  .hand{ padding:8px; gap:8px; }
+  .handCard{ width:66px; }
+  .enemyHandLabel{ font-size:10px; }
+  .handBack{ width:20px; height:30px; }
+}
+
+/* 超小型iPhone */
+@media (max-width: 390px){
+  :root{ --matScale: 0.82; }
 }
