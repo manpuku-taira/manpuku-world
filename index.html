@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40018" />
+  <link rel="stylesheet" href="./style.css?v=40019" />
 </head>
 <body>
 
@@ -15,9 +15,9 @@
         <div class="logoMain">Manpuku World</div>
         <div class="logoSub">マンプクワールド</div>
         <div class="logoTags">
-          <div class="tag">iPhone/iPad Responsive</div>
-          <div class="tag">Battle + Equip</div>
-          <div class="tag">v40018</div>
+          <div class="tag">iPhone/iPad Fix</div>
+          <div class="tag">Effect One-shot</div>
+          <div class="tag">v40019</div>
         </div>
         <div class="mini">画面タップ または START で開始</div>
         <div style="margin-top:14px;">
@@ -61,76 +61,78 @@
 
     <!-- Stage -->
     <div class="stage">
-      <div id="matRoot" class="mat">
-        <div id="fieldTop" class="field fieldTop"></div>
-        <div id="fieldBottom" class="field fieldBottom"></div>
+      <div id="matRoot" class="matWrap">
+        <div class="mat" id="mat">
+          <div id="fieldTop" class="field fieldTop"></div>
+          <div id="fieldBottom" class="field fieldBottom"></div>
 
-        <div id="grid" class="grid">
+          <div id="grid" class="grid">
 
-          <!-- ROW 1 -->
-          <div class="cell pile" data-click="aiDeck">
-            <div class="z">D</div><div id="aiDeckN" class="n">0</div>
-          </div>
-          <div class="cell shieldSlot" data-side="AI" data-idx="0">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="AI" data-idx="1">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="AI" data-idx="2">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
-          </div>
+            <!-- ROW 1 -->
+            <div class="cell pile" data-click="aiDeck">
+              <div class="z">D</div><div id="aiDeckN" class="n">0</div>
+            </div>
+            <div class="cell shieldSlot" data-side="AI" data-idx="0">
+              <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
+            </div>
+            <div class="cell shieldSlot" data-side="AI" data-idx="1">
+              <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
+            </div>
+            <div class="cell shieldSlot" data-side="AI" data-idx="2">
+              <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
+            </div>
 
-          <!-- ROW 2 -->
-          <div class="cell pile" data-click="aiWing">
-            <div class="z">W</div><div id="aiWingN" class="n">0</div>
-          </div>
-          <div class="cell stageRow span3">
-            <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-            <div id="aiE" class="slots enemy"></div>
-          </div>
+            <!-- ROW 2 -->
+            <div class="cell pile" data-click="aiWing">
+              <div class="z">W</div><div id="aiWingN" class="n">0</div>
+            </div>
+            <div class="cell stageRow span3">
+              <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
+              <div id="aiE" class="slots enemy"></div>
+            </div>
 
-          <!-- ROW 3 -->
-          <div class="cell pile" data-click="aiOutside">
-            <div class="z">O</div><div id="aiOutN" class="n">0</div>
-          </div>
-          <div class="cell stageRow span3">
-            <div class="rowTitle">ENEMY C（キャラクター）</div>
-            <div id="aiC" class="slots enemy"></div>
-          </div>
+            <!-- ROW 3 -->
+            <div class="cell pile" data-click="aiOutside">
+              <div class="z">O</div><div id="aiOutN" class="n">0</div>
+            </div>
+            <div class="cell stageRow span3">
+              <div class="rowTitle">ENEMY C（キャラクター）</div>
+              <div id="aiC" class="slots enemy"></div>
+            </div>
 
-          <!-- ROW 4 -->
-          <div class="cell stageRow span3">
-            <div class="rowTitle">YOUR C（キャラクター）</div>
-            <div id="pC" class="slots"></div>
-          </div>
-          <div class="cell pile" data-click="pOutside">
-            <div class="z">O</div><div id="pOutN" class="n">0</div>
-          </div>
+            <!-- ROW 4 -->
+            <div class="cell stageRow span3">
+              <div class="rowTitle">YOUR C（キャラクター）</div>
+              <div id="pC" class="slots"></div>
+            </div>
+            <div class="cell pile" data-click="pOutside">
+              <div class="z">O</div><div id="pOutN" class="n">0</div>
+            </div>
 
-          <!-- ROW 5 -->
-          <div class="cell stageRow span3">
-            <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
-            <div id="pE" class="slots"></div>
-          </div>
-          <div class="cell pile" data-click="pWing">
-            <div class="z">W</div><div id="pWingN" class="n">0</div>
-          </div>
+            <!-- ROW 5 -->
+            <div class="cell stageRow span3">
+              <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
+              <div id="pE" class="slots"></div>
+            </div>
+            <div class="cell pile" data-click="pWing">
+              <div class="z">W</div><div id="pWingN" class="n">0</div>
+            </div>
 
-          <!-- ROW 6 -->
-          <div class="cell shieldSlot" data-side="P1" data-idx="0">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="P1" data-idx="1">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="P1" data-idx="2">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell pile" data-click="pDeck">
-            <div class="z">D</div><div id="pDeckN" class="n">0</div>
-          </div>
+            <!-- ROW 6 -->
+            <div class="cell shieldSlot" data-side="P1" data-idx="0">
+              <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
+            </div>
+            <div class="cell shieldSlot" data-side="P1" data-idx="1">
+              <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
+            </div>
+            <div class="cell shieldSlot" data-side="P1" data-idx="2">
+              <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
+            </div>
+            <div class="cell pile" data-click="pDeck">
+              <div class="z">D</div><div id="pDeckN" class="n">0</div>
+            </div>
 
+          </div>
         </div>
       </div>
     </div>
@@ -187,10 +189,10 @@
     </div>
   </div>
 
-  <!-- Confirm -->
+  <!-- Confirm（★OKが押せない不具合修正：必ず .box を付与） -->
   <div id="confirmM" class="modal">
     <div class="back" data-close="confirm"></div>
-    <div class="confirmBox">
+    <div class="box confirmBox">
       <div class="boxHead">
         <div id="confirmTitle" class="boxTitle">確認</div>
         <button class="btn small ghost" data-close="confirm">閉じる</button>
@@ -255,12 +257,13 @@
         <div class="helpItem">・手札タップ：選択（紫枠）／長押し：拡大</div>
         <div class="helpItem">・MAIN：キャラ（登場可）→ 空Cタップで登場（1ターン1回）</div>
         <div class="helpItem">・MAIN：登場不可キャラ → 空C長押しで見参（無制限・コスト選択）</div>
-        <div class="helpItem">・MAIN：アイテム → 装備先キャラを選択して装備（ATK加算）</div>
-        <div class="helpItem">・BATTLE：自分Cをタップで選択 → 相手Cタップで攻撃（ATK比較）</div>
+        <div class="helpItem">・MAIN：アイテム → 空E → 装備先キャラ選択（ATK加算）</div>
+        <div class="helpItem">・MAIN：エフェクト → 空E → 発動後ウイングへ（使い切り）</div>
+        <div class="helpItem">・BATTLE：自分C選択 → 相手Cタップで攻撃（ATK比較）</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40018"></script>
+  <script src="./script.js?v=40019"></script>
 </body>
 </html>
