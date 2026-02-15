@@ -2,243 +2,236 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#060814" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=50000" />
 </head>
-
 <body>
-  <!-- Title -->
-  <section id="title" class="screen active">
-    <div class="titleCard">
-      <div class="titleLogo">MANPUKU WORLD</div>
-      <div class="titleSub">iPhone Layout (3×4 Grid)</div>
 
-      <div class="titleBtns">
-        <button id="btnStart" class="btn primary" type="button">START</button>
-        <button id="btnSettingsOpen" class="btn" type="button">設定</button>
-        <button id="btnHelpOpen" class="btn" type="button">ルール</button>
+  <!-- TITLE -->
+  <div id="title" class="screen active">
+    <div class="titleWrap">
+      <div class="logoBox">
+        <div class="logoMain">Manpuku World</div>
+        <div class="logoSub">マンプクワールド</div>
+        <div class="mini">タップ または START</div>
+        <div style="margin-top:14px;">
+          <button id="btnStart" class="btn primary">START</button>
+        </div>
+        <div id="boot" class="mini" style="margin-top:12px;">JS: …</div>
       </div>
-
-      <div id="boot" class="boot">読み込み中…</div>
     </div>
-  </section>
+  </div>
 
-  <!-- Game -->
-  <section id="game" class="screen">
+  <!-- GAME -->
+  <div id="game" class="screen">
+    <!-- HUD -->
     <header class="hud">
       <div class="hudLeft">
-        <div class="chip" id="chipTurn">TURN 1</div>
-        <div class="chip" id="chipPhase">START</div>
+        <div id="chipTurn" class="chip">TURN 1</div>
+        <div id="chipPhase" class="chip subtle">START</div>
       </div>
-      <div class="hudMid">
-        <div class="chip active" id="chipActive">YOUR TURN</div>
-        <div class="firstInfo" id="firstInfo"></div>
+      <div class="hudCenter">
+        <div id="firstInfo">先攻：—</div>
       </div>
       <div class="hudRight">
-        <button id="btnLog" class="hudBtn" type="button">LOG</button>
-        <button id="btnHelp" class="hudBtn" type="button">HELP</button>
-        <button id="btnSettings" class="hudBtn" type="button">SET</button>
+        <div id="chipActive" class="chip">YOUR TURN</div>
+        <button id="btnLog" class="iconBtn" title="ログ（長押し）">LOG</button>
+        <button id="btnHelp" class="iconBtn" title="ヘルプ">?</button>
+        <button id="btnSettings" class="iconBtn" title="設定">⚙</button>
       </div>
     </header>
 
-    <!-- fixed board area (no auto-start by scroll) -->
-    <main class="stage">
-      <!-- Field underlay -->
-      <img id="fieldImg" class="fieldImg" alt="" />
-
-      <!-- ENEMY: Character -> Effect -> Shield -> EnemyHand -->
-      <section class="side enemy">
-        <div class="rowTitle">
-          <div class="rowName">ENEMY</div>
-          <div class="miniCounts">
-            <span>DECK <b id="aiDeckN">0</b></span>
-            <span>WING <b id="aiWingN">0</b></span>
-            <span>OUT <b id="aiOutN">0</b></span>
-          </div>
-        </div>
-
-        <!-- 3×4 grid -->
-        <div class="grid34">
-          <!-- Row 1: Character + OUT -->
-          <div class="label">CHAR</div>
-          <div class="grid3" id="aiC"></div>
-          <button class="pileBtn smallPile" id="aiOutBtn" type="button">
-            <div class="pileFace" id="aiOutFace"></div>
-            <div class="pileCap">OUT</div>
-          </button>
-
-          <!-- Row 2: Effect + WING -->
-          <div class="label">EFFECT</div>
-          <div class="grid3" id="aiE"></div>
-          <button class="pileBtn smallPile" id="aiWingBtn" type="button">
-            <div class="pileFace" id="aiWingFace"></div>
-            <div class="pileCap">WING</div>
-          </button>
-
-          <!-- Row 3: Shield + DECK -->
-          <div class="label">SHIELD</div>
-          <div class="grid3 small" id="aiS"></div>
-          <button class="pileBtn smallPile" id="aiDeckBtn" type="button">
-            <div class="pileFace back" id="aiDeckFace"></div>
-            <div class="pileCap">DECK</div>
-          </button>
-        </div>
-
-        <!-- Enemy hand (comes after Shield) -->
-        <div class="handLine">
-          <div class="handLineLabel" id="enemyHandLabel">ENEMY HAND ×0</div>
-          <div class="enemyHand" id="aiHand"></div>
-        </div>
+    <!-- MAIN (scrollable content) -->
+    <main class="main">
+      <!-- Enemy Hand -->
+      <section class="enemyHandDock">
+        <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
+        <div id="aiHand" class="enemyHand"></div>
       </section>
 
-      <div class="divider"></div>
+      <!-- BOARD -->
+      <section class="board">
+        <div id="fieldTop" class="field fieldTop"></div>
+        <div id="fieldBottom" class="field fieldBottom"></div>
 
-      <!-- YOU: Character -> Effect -> Shield -> Hand -->
-      <section class="side you">
-        <div class="rowTitle">
-          <div class="rowName">YOU</div>
-          <div class="miniCounts">
-            <span>DECK <b id="pDeckN">0</b></span>
-            <span>WING <b id="pWingN">0</b></span>
-            <span>OUT <b id="pOutN">0</b></span>
+        <!-- ENEMY SIDE -->
+        <div class="side enemySide">
+          <div class="piles">
+            <div class="pile" data-click="aiDeck">
+              <div class="pileCard" data-pile="AI_DECK"></div>
+              <div class="pileMeta"><div class="z">D</div><div id="aiDeckN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="aiWing">
+              <div class="pileCard" data-pile="AI_WING"></div>
+              <div class="pileMeta"><div class="z">W</div><div id="aiWingN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="aiOutside">
+              <div class="pileCard" data-pile="AI_OUT"></div>
+              <div class="pileMeta"><div class="z">O</div><div id="aiOutN" class="n">0</div></div>
+            </div>
+          </div>
+
+          <div class="lanes">
+            <div class="lane">
+              <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
+              <div id="aiE" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">ENEMY C（キャラクター）</div>
+              <div id="aiC" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">ENEMY SHIELD</div>
+              <div class="shields">
+                <div class="shieldSlot" data-side="AI" data-idx="0"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="AI" data-idx="1"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="AI" data-idx="2"><div class="shieldCard"></div></div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="grid34">
-          <!-- Row 1: Character + OUT -->
-          <div class="label">CHAR</div>
-          <div class="grid3" id="pC"></div>
-          <button class="pileBtn smallPile" id="pOutBtn" type="button">
-            <div class="pileFace" id="pOutFace"></div>
-            <div class="pileCap">OUT</div>
-          </button>
+        <div class="divider"></div>
 
-          <!-- Row 2: Effect + WING -->
-          <div class="label">EFFECT</div>
-          <div class="grid3" id="pE"></div>
-          <button class="pileBtn smallPile" id="pWingBtn" type="button">
-            <div class="pileFace" id="pWingFace"></div>
-            <div class="pileCap">WING</div>
-          </button>
+        <!-- YOUR SIDE -->
+        <div class="side yourSide">
+          <div class="lanes">
+            <div class="lane">
+              <div class="rowTitle">YOUR C（キャラクター）</div>
+              <div id="pC" class="slots"></div>
+            </div>
 
-          <!-- Row 3: Shield + DECK -->
-          <div class="label">SHIELD</div>
-          <div class="grid3 small" id="pS"></div>
-          <button class="pileBtn smallPile" id="pDeckBtn" type="button">
-            <div class="pileFace back" id="pDeckFace"></div>
-            <div class="pileCap">DECK</div>
-          </button>
+            <div class="lane">
+              <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
+              <div id="pE" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">YOUR SHIELD</div>
+              <div class="shields">
+                <div class="shieldSlot" data-side="P1" data-idx="0"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="1"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="2"><div class="shieldCard"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="piles">
+            <div class="pile" data-click="pDeck">
+              <div class="pileCard" data-pile="P_DECK"></div>
+              <div class="pileMeta"><div class="z">D</div><div id="pDeckN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="pWing">
+              <div class="pileCard" data-pile="P_WING"></div>
+              <div class="pileMeta"><div class="z">W</div><div id="pWingN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="pOutside">
+              <div class="pileCard" data-pile="P_OUT"></div>
+              <div class="pileMeta"><div class="z">O</div><div id="pOutN" class="n">0</div></div>
+            </div>
+          </div>
         </div>
 
-        <!-- Player hand (after Shield) -->
-        <div class="handWrap">
-          <div class="handHint">HAND（タップ=選択 / 長押し=詳細）</div>
-          <div class="hand" id="hand"></div>
-        </div>
+      </section>
 
-        <div class="actions">
-          <div class="announce" id="announce">準備中…</div>
-          <button id="btnNext" class="btn primary" type="button">NEXT</button>
-          <button id="btnEnd" class="btn danger" type="button">END</button>
-        </div>
+      <!-- HAND -->
+      <section class="handDock">
+        <div id="hand" class="hand"></div>
       </section>
     </main>
-  </section>
 
-  <!-- Modals -->
-  <div class="modal" id="viewerM">
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle" id="viewerTitle">CARD</div>
-        <button class="x" data-close="viewer" type="button">×</button>
+    <!-- ACTION BAR (no fixed overlay, sticky) -->
+    <footer class="actionBar">
+      <button id="btnNext" class="fabBtn">次のフェイズ</button>
+      <button id="btnEnd" class="fabBtn danger">ターン終了</button>
+    </footer>
+  </div>
+
+  <!-- Viewer -->
+  <div id="viewerM" class="modal">
+    <div class="back" data-close="viewer"></div>
+    <div class="box">
+      <div class="boxHead">
+        <div id="viewerTitle" class="boxTitle">CARD</div>
+        <button class="btn small ghost" data-close="viewer">閉じる</button>
       </div>
-      <div class="modalBody">
-        <img id="viewerImg" class="viewerImg" alt="" />
-        <pre id="viewerText" class="viewerText"></pre>
+      <div class="viewerBody">
+        <img id="viewerImg" alt="" />
+        <div id="viewerText" class="viewerText"></div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="zoneM">
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle" id="zoneTitle">ZONE</div>
-        <button class="x" data-close="zone" type="button">×</button>
+  <!-- Choice -->
+  <div id="choiceM" class="modal">
+    <div class="back" data-close="choice"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div id="choiceTitle" class="boxTitle">選択</div>
+        <button class="btn small ghost" data-close="choice">閉じる</button>
       </div>
-      <div class="modalBody">
-        <div id="zoneList" class="zoneList"></div>
-      </div>
+      <div id="choiceBody" class="choiceBody"></div>
     </div>
   </div>
 
-  <div class="modal" id="confirmM">
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle" id="confirmTitle">確認</div>
-        <button class="x" data-close="confirm" type="button">×</button>
+  <!-- Log -->
+  <div id="logM" class="modal">
+    <div class="back" data-close="log"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">LOG</div>
+        <button class="btn small ghost" data-close="log">閉じる</button>
       </div>
-      <div class="modalBody">
-        <div id="confirmBody" class="confirmBody"></div>
-        <div class="confirmBtns">
-          <button id="btnNo" class="btn" type="button">キャンセル</button>
-          <button id="btnYes" class="btn primary" type="button">OK</button>
+      <div id="logBody" class="logBody"></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settingsM" class="modal">
+    <div class="back" data-close="settings"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">設定</div>
+        <button class="btn small ghost" data-close="settings">閉じる</button>
+      </div>
+      <div class="settings">
+        <div class="setBlock">
+          <div class="setTitle">GitHub Repo（画像自動探索）</div>
+          <div class="setRow">
+            <input id="repoInput" class="input" placeholder="owner/repo" />
+          </div>
+          <div class="setRow" style="margin-top:10px;">
+            <button id="btnRepoSave" class="btn primary small">保存</button>
+            <button id="btnRescan" class="btn small">再スキャン</button>
+            <button id="btnClearCache" class="btn small ghost">キャッシュ削除</button>
+          </div>
+          <div class="setHint">裏面は /assets/card_back.png.PNG を直接チェックします。</div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="settingsM">
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle">設定</div>
-        <button class="x" data-close="settings" type="button">×</button>
+  <!-- Help -->
+  <div id="helpM" class="modal">
+    <div class="back" data-close="help"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">操作</div>
+        <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
-      <div class="modalBody">
-        <div class="formRow">
-          <div class="label2">GitHub Repo（owner/repo）</div>
-          <input id="repoInput" class="input" placeholder="manpuku-taira/manpuku-world" />
-        </div>
-        <div class="formBtns">
-          <button id="btnRepoSave" class="btn primary" type="button">保存</button>
-          <button id="btnRescan" class="btn" type="button">画像再取得</button>
-          <button id="btnClearCache" class="btn danger" type="button">キャッシュ削除</button>
-        </div>
+      <div class="help">
+        <div class="helpItem">・長押し：拡大表示（テキスト＆ATK）</div>
+        <div class="helpItem">・手札タップ：選択</div>
+        <div class="helpItem">・MAIN：キャラ→空きCタップで登場（通常はターン1回）</div>
+        <div class="helpItem">・MAIN：見参カード→空きC長押し（無制限）</div>
+        <div class="helpItem">・MAIN：エフェ/アイテム→空きEタップ（即時効果は直後に選択）</div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="helpM">
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle">ルール（簡易）</div>
-        <button class="x" data-close="help" type="button">×</button>
-      </div>
-      <div class="modalBody help">
-        <ul>
-          <li>縦順：キャラクター → エフェクト → シールド → 手札</li>
-          <li>右枠：OUT（キャラ横）/ WING（エフェクト横）/ DECK（シールド横）</li>
-          <li>MAIN：手札選択→C（キャラ）またはE（発動/装備）</li>
-          <li>BATTLE：自分C→相手C/シールド（相手Cが0の時のみシールド攻撃）</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="logM">
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle">LOG</div>
-        <button class="x" data-close="log" type="button">×</button>
-      </div>
-      <div class="modalBody">
-        <div id="logBody" class="logBody"></div>
-      </div>
-    </div>
-  </div>
-
-  <script src="./script.js"></script>
+  <script src="./script.js?v=50000"></script>
 </body>
 </html>
