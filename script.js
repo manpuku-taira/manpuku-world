@@ -1,159 +1,106 @@
 /* =========================================================
-  Manpuku World - v60010 (3×4 layout restore)
-  - Relative paths "./assets/..." => field/hand/back always load
-  - Layout: Character -> Effect -> Shield -> Hand
-  - Piles: OUT beside Character, WING beside Effect, DECK beside Shield
-  - Title -> Start button only (no scroll start)
+  Manpuku World - v50000 (iPhone First Layout Rebuild)
+  - fixed廃止 / sticky採用 / クリック吸い込み対策
+  - C/E スロットは常にDOM上で見える＆押せる
 ========================================================= */
 
-const $ = (id)=> document.getElementById(id);
-const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const pad2 = (n)=> String(n).padStart(2,"0");
-function normalizeText(t){ return (t||"").replaceAll("又は","または").replaceAll("出来る","できる"); }
 
 const el = {
-  title:$("title"), game:$("game"), boot:$("boot"),
-  btnStart:$("btnStart"), btnSettingsOpen:$("btnSettingsOpen"), btnHelpOpen:$("btnHelpOpen"),
+  title: $("title"),
+  game: $("game"),
+  boot: $("boot"),
+  btnStart: $("btnStart"),
 
-  chipTurn:$("chipTurn"), chipPhase:$("chipPhase"), chipActive:$("chipActive"), firstInfo:$("firstInfo"),
-  btnHelp:$("btnHelp"), btnSettings:$("btnSettings"), btnNext:$("btnNext"), btnEnd:$("btnEnd"), btnLog:$("btnLog"),
-  announce:$("announce"),
+  chipTurn: $("chipTurn"),
+  chipPhase: $("chipPhase"),
+  chipActive: $("chipActive"),
+  firstInfo: $("firstInfo"),
 
-  fieldImg:$("fieldImg"),
+  btnHelp: $("btnHelp"),
+  btnSettings: $("btnSettings"),
+  btnNext: $("btnNext"),
+  btnEnd: $("btnEnd"),
+  btnLog: $("btnLog"),
 
-  aiC:$("aiC"), aiE:$("aiE"), aiS:$("aiS"),
-  pC:$("pC"), pE:$("pE"), pS:$("pS"),
+  fieldTop: $("fieldTop"),
+  fieldBottom: $("fieldBottom"),
 
-  hand:$("hand"), aiHand:$("aiHand"), enemyHandLabel:$("enemyHandLabel"),
+  aiC: $("aiC"),
+  aiE: $("aiE"),
+  pC: $("pC"),
+  pE: $("pE"),
+  hand: $("hand"),
+  aiHand: $("aiHand"),
+  enemyHandLabel: $("enemyHandLabel"),
 
-  aiDeckN:$("aiDeckN"), aiWingN:$("aiWingN"), aiOutN:$("aiOutN"),
-  pDeckN:$("pDeckN"), pWingN:$("pWingN"), pOutN:$("pOutN"),
+  aiDeckN: $("aiDeckN"),
+  aiWingN: $("aiWingN"),
+  aiOutN: $("aiOutN"),
+  pDeckN: $("pDeckN"),
+  pWingN: $("pWingN"),
+  pOutN: $("pOutN"),
 
-  aiDeckFace:$("aiDeckFace"), pDeckFace:$("pDeckFace"),
-  aiWingFace:$("aiWingFace"), aiOutFace:$("aiOutFace"),
-  pWingFace:$("pWingFace"), pOutFace:$("pOutFace"),
+  viewerM: $("viewerM"),
+  viewerTitle: $("viewerTitle"),
+  viewerImg: $("viewerImg"),
+  viewerText: $("viewerText"),
 
-  viewerM:$("viewerM"), viewerTitle:$("viewerTitle"), viewerImg:$("viewerImg"), viewerText:$("viewerText"),
-  zoneM:$("zoneM"), zoneTitle:$("zoneTitle"), zoneList:$("zoneList"),
-  logM:$("logM"), logBody:$("logBody"),
-  confirmM:$("confirmM"), confirmTitle:$("confirmTitle"), confirmBody:$("confirmBody"),
-  btnYes:$("btnYes"), btnNo:$("btnNo"),
+  choiceM: $("choiceM"),
+  choiceTitle: $("choiceTitle"),
+  choiceBody: $("choiceBody"),
 
-  settingsM:$("settingsM"), repoInput:$("repoInput"),
-  btnRepoSave:$("btnRepoSave"), btnRescan:$("btnRescan"), btnClearCache:$("btnClearCache"),
+  logM: $("logM"),
+  logBody: $("logBody"),
 
-  helpM:$("helpM"),
+  settingsM: $("settingsM"),
+  repoInput: $("repoInput"),
+  btnRepoSave: $("btnRepoSave"),
+  btnRescan: $("btnRescan"),
+  btnClearCache: $("btnClearCache"),
+
+  helpM: $("helpM"),
 };
 
-/* ---------- Logs ---------- */
 const LOGS = [];
 function log(msg, kind="muted"){
-  LOGS.unshift({msg, kind, t:Date.now()});
+  LOGS.unshift({msg, kind, t: Date.now()});
   if(el.logM.classList.contains("show")) renderLogModal();
 }
+window.addEventListener("error", (e)=> log(`JSエラー: ${e.message || e.type}`, "warn"));
+window.addEventListener("unhandledrejection", (e)=> log(`Promiseエラー: ${String(e.reason || "")}`, "warn"));
+
 function renderLogModal(){
   el.logBody.innerHTML = "";
   if(!LOGS.length){
-    const d=document.createElement("div");
-    d.className="logLine muted";
-    d.textContent="（ログはまだありません）";
+    const d = document.createElement("div");
+    d.className = "logLine";
+    d.textContent = "（ログはまだありません）";
     el.logBody.appendChild(d);
     return;
   }
-  for(const it of LOGS.slice(0,250)){
-    const d=document.createElement("div");
-    d.className=`logLine ${it.kind}`;
-    d.textContent=it.msg;
+  for(const it of LOGS.slice(0, 200)){
+    const d = document.createElement("div");
+    d.className = `logLine ${it.kind==="warn"?"warn":""}`;
+    d.textContent = it.msg;
     el.logBody.appendChild(d);
   }
 }
-function say(text, tone="muted"){
-  el.announce.textContent = text;
-  el.announce.style.color =
-    (tone==="warn") ? "rgba(255,77,109,.95)" :
-    (tone==="ok") ? "rgba(89,242,255,.95)" :
-    "rgba(167,176,217,.92)";
+
+function bindLongPress(node, fn, ms=420){
+  let t = null;
+  const start = (e)=> { clearTimeout(t); t = setTimeout(()=>fn(e), ms); };
+  const end = ()=> clearTimeout(t);
+  node.addEventListener("mousedown", start);
+  node.addEventListener("mouseup", end);
+  node.addEventListener("mouseleave", end);
+  node.addEventListener("touchstart", start, {passive:true});
+  node.addEventListener("touchend", end, {passive:true});
 }
-
-/* ---------- Storage ---------- */
-const LS_REPO="mw_repo";
-const LS_IMG_CACHE="mw_img_cache_v6";
-const PHASES=["START","DRAW","MAIN","BATTLE","END"];
-
-/* =========================================================
-   CARD DATA (20)  ※前回と同じ
-========================================================= */
-const CardRegistry = [
-  { no:1,  name:"黒の魔法使いクルエラ", kind:"character", tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:1500, rank:5,
-    text:normalizeText(`・このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。\n・1ターンに1度発動できる。デッキ・ウイングから「黒魔法」カード1枚を手札に加える。`)
-  },
-  { no:2,  name:"黒魔法-フレイムバレット", kind:"effect", tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・自分ステージに「クルエラ」がある時、手札から発動できる。\n・相手ステージのキャラクター1体を選び、以下から1つ選ぶ。\n  A：ATKが1番高いキャラ1体をウイングに送る\n  B：rank4以下のキャラをすべてウイングに送る`)
-  },
-  { no:3,  name:"トナカイの少女ニコラ", kind:"character", tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:2000, rank:5,
-    text:normalizeText(`・このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。\n・自分ターンに発動できる。このターンの終わりまでATK+1000。`)
-  },
-  { no:4,  name:"聖ラウス", kind:"character", tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:1000, rank:3,
-    text:normalizeText(`・このカードが登場した時、デッキ・ウイングからタグ「クランプス」カード1枚を手札に加える。`)
-  },
-  { no:5,  name:"統括AI タータ", kind:"character", tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記", baseAtk:1000, rank:3,
-    text:normalizeText(`・登場した時、デッキから2枚ドローする。\n・自分ターンに1度：手札から2枚までウイングへ送り、その後同枚数だけタイトルタグ「BUGBUG西遊記」をデッキから手札へ。`)
-  },
-  { no:6,  name:"麗し令嬢エフィ", kind:"character", tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:1500, rank:5,
-    text:normalizeText(`・このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。\n・自分ターン：相手キャラ1体を選び、このターンの終わりまでATK-1000。`)
-  },
-  { no:7,  name:"狩猟まひる", kind:"character", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:1500, rank:4,
-    text:normalizeText("（効果文言未確定：現版では効果なし）")
-  },
-  { no:8,  name:"組織の男 手形", kind:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・相手ターンに1度発動できる。相手が発動した効果を無効にする。`)
-  },
-  { no:9,  name:"小太郎・孫悟空Lv17", kind:"character", tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記", baseAtk:2000, rank:4,
-    text:normalizeText(`・自分ステージに存在：手札の「小次郎」を見参させる。\n・自分ステージに「小次郎」がある時ATK+500。`)
-  },
-  { no:10, name:"小次郎・孫悟空Lv17", kind:"character", tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記", baseAtk:2000, rank:4,
-    text:normalizeText(`・自分ステージに存在：手札の「小太郎」を見参させる。\n・自分ステージに「小太郎」がある時ATK+500。`)
-  },
-  { no:11, name:"司令", kind:"item", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・登場した時：自分キャラ1体に装備。装備キャラATK+500。`)
-  },
-  { no:12, name:"班目プロデューサー", kind:"character", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:1500, rank:4,
-    text:normalizeText(`・このカードは1ターンに1度、バトルでは破壊されない。`)
-  },
-  { no:13, name:"超弩級砲塔列車スタマックス氏", kind:"character", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:2500, rank:4,
-    text:normalizeText(`・自分ステージに存在：このカードをウイングに送り、相手キャラ1体をこのターンATK-1000（相手ターンでも可）。`)
-  },
-  { no:14, name:"記憶抹消", kind:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・相手が効果発動した時：手札から発動。無効にしてウイングに送る。`)
-  },
-  { no:15, name:"桜蘭の陰陽術 - 闘 -", kind:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・バトルする時：手札から発動。自分キャラ1体をこのターンATK+1000。`)
-  },
-  { no:16, name:"力こそパワー！！", kind:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・自分ターンのみ：相手のATKが1番低いキャラ1体をウイングに送る。`)
-  },
-  { no:17, name:"キャトルミューティレーション", kind:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・自分キャラがバトルでウイングに送られた時：手札から発動。相手キャラ1体を手札に戻す。`)
-  },
-  { no:18, name:"a-xブラスター01 -放射型-", kind:"item", tags:["射手"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・自分ターン：装備。ATK+500。\n・装備者がタグ「射手」ならさらにATK+500。\n・相手ターン開始時：相手手札をランダム1枚ウイングへ。`)
-  },
-  { no:19, name:"-聖剣- アロングダイト", kind:"item", tags:["勇者","剣士"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:2,
-    text:normalizeText(`・自分ターン：装備。ATK+500。\n・装備者が「勇者」または「剣士」ならさらにATK+500。\n・装備者がバトルで相手キャラをウイングに送った時：1ドロー。`)
-  },
-  { no:20, name:"普通の棒", kind:"item", tags:["勇者"], titleTag:"恋愛疾患特殊医療機a-xブラスター", baseAtk:0, rank:1,
-    text:normalizeText(`・自分ターン：装備。ATK+300。\n・装備者が「勇者」ならさらにATK+500。`)
-  },
-];
-
-function cloneCard(no){
-  const c = CardRegistry.find(x=>x.no===no);
-  const base = {...c};
-  base.uid = `${no}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
-  base.atk = base.baseAtk || 0;
-  base.equips = [];
-  base.flags = { immuneUsedThisTurn:false, usedOnceThisTurn:false };
-  return base;
+function normalizeText(t){
+  return (t || "").replaceAll("又は","または").replaceAll("出来る","できる");
 }
 function shuffle(a){
   for(let i=a.length-1;i>0;i--){
@@ -161,575 +108,675 @@ function shuffle(a){
     [a[i],a[j]]=[a[j],a[i]];
   }
 }
+function validateImage(url){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(true);
+    img.onerror = ()=> resolve(false);
+    img.src = url;
+  });
+}
+
+/* ---------------- Cards (same as previous subset) ---------------- */
+const CardRegistry = [
+  { no:1,  name:"黒の魔法使いクルエラ", type:"character", tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    summon:"kensan", text: normalizeText("このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。\n1ターンに1度発動できる。デッキ・ウイングから「黒魔法」カード1枚を手札に加える。"),
+    rank:5, atk:2500 },
+  { no:2,  name:"黒魔法-フレイムバレット", type:"effect", tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("自分ステージに「クルエラ」がある時、手札から発動できる。\n相手ステージのキャラクター1体を選び、以下の効果を1つ選択する。\n・相手ステージのATKが1番高いキャラクター1体をウイングに送る。\n・相手ステージのrank4以下のキャラクターをすべてウイングに送る。"),
+    rank:0, atk:0 },
+  { no:3,  name:"トナカイの少女ニコラ", type:"character", tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    summon:"kensan", text: normalizeText("このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。\n自分ターンに発動できる。このターンの終わりまで、このキャラクターのATK+1000。"),
+    rank:5, atk:2000 },
+  { no:4,  name:"聖ラウス", type:"character", tags:["クランプス"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("このカードが登場した時、発動できる。デッキ・ウイングからタグ「クランプス」カード1枚を手札に加える。"),
+    rank:3, atk:1500 },
+
+  { no:5,  name:"統括AI タータ", type:"character", tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
+    text: normalizeText("このカードが登場した時、発動できる。デッキから2枚ドローする。\n自分ターンに1度発動できる。手札から2枚までウイングに送る。その後、送った枚数と同じ枚数だけ、タイトルタグ「BUGBUG西遊記」カードをデッキから手札に加える。"),
+    rank:4, atk:2000 },
+  { no:6,  name:"麗し令嬢エフィ", type:"character", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    summon:"kensan", text: normalizeText("このカードは登場できず、手札または自分ステージのカード1枚をウイングに送り、手札から見参できる。\n自分ターンに発動できる。このターンの終わりまで、相手ステージのキャラクター1体を選び、ATK-1000。"),
+    rank:5, atk:2000 },
+
+  { no:8,  name:"組織の男 手形", type:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    text: normalizeText("相手ターンに1度発動できる。相手が発動した効果を無効にする。"),
+    rank:0, atk:0 },
+
+  { no:11, name:"司令", type:"item", tags:[], titleTag:"",
+    text: normalizeText("このカードが登場した時、発動できる。自分ステージのキャラクター1体を選択し、このカードをアイテム扱いとして装備する。そのキャラクターのATK+500。"),
+    rank:0, atk:0 },
+
+  { no:15, name:"桜蘭の陰陽術 - 闘 -", type:"effect", tags:[], titleTag:"",
+    text: normalizeText("自分・相手のキャラクターがバトルする時、手札から発動できる。このターンの終わりまで自分ステージのキャラクター1体を選択し、ATK+1000。"),
+    rank:0, atk:0 },
+
+  { no:18, name:"a-xブラスター01 -放射型-", type:"item", tags:["射手"], titleTag:"",
+    text: normalizeText("自分のターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+500。\nタグ「射手」をもつキャラクターが装備した場合、さらにATK+500させ、相手ターンの開始時に相手の手札を1枚ランダムにウイングに送る。"),
+    rank:0, atk:0 },
+
+  { no:20, name:"普通の棒", type:"item", tags:["勇者"], titleTag:"",
+    text: normalizeText("自分ターンに手札から発動できる。自分ステージのキャラクター1体を選択し、このカードを装備する。ATK+300。\nタグ「勇者」を持つキャラクターがこのカードを装備した場合、さらにATK+500。"),
+    rank:0, atk:0 },
+];
+
 function buildDeck(){
-  const deck=[];
-  for(let no=1; no<=20; no++){ deck.push(cloneCard(no)); deck.push(cloneCard(no)); }
+  const deck = [];
+  for(const c of CardRegistry){ deck.push({...c}); deck.push({...c}); }
   shuffle(deck);
   return deck;
 }
 
-/* =========================================================
-   STATE
-========================================================= */
+/* ---------------- State ---------------- */
 const state = {
   started:false,
-  gameOver:false,
-  aiRunning:false,
   turn:1,
   phase:"START",
   activeSide:"P1",
   firstSide:"P1",
-
+  normalSummonUsed:false,
   selectedHandIndex:null,
-  selectedAttackerPos:null,
-  attackedThisTurn:{ P1:[false,false,false], AI:[false,false,false] },
-  pending:null,
 
-  P1:{ deck:[], hand:[], shield:[null,null,null], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
-  AI:{ deck:[], hand:[], shield:[null,null,null], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
+  P1: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
+  AI: { deck:[], hand:[], shield:[], C:[null,null,null], E:[null,null,null], wing:[], outside:[] },
 
-  img:{ ready:false, fieldUrl:"", backUrl:"", cardUrlByNo:{} },
-
-  tempMods: { P1: new Map(), AI: new Map() },
+  img: { fieldUrl:"", backUrl:"", cardUrlByNo:{}, ready:false },
 };
 
-/* =========================================================
-   IMAGE SCAN
-   ★修正点：相対パス "./assets/..." を返す
-========================================================= */
-function getRepo(){ return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world"; }
-function setRepo(v){ localStorage.setItem(LS_REPO, v); }
-function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE)||"{}"); }catch{ return {}; } }
-function setCache(obj){ localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj)); }
-function clearCache(){ localStorage.removeItem(LS_IMG_CACHE); }
+const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
+function isCharacter(card){ return card && card.type==="character"; }
+function isEffectOrItem(card){ return card && card.type!=="character"; }
 
-async function ghList(path){
-  const repo=getRepo();
-  const url=`https://api.github.com/repos/${repo}/contents/${path}?ref=main`;
-  const res=await fetch(url, { headers:{ "Accept":"application/vnd.github+json" }});
-  if(!res.ok) throw new Error(`GitHub API NG: ${res.status}`);
-  const data=await res.json();
-  if(!Array.isArray(data)) return [];
-  return data.filter(x=>x && x.type==="file").map(x=>x.name);
-}
-function encFile(name){ return encodeURIComponent(name); }
-
-/* ★ここが最重要：先頭スラッシュを消す */
-function relCards(filename){ return `./assets/cards/${encFile(filename)}`; }
-function relAssets(filename){ return `./assets/${encFile(filename)}`; }
-
-function pickFieldFile(assetFiles){
-  const lowers=assetFiles.map(n=>n.toLowerCase());
-  const idx=lowers.findIndex(n=>n.startsWith("field."));
-  if(idx>=0) return assetFiles[idx];
-  const cand=["field.png.jpg","field.jpg","field.png","field.jpeg"];
-  for(const c of cand){
-    const k=lowers.findIndex(n=>n===c);
-    if(k>=0) return assetFiles[k];
-  }
-  return "";
-}
-function isBackNameLower(l){
-  return (
-    l === "card_back.png" || l === "card_back.jpg" || l === "card_back.jpeg" ||
-    l === "card_back.png.png" || l === "card_back.png.jpg" || l === "card_back.png.jpeg" ||
-    l === "card_back.jpg.jpg" || l === "card_back.jpeg.jpeg" ||
-    l.startsWith("card_back.") || l.startsWith("cardback.") || l.startsWith("back.")
-  );
-}
-function pickBackFile(assetFiles){
-  const lowers=assetFiles.map(n=>n.toLowerCase());
-  for(let i=0;i<assetFiles.length;i++){
-    if(isBackNameLower(lowers[i])) return assetFiles[i];
-  }
-  return "";
-}
-function scoreCardFilename(name, no){
-  const s=name.toLowerCase();
-  const p2=pad2(no), p1=String(no);
-  let score=0;
-  if(s.startsWith(`${p2}_`)) score+=100;
-  if(s.startsWith(`${p1}_`)) score+=80;
-  if(s.includes(`${p2}_`)) score+=30;
-  if(s.includes(`${p1}_`)) score+=20;
-  if(s.includes(".png.jpg") || s.includes(".png.jpeg") || s.includes(".png.png")) score+=6;
-  if(s.includes(".jpg")) score+=5;
-  if(s.includes(".png")) score+=5;
-  if(s.includes(".jpeg")) score+=4;
-  return score;
-}
-function buildCardMapFromFileList(cardFiles){
-  const map={};
-  for(let no=1; no<=20; no++){
-    let best={name:"", score:-1};
-    for(const f of cardFiles){
-      const sc=scoreCardFilename(f,no);
-      if(sc>best.score) best={name:f, score:sc};
-    }
-    if(best.score>=60) map[pad2(no)]=best.name;
-  }
-  return map;
-}
-async function validateImage(url){
-  return new Promise((resolve)=>{
-    const img=new Image();
-    img.onload=()=>resolve(true);
-    img.onerror=()=>resolve(false);
-    img.src=url;
-  });
-}
-
-async function rescanImages(){
-  state.img.ready=false;
-  log("画像スキャン：GitHub assets を取得…", "muted");
-  const cache={};
-  const repo=getRepo();
-  try{
-    const [assetFiles, cardFiles] = await Promise.all([ ghList("assets"), ghList("assets/cards") ]);
-    cache.repo=repo;
-    cache.assetFiles=assetFiles;
-    cache.cardFiles=cardFiles;
-    cache.scannedAt=Date.now();
-    cache.fieldFile=pickFieldFile(assetFiles)||"";
-    cache.backFile=pickBackFile(assetFiles)||"";
-    cache.cardMap=buildCardMapFromFileList(cardFiles);
-    setCache(cache);
-  }catch(err){
-    log(`NG GitHub API失敗：${String(err.message||err)}`, "warn");
-  }
-  await applyImagesFromCache();
-}
-
-async function applyImagesFromCache(){
-  const cache=getCache();
-  state.img.fieldUrl="";
-  state.img.backUrl="";
-  state.img.cardUrlByNo={};
-
-  // field
-  if(cache.fieldFile){
-    const u=relAssets(cache.fieldFile);
-    if(await validateImage(u)) state.img.fieldUrl=u;
-  }
-  el.fieldImg.src = state.img.fieldUrl || "";
-  el.fieldImg.style.display = state.img.fieldUrl ? "block" : "none";
-
-  // back
-  if(cache.backFile){
-    const b=relAssets(cache.backFile);
-    if(await validateImage(b)) state.img.backUrl=b;
-  }else{
-    // fallback common names (relative)
-    const tries=[
-      "./assets/card_back.png.PNG",
-      "./assets/card_back.png.png",
-      "./assets/card_back.png",
-      "./assets/card_back.jpg",
-      "./assets/card_back.jpeg",
-      "./assets/back.png",
-      "./assets/back.jpg",
-    ];
-    for(const t of tries){
-      if(await validateImage(t)){ state.img.backUrl=t; break; }
-    }
-  }
-
-  // cards
-  const map=cache.cardMap||{};
-  for(const k of Object.keys(map)){
-    state.img.cardUrlByNo[k]=relCards(map[k]);
-  }
-
-  state.img.ready=true;
-
-  // 画像が無い場合でも遊べるようにする
-  log(`画像：field=${!!state.img.fieldUrl} back=${!!state.img.backUrl} cards=${Object.keys(state.img.cardUrlByNo).length}/20`, "ok");
-  renderAll();
-}
-
-/* =========================================================
-   UI HELPERS / MODALS
-========================================================= */
+/* ---------------- Modals basic ---------------- */
 function showModal(id){ $(id).classList.add("show"); }
 function hideModal(id){ $(id).classList.remove("show"); }
+
 document.addEventListener("click", (e)=>{
-  const t=e.target;
+  const t = e.target;
   if(!(t instanceof HTMLElement)) return;
-  const close=t.getAttribute("data-close");
+  const close = t.getAttribute("data-close");
   if(close==="viewer") hideModal("viewerM");
-  if(close==="zone") hideModal("zoneM");
-  if(close==="confirm") hideModal("confirmM");
+  if(close==="choice") hideModal("choiceM");
   if(close==="settings") hideModal("settingsM");
   if(close==="help") hideModal("helpM");
   if(close==="log") hideModal("logM");
 });
 
-function bindLongPress(node, fn, ms=420){
-  let timer=null;
-  const start=()=>{ clearTimeout(timer); timer=setTimeout(fn, ms); };
-  const end=()=>clearTimeout(timer);
-  node.addEventListener("touchstart", start, {passive:true});
-  node.addEventListener("touchend", end, {passive:true});
-  node.addEventListener("touchcancel", end, {passive:true});
-  node.addEventListener("mousedown", start);
-  node.addEventListener("mouseup", end);
-  node.addEventListener("mouseleave", end);
-}
-
+/* Viewer */
 function openViewer(card){
   el.viewerTitle.textContent = card.name;
-  const cur = (card.kind==="character") ? `\n\n現在ATK：${card.atk}\n基本ATK：${card.baseAtk}` : "";
-  el.viewerText.textContent = (card.text||"") + cur;
+  el.viewerText.textContent = `${card.name}\nRANK ${card.rank||0} / ATK ${card.atk||0}\n\n${card.text||""}`;
   el.viewerImg.src = state.img.cardUrlByNo[pad2(card.no)] || "";
   showModal("viewerM");
 }
 
-/* confirm */
-let confirmYes=null;
-function askConfirm(title, body, onYes){
-  el.confirmTitle.textContent=title;
-  el.confirmBody.textContent=body;
-  confirmYes=onYes;
-  showModal("confirmM");
-}
-el.btnNo.addEventListener("click", ()=>hideModal("confirmM"), {passive:true});
-el.btnYes.addEventListener("click", ()=>{
-  hideModal("confirmM");
-  const fn=confirmYes; confirmYes=null;
-  if(fn) fn();
-}, {passive:true});
+/* Choice with thumbs */
+let choiceResolver = null;
+function askChoice(title, message, items){
+  el.choiceTitle.textContent = title;
+  el.choiceBody.innerHTML = "";
 
-/* =========================================================
-   GAME CORE（前回のロジックを踏襲：ここは必要最小限）
-   ※ご主人様の要望の焦点はUI/画像なので、今回の差分は描画側中心です
-========================================================= */
-function sideName(side){ return side==="P1" ? "あなた" : "AI"; }
-function updateHUD(){
-  $("chipTurn").textContent = `TURN ${state.turn}`;
-  $("chipPhase").textContent = state.phase;
-  const you = (state.activeSide==="P1");
-  $("chipActive").textContent = you ? "YOUR TURN" : "ENEMY TURN";
-  $("chipActive").classList.toggle("enemy", !you);
-  el.btnNext.disabled = !you || state.gameOver;
-  el.btnEnd.disabled  = !you || state.gameOver;
-}
-function updateCounts(){
-  el.aiDeckN.textContent=state.AI.deck.length;
-  el.aiWingN.textContent=state.AI.wing.length;
-  el.aiOutN.textContent=state.AI.outside.length;
-  el.pDeckN.textContent=state.P1.deck.length;
-  el.pWingN.textContent=state.P1.wing.length;
-  el.pOutN.textContent=state.P1.outside.length;
-  el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
-}
-function draw(side, n=1){
-  const p=state[side];
-  for(let i=0;i<n;i++){
-    if(p.deck.length<=0){
-      state.gameOver=true;
-      const msg = (side==="P1") ? "敗北：デッキ切れ" : "勝利：相手デッキ切れ";
-      log(msg, (side==="P1")?"warn":"ok");
-      say(`ゲーム終了（${msg}）`, "warn");
-      return;
+  const msg = document.createElement("div");
+  msg.className = "choiceMsg";
+  msg.textContent = message;
+  el.choiceBody.appendChild(msg);
+
+  const list = document.createElement("div");
+  list.className = "choiceList";
+
+  for(const it of items){
+    const row = document.createElement("div");
+    row.className = "choiceItem";
+
+    const th = document.createElement("div");
+    th.className = "choiceThumb";
+    if(it.card){
+      const url = state.img.cardUrlByNo[pad2(it.card.no)];
+      if(url) th.style.backgroundImage = `url("${url}")`;
     }
+
+    const meta = document.createElement("div");
+    meta.className = "choiceMeta";
+    const t = document.createElement("div");
+    t.className = "t";
+    t.textContent = it.label;
+    const s = document.createElement("div");
+    s.className = "s";
+    s.textContent = it.card ? `RANK ${it.card.rank||0} / ATK ${it.card.atk||0}` : "";
+    meta.appendChild(t);
+    if(s.textContent) meta.appendChild(s);
+
+    row.appendChild(th);
+    row.appendChild(meta);
+
+    row.addEventListener("click", ()=>{
+      hideModal("choiceM");
+      if(choiceResolver){ const r = choiceResolver; choiceResolver=null; r(it.value); }
+    }, {passive:true});
+
+    if(it.card){
+      bindLongPress(row, ()=> openViewer(it.card), 380);
+    }
+    list.appendChild(row);
+  }
+
+  el.choiceBody.appendChild(list);
+  showModal("choiceM");
+  return new Promise((resolve)=>{ choiceResolver = resolve; });
+}
+
+/* ---------------- Images ---------------- */
+const LS_REPO = "mw_repo";
+const LS_IMG_CACHE = "mw_img_cache_v7";
+function getRepo(){ return localStorage.getItem(LS_REPO) || "manpuku-taira/manpuku-world"; }
+function setRepo(v){ localStorage.setItem(LS_REPO, v); }
+function getCache(){ try{ return JSON.parse(localStorage.getItem(LS_IMG_CACHE) || "{}"); }catch{ return {}; } }
+function setCache(obj){ localStorage.setItem(LS_IMG_CACHE, JSON.stringify(obj)); }
+function clearCache(){ localStorage.removeItem(LS_IMG_CACHE); }
+
+async function ghList(path){
+  const repo = getRepo();
+  const url = `https://api.github.com/repos/${repo}/contents/${path}?ref=main`;
+  const res = await fetch(url, { headers: { "Accept":"application/vnd.github+json" }});
+  if(!res.ok) throw new Error(`GitHub API NG: ${res.status}`);
+  const data = await res.json();
+  if(!Array.isArray(data)) return [];
+  return data.filter(x=>x && x.type === "file").map(x=>x.name);
+}
+function encFile(name){ return encodeURIComponent(name); }
+function vercelPathCards(filename){ return `/assets/cards/${encFile(filename)}`; }
+function vercelPathAssets(filename){ return `/assets/${encFile(filename)}`; }
+
+function pickBackFile(assetFiles){
+  const lowers = assetFiles.map(n=>n.toLowerCase());
+  const idxAny = lowers.findIndex(n=>n.startsWith("card_back"));
+  if(idxAny>=0) return assetFiles[idxAny];
+  return "";
+}
+function pickFieldFile(assetFiles){
+  const lowers = assetFiles.map(n=>n.toLowerCase());
+  const idxAny = lowers.findIndex(n=>n.startsWith("field."));
+  if(idxAny>=0) return assetFiles[idxAny];
+  return "";
+}
+function scoreCardFilename(name, no){
+  const s = name.toLowerCase();
+  const p2 = pad2(no).toLowerCase();
+  let score = 0;
+  if(s.startsWith(`${p2}_`)) score += 100;
+  if(s.includes(`${p2}_`)) score += 30;
+  if(s.includes(".png")) score += 5;
+  if(s.includes(".jpg")) score += 5;
+  if(s.includes(".jpeg")) score += 4;
+  return score;
+}
+function buildCardMapFromFileList(cardFiles){
+  const map = {};
+  for(let no=1; no<=20; no++){
+    let best = {name:"", score:-1};
+    for(const f of cardFiles){
+      const sc = scoreCardFilename(f, no);
+      if(sc > best.score) best = {name:f, score:sc};
+    }
+    if(best.score >= 60) map[pad2(no)] = best.name;
+  }
+  return map;
+}
+async function resolveBackUrl(cacheBackFile){
+  const directCandidates = [
+    "/assets/card_back.png.PNG",
+    "/assets/card_back.png.png",
+    "/assets/card_back.png",
+    "/assets/card_back.PNG",
+  ];
+  if(cacheBackFile){
+    const u = vercelPathAssets(cacheBackFile);
+    if(await validateImage(u)) return u;
+  }
+  for(const u of directCandidates){
+    if(await validateImage(u)) return u;
+  }
+  return "";
+}
+
+async function rescanImages(){
+  state.img.ready = false;
+  log("画像スキャン開始（GitHub）…");
+
+  const cache = { repo:getRepo(), scannedAt:Date.now() };
+  try{
+    const [assetFiles, cardFiles] = await Promise.all([
+      ghList("assets"),
+      ghList("assets/cards"),
+    ]);
+    cache.assetFiles = assetFiles;
+    cache.cardFiles = cardFiles;
+    cache.fieldFile = pickFieldFile(assetFiles) || "";
+    cache.backFile  = pickBackFile(assetFiles) || "";
+    cache.cardMap   = buildCardMapFromFileList(cardFiles);
+    setCache(cache);
+    log("画像スキャン完了：適用します");
+  }catch(err){
+    setCache(cache);
+    log(`GitHubスキャン失敗：${String(err.message||err)}（直接パスで復旧）`, "warn");
+  }
+  await applyImagesFromCache();
+}
+
+async function applyImagesFromCache(){
+  const cache = getCache();
+
+  state.img.fieldUrl = "";
+  if(cache.fieldFile){
+    const u = vercelPathAssets(cache.fieldFile);
+    if(await validateImage(u)) state.img.fieldUrl = u;
+  }
+  if(state.img.fieldUrl){
+    el.fieldTop.style.backgroundImage = `url("${state.img.fieldUrl}")`;
+    el.fieldBottom.style.backgroundImage = `url("${state.img.fieldUrl}")`;
+  }else{
+    el.fieldTop.style.backgroundImage = "";
+    el.fieldBottom.style.backgroundImage = "";
+  }
+
+  state.img.backUrl = await resolveBackUrl(cache.backFile || "");
+
+  state.img.cardUrlByNo = {};
+  const map = (cache.cardMap || {});
+  for(const k of Object.keys(map)){
+    state.img.cardUrlByNo[k] = vercelPathCards(map[k]);
+  }
+
+  state.img.ready = true;
+  renderAll();
+}
+
+/* ---------------- Render helpers ---------------- */
+function faceForCard(card, isEnemy=false){
+  const face = document.createElement("div");
+  face.className = "face";
+  const url = state.img.cardUrlByNo[pad2(card.no)];
+  if(url){
+    face.style.backgroundImage = `url("${url}")`;
+  }else{
+    face.classList.add("fallback");
+  }
+  if(isEnemy) face.style.transform = "rotate(180deg)";
+  return face;
+}
+function makeSlot(card, opts={}){
+  const slot = document.createElement("div");
+  slot.className = "slot";
+  if(opts.glow) slot.classList.add("glow");
+  if(opts.sel) slot.classList.add("sel");
+  if(card){
+    slot.appendChild(faceForCard(card, !!opts.enemy));
+    bindLongPress(slot, ()=> openViewer(card));
+  }
+  return slot;
+}
+
+/* ---------------- Game rules (minimal stable) ---------------- */
+function draw(side, n=1){
+  const p = state[side];
+  for(let i=0;i<n;i++){
+    if(p.deck.length<=0){ log(`${side==="P1"?"あなた":"AI"}：デッキ切れ`, "warn"); return; }
     p.hand.push(p.deck.shift());
   }
 }
-function moveToWing(side, card){ state[side].wing.push(card); }
+function enforceHandLimit(side){
+  const p = state[side];
+  while(p.hand.length > 7){
+    const c = p.hand.pop();
+    p.wing.push(c);
+    log(`${side==="P1"?"あなた":"AI"}：手札上限→ウイング ${c.name}`);
+  }
+}
 
-/* ----（戦闘/効果の詳細ロジックは前回版と同様のため、ここではUIに必要な最小実装だけ保持）---- */
-/* 実運用では、前回v60000の effect/AI/battle 部分をそのまま移植して下さい。
-   （ご希望であれば、次の返信で “v60000の全ロジックを丸ごと統合した完全版script.js” を提示します） */
+/* ---------------- Interactions ---------------- */
+function onClickYourC(pos){
+  if(state.activeSide!=="P1") return;
+  if(state.phase!=="MAIN") return;
+  if(state.selectedHandIndex==null) return;
+  if(state.P1.C[pos]) return;
 
+  const card = state.P1.hand[state.selectedHandIndex];
+  if(!isCharacter(card)){ log("Cにはキャラクターのみ置けます", "warn"); return; }
+  if(card.summon==="kensan"){ log("このカードは登場できません。空きCを長押しして見参してください", "warn"); return; }
+  if(state.normalSummonUsed){ log("登場（通常）はターン1回です", "warn"); return; }
+
+  state.P1.C[pos]=card;
+  state.P1.hand.splice(state.selectedHandIndex,1);
+  state.selectedHandIndex=null;
+  state.normalSummonUsed=true;
+
+  log(`登場：${card.name}`);
+  renderAll();
+}
+
+async function onLongPressEmptyCForKensan(pos){
+  if(state.activeSide!=="P1") return;
+  if(state.phase!=="MAIN") return;
+  if(state.selectedHandIndex==null) return;
+  if(state.P1.C[pos]) return;
+
+  const card = state.P1.hand[state.selectedHandIndex];
+  if(!isCharacter(card) || card.summon!=="kensan") return;
+
+  // cost candidates (hand except selected, plus stage C/E)
+  const cands = [];
+  for(let i=0;i<state.P1.hand.length;i++){
+    if(i===state.selectedHandIndex) continue;
+    cands.push({from:"hand", idx:i, card:state.P1.hand[i], label:`手札：${state.P1.hand[i].name}`});
+  }
+  for(let i=0;i<3;i++){
+    if(state.P1.C[i]) cands.push({from:"C", idx:i, card:state.P1.C[i], label:`C${i+1}：${state.P1.C[i].name}`});
+    if(state.P1.E[i]) cands.push({from:"E", idx:i, card:state.P1.E[i], label:`E${i+1}：${state.P1.E[i].name}`});
+  }
+  if(!cands.length){ log("見参：コスト候補なし", "warn"); return; }
+
+  const pick = await askChoice("見参（コスト）", "ウイングへ送るカードを1枚選んでください。", cands.map(x=>({
+    label:x.label, value:`${x.from}:${x.idx}`, card:x.card
+  })));
+
+  const [from, idxStr] = String(pick).split(":");
+  const idx = Number(idxStr);
+
+  if(from==="hand"){
+    const moved = state.P1.hand.splice(idx,1)[0];
+    state.P1.wing.push(moved);
+    if(idx < state.selectedHandIndex) state.selectedHandIndex -= 1;
+  }else if(from==="C"){
+    const moved = state.P1.C[idx];
+    state.P1.C[idx]=null;
+    state.P1.wing.push(moved);
+  }else if(from==="E"){
+    const moved = state.P1.E[idx];
+    state.P1.E[idx]=null;
+    state.P1.wing.push(moved);
+  }
+
+  const placed = state.P1.hand.splice(state.selectedHandIndex,1)[0];
+  state.P1.C[pos]=placed;
+  state.selectedHandIndex=null;
+
+  log(`見参：${placed.name}`);
+  renderAll();
+}
+
+function onClickYourE(pos){
+  if(state.activeSide!=="P1") return;
+  if(state.phase!=="MAIN") return;
+  if(state.selectedHandIndex==null) return;
+  if(state.P1.E[pos]) return;
+
+  const card = state.P1.hand[state.selectedHandIndex];
+  if(isCharacter(card)){ log("Eにはエフェクト/アイテムのみ置けます", "warn"); return; }
+
+  state.P1.E[pos]=card;
+  state.P1.hand.splice(state.selectedHandIndex,1);
+  state.selectedHandIndex=null;
+
+  log(`E配置：${card.name}`);
+  renderAll();
+}
+
+/* ---------------- Rendering ---------------- */
+function updateHUD(){
+  el.chipTurn.textContent = `TURN ${state.turn}`;
+  el.chipPhase.textContent = state.phase;
+  el.chipActive.textContent = (state.activeSide==="P1") ? "YOUR TURN" : "ENEMY TURN";
+  el.btnNext.disabled = (state.activeSide!=="P1");
+  el.btnEnd.disabled  = (state.activeSide!=="P1");
+  el.btnNext.style.opacity = (state.activeSide==="P1") ? "1" : ".45";
+  el.btnEnd.style.opacity  = (state.activeSide==="P1") ? "1" : ".45";
+}
+
+function updateCounts(){
+  el.aiDeckN.textContent = state.AI.deck.length;
+  el.aiWingN.textContent = state.AI.wing.length;
+  el.aiOutN.textContent = state.AI.outside.length;
+  el.pDeckN.textContent = state.P1.deck.length;
+  el.pWingN.textContent = state.P1.wing.length;
+  el.pOutN.textContent = state.P1.outside.length;
+  el.enemyHandLabel.textContent = `ENEMY HAND ×${state.AI.hand.length}`;
+}
+
+function renderZones(){
+  el.aiE.innerHTML="";
+  for(let i=0;i<3;i++) el.aiE.appendChild(makeSlot(state.AI.E[i], {enemy:true}));
+
+  el.aiC.innerHTML="";
+  for(let i=0;i<3;i++) el.aiC.appendChild(makeSlot(state.AI.C[i], {enemy:true}));
+
+  el.pC.innerHTML="";
+  for(let i=0;i<3;i++){
+    const c = state.P1.C[i];
+    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && state.selectedHandIndex!=null && !c);
+    const slot = makeSlot(c, {glow});
+    slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
+    if(!c) bindLongPress(slot, ()=> onLongPressEmptyCForKensan(i), 420);
+    el.pC.appendChild(slot);
+  }
+
+  el.pE.innerHTML="";
+  for(let i=0;i<3;i++){
+    const c = state.P1.E[i];
+    const glow = (state.activeSide==="P1" && state.phase==="MAIN" && state.selectedHandIndex!=null && !c);
+    const slot = makeSlot(c, {glow});
+    slot.addEventListener("click", ()=> onClickYourE(i), {passive:true});
+    el.pE.appendChild(slot);
+  }
+}
+
+function renderHand(){
+  el.hand.innerHTML="";
+  for(let i=0;i<state.P1.hand.length;i++){
+    const c = state.P1.hand[i];
+    const h = document.createElement("div");
+    h.className="handCard";
+
+    const playable = (state.activeSide==="P1" && state.phase==="MAIN");
+    if(playable) h.classList.add("glow");
+    if(state.selectedHandIndex===i) h.classList.add("sel");
+
+    const url = state.img.cardUrlByNo[pad2(c.no)];
+    if(url) h.style.backgroundImage = `url("${url}")`;
+
+    h.addEventListener("click", ()=>{
+      if(state.activeSide!=="P1") return;
+      state.selectedHandIndex = (state.selectedHandIndex===i) ? null : i;
+      renderAll();
+    }, {passive:true});
+    bindLongPress(h, ()=> openViewer(c), 420);
+    el.hand.appendChild(h);
+  }
+}
+
+function renderEnemyHand(){
+  el.aiHand.innerHTML="";
+  const n = state.AI.hand.length;
+  const show = Math.min(n, 12);
+  for(let i=0;i<show;i++){
+    const b = document.createElement("div");
+    b.className="handBack";
+    if(state.img.backUrl) b.style.backgroundImage = `url("${state.img.backUrl}")`;
+    el.aiHand.appendChild(b);
+  }
+}
+
+function renderShields(){
+  document.querySelectorAll(".shieldSlot").forEach((slot)=>{
+    const side = slot.getAttribute("data-side");
+    const idx = Number(slot.getAttribute("data-idx")||"0");
+    const cardNode = slot.querySelector(".shieldCard");
+    const sh = state[side].shield[idx];
+    const exists = !!sh;
+    cardNode.classList.toggle("empty", !exists);
+    if(exists && state.img.backUrl){
+      cardNode.style.backgroundImage = `url("${state.img.backUrl}")`;
+    }else{
+      cardNode.style.backgroundImage = "";
+    }
+  });
+}
+
+function renderPiles(){
+  document.querySelectorAll(".pileCard").forEach((n)=>{
+    if(state.img.backUrl) n.style.backgroundImage = `url("${state.img.backUrl}")`;
+    else n.style.backgroundImage = "";
+  });
+}
+
+function renderAll(){
+  updateHUD();
+  updateCounts();
+  renderZones();
+  renderHand();
+  renderEnemyHand();
+  renderShields();
+  renderPiles();
+}
+
+/* ---------------- Turn controls ---------------- */
+function nextPhase(){
+  const i = PHASES.indexOf(state.phase);
+  const next = PHASES[(i+1)%PHASES.length];
+  state.phase = next;
+
+  if(next==="START"){
+    state.normalSummonUsed=false;
+    state.selectedHandIndex=null;
+  }
+  if(next==="DRAW"){
+    draw(state.activeSide, 1);
+    log(`${state.activeSide==="P1"?"あなた":"AI"}：ドロー +1`);
+  }
+  if(next==="END"){
+    enforceHandLimit(state.activeSide);
+  }
+  renderAll();
+}
+function endTurn(){
+  enforceHandLimit(state.activeSide);
+
+  if(state.activeSide==="P1"){
+    state.activeSide="AI";
+    state.phase="START";
+    renderAll();
+
+    // AI簡易（安定優先）
+    draw("AI", 1);
+    enforceHandLimit("AI");
+
+    state.activeSide="P1";
+    state.turn++;
+    state.phase="START";
+    log(`TURN ${state.turn} あなたのターン`);
+    renderAll();
+  }
+}
+
+/* ---------------- Start game ---------------- */
 function startGame(){
-  state.gameOver=false;
   state.turn=1;
   state.phase="START";
+  state.normalSummonUsed=false;
   state.selectedHandIndex=null;
-  state.selectedAttackerPos=null;
-  state.pending=null;
 
-  state.P1.deck=buildDeck();
-  state.AI.deck=buildDeck();
+  state.P1.deck = buildDeck();
+  state.AI.deck = buildDeck();
 
-  state.P1.shield=[state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
-  state.AI.shield=[state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
+  state.P1.shield = [state.P1.deck.shift(), state.P1.deck.shift(), state.P1.deck.shift()];
+  state.AI.shield = [state.AI.deck.shift(), state.AI.deck.shift(), state.AI.deck.shift()];
 
   state.P1.hand=[]; state.AI.hand=[];
-  draw("P1",4); draw("AI",4);
+  draw("P1", 4);
+  draw("AI", 4);
 
-  state.P1.C=[null,null,null]; state.AI.C=[null,null,null];
-  state.P1.E=[null,null,null]; state.AI.E=[null,null,null];
+  state.P1.C=[null,null,null]; state.P1.E=[null,null,null];
+  state.AI.C=[null,null,null]; state.AI.E=[null,null,null];
   state.P1.wing=[]; state.AI.wing=[];
   state.P1.outside=[]; state.AI.outside=[];
 
   state.firstSide = (Math.random()<0.5) ? "P1" : "AI";
   state.activeSide = state.firstSide;
+
   el.firstInfo.textContent = (state.firstSide==="P1") ? "先攻：あなた" : "先攻：相手";
-  say("ゲーム開始", "ok");
+  log(`ゲーム開始：初手4 / シールド3 / 先攻=${el.firstInfo.textContent}`);
+
   renderAll();
 }
 
-/* =========================================================
-   RENDER (3×4 layout)
-========================================================= */
-function faceForCard(card){
-  const face=document.createElement("div");
-  face.className="face";
-  const url=state.img.cardUrlByNo[pad2(card.no)];
-  if(url) face.style.backgroundImage=`url("${url}")`;
-  else face.classList.add("fallback");
-  return face;
-}
-function makeSlot(card, opts={}){
-  const slot=document.createElement("div");
-  slot.className="slot";
-  if(opts.small) slot.classList.add("small");
-  if(opts.disabled) slot.classList.add("disabled");
-
-  if(card){
-    slot.appendChild(faceForCard(card));
-    if(card.kind==="character"){
-      const b=document.createElement("div");
-      b.className="slotBadge";
-      b.textContent=`ATK ${card.atk}`;
-      slot.appendChild(b);
-    }
-    bindLongPress(slot, ()=>openViewer(card));
-  }else{
-    const f=document.createElement("div");
-    f.className="face fallback";
-    f.style.opacity=".18";
-    slot.appendChild(f);
-  }
-  return slot;
-}
-function setBack(elm){
-  if(state.img.backUrl){
-    elm.style.backgroundImage=`url("${state.img.backUrl}")`;
-    elm.style.backgroundColor="";
-    elm.style.backgroundSize="cover";
-    elm.style.backgroundPosition="center";
-  }else{
-    elm.style.backgroundImage="";
-    elm.style.backgroundColor="#070914";
-  }
-}
-function renderPiles(){
-  setBack(el.aiDeckFace);
-  setBack(el.pDeckFace);
-
-  const aiW=state.AI.wing[state.AI.wing.length-1];
-  const aiO=state.AI.outside[state.AI.outside.length-1];
-  const pW =state.P1.wing[state.P1.wing.length-1];
-  const pO =state.P1.outside[state.P1.outside.length-1];
-
-  function setTop(elm, card){
-    elm.style.backgroundImage="";
-    elm.style.backgroundColor="rgba(6,8,14,.55)";
-    if(card){
-      const url=state.img.cardUrlByNo[pad2(card.no)];
-      if(url) elm.style.backgroundImage=`url("${url}")`;
-      elm.style.backgroundSize="cover";
-      elm.style.backgroundPosition="center";
-    }
-  }
-  setTop(el.aiWingFace, aiW);
-  setTop(el.aiOutFace, aiO);
-  setTop(el.pWingFace, pW);
-  setTop(el.pOutFace, pO);
-}
-function renderZones(){
-  // Enemy Character
-  el.aiC.innerHTML="";
-  for(let i=0;i<3;i++) el.aiC.appendChild(makeSlot(state.AI.C[i]));
-  // Enemy Effect
-  el.aiE.innerHTML="";
-  for(let i=0;i<3;i++) el.aiE.appendChild(makeSlot(state.AI.E[i]));
-  // Enemy Shield (facedown)
-  el.aiS.innerHTML="";
-  for(let i=0;i<3;i++){
-    const exists=!!state.AI.shield[i];
-    const slot=document.createElement("div");
-    slot.className="slot small";
-    if(!exists) slot.classList.add("disabled");
-    const face=document.createElement("div");
-    face.className="face";
-    if(exists){
-      if(state.img.backUrl) face.style.backgroundImage=`url("${state.img.backUrl}")`;
-      face.style.backgroundSize="cover";
-      face.style.backgroundPosition="center";
-    }else{
-      face.classList.add("fallback");
-      face.style.opacity=".18";
-    }
-    slot.appendChild(face);
-    el.aiS.appendChild(slot);
-  }
-
-  // Player Character
-  el.pC.innerHTML="";
-  for(let i=0;i<3;i++) el.pC.appendChild(makeSlot(state.P1.C[i]));
-  // Player Effect
-  el.pE.innerHTML="";
-  for(let i=0;i<3;i++) el.pE.appendChild(makeSlot(state.P1.E[i]));
-  // Player Shield (facedown)
-  el.pS.innerHTML="";
-  for(let i=0;i<3;i++){
-    const exists=!!state.P1.shield[i];
-    const slot=document.createElement("div");
-    slot.className="slot small";
-    if(!exists) slot.classList.add("disabled");
-    const face=document.createElement("div");
-    face.className="face";
-    if(exists){
-      if(state.img.backUrl) face.style.backgroundImage=`url("${state.img.backUrl}")`;
-      face.style.backgroundSize="cover";
-      face.style.backgroundPosition="center";
-    }else{
-      face.classList.add("fallback");
-      face.style.opacity=".18";
-    }
-    slot.appendChild(face);
-    el.pS.appendChild(slot);
-  }
-}
-function renderHand(){
-  el.hand.innerHTML="";
-  for(let i=0;i<state.P1.hand.length;i++){
-    const c=state.P1.hand[i];
-    const h=document.createElement("div");
-    h.className="handCard";
-    const url=state.img.cardUrlByNo[pad2(c.no)];
-    if(url) h.style.backgroundImage=`url("${url}")`;
-    bindLongPress(h, ()=>openViewer(c));
-    el.hand.appendChild(h);
-  }
-}
-function renderEnemyHand(){
-  el.aiHand.innerHTML="";
-  const n=state.AI.hand.length;
-  const show=Math.min(n, 12);
-  for(let i=0;i<show;i++){
-    const b=document.createElement("div");
-    b.className="handBack";
-    if(state.img.backUrl) b.style.backgroundImage=`url("${state.img.backUrl}")`;
-    el.aiHand.appendChild(b);
-  }
-  if(n>show){
-    const more=document.createElement("div");
-    more.className="handBack";
-    more.textContent=`+${n-show}`;
-    more.style.display="flex";
-    more.style.alignItems="center";
-    more.style.justifyContent="center";
-    more.style.fontWeight="1000";
-    el.aiHand.appendChild(more);
-  }
-}
-function renderAll(){
-  updateHUD();
-  updateCounts();
-  renderPiles();
-  renderZones();
-  renderHand();
-  renderEnemyHand();
-}
-
-/* =========================================================
-   BUTTONS / SETTINGS
-========================================================= */
-function bindHUDButtons(){
-  el.btnHelp.addEventListener("click", ()=>showModal("helpM"), {passive:true});
-  el.btnSettings.addEventListener("click", ()=>{
-    el.repoInput.value=getRepo();
-    showModal("settingsM");
-  }, {passive:true});
-  el.btnLog.addEventListener("click", ()=>{ renderLogModal(); showModal("logM"); }, {passive:true});
-}
-function bindTitleButtons(){
-  el.btnSettingsOpen.addEventListener("click", ()=>{
-    el.repoInput.value=getRepo();
-    showModal("settingsM");
-  }, {passive:true});
-  el.btnHelpOpen.addEventListener("click", ()=>showModal("helpM"), {passive:true});
-}
-function bindSettings(){
-  el.btnRepoSave.addEventListener("click", async ()=>{
-    const v=(el.repoInput.value||"").trim();
-    if(!v.includes("/")){ log("設定NG：owner/repo 形式で入力してください", "warn"); return; }
-    setRepo(v);
-    clearCache();
-    log(`設定：repo=${v}`, "ok");
-    await rescanImages();
-  }, {passive:true});
-
-  el.btnRescan.addEventListener("click", async ()=>{ await rescanImages(); }, {passive:true});
-
-  el.btnClearCache.addEventListener("click", ()=>{
-    clearCache();
-    state.img.ready=false;
-    state.img.fieldUrl=""; state.img.backUrl=""; state.img.cardUrlByNo={};
-    el.fieldImg.src="";
-    log("画像キャッシュを削除しました", "ok");
-    renderAll();
-  }, {passive:true});
-}
-function bindPhaseButtons(){
-  el.btnNext.addEventListener("click",(e)=>{
-    e.preventDefault();
-    const i=PHASES.indexOf(state.phase);
-    state.phase = PHASES[(i+1)%PHASES.length];
-    renderAll();
-  }, {passive:false});
-  el.btnEnd.addEventListener("click",(e)=>{
-    e.preventDefault();
-    state.turn++;
-    state.phase="START";
-    renderAll();
-  }, {passive:false});
-}
-function bindZoneButtons(){
-  $("aiWingBtn").addEventListener("click", ()=>showModal("zoneM"), {passive:true});
-  $("aiOutBtn").addEventListener("click", ()=>showModal("zoneM"), {passive:true});
-  $("pWingBtn").addEventListener("click", ()=>showModal("zoneM"), {passive:true});
-  $("pOutBtn").addEventListener("click", ()=>showModal("zoneM"), {passive:true});
-}
-
-/* =========================================================
-   START
-========================================================= */
+/* ---------------- Bindings ---------------- */
 function bindStart(){
-  el.btnStart.addEventListener("click", ()=>{
+  el.boot.textContent="JS: OK";
+  const go = ()=>{
     if(state.started) return;
     state.started=true;
     el.title.classList.remove("active");
     el.game.classList.add("active");
     startGame();
+  };
+  el.btnStart.addEventListener("click", go, {passive:true});
+  el.title.addEventListener("click", go, {passive:true});
+}
+
+function bindHUD(){
+  el.btnHelp.addEventListener("click", ()=> showModal("helpM"), {passive:true});
+  el.btnSettings.addEventListener("click", ()=>{
+    el.repoInput.value = getRepo();
+    showModal("settingsM");
+  }, {passive:true});
+
+  bindLongPress(el.btnLog, ()=>{
+    renderLogModal();
+    showModal("logM");
+  }, 360);
+
+  el.btnNext.addEventListener("click", ()=>{
+    if(state.activeSide!=="P1") return;
+    nextPhase();
+  }, {passive:true});
+
+  el.btnEnd.addEventListener("click", ()=>{
+    if(state.activeSide!=="P1") return;
+    endTurn();
   }, {passive:true});
 }
 
+function bindSettings(){
+  el.btnRepoSave.addEventListener("click", async ()=>{
+    const v = (el.repoInput.value||"").trim();
+    if(!v.includes("/")){
+      log("設定NG：owner/repo 形式で入力してください", "warn");
+      return;
+    }
+    setRepo(v);
+    clearCache();
+    log(`設定：repo=${v}`);
+    await rescanImages();
+  }, {passive:true});
+
+  el.btnRescan.addEventListener("click", async ()=>{ await rescanImages(); }, {passive:true});
+  el.btnClearCache.addEventListener("click", ()=>{ clearCache(); log("キャッシュ削除"); }, {passive:true});
+}
+
+/* ---------------- init ---------------- */
 async function init(){
-  el.boot.textContent="JS: 初期化中…";
-  say("準備中…", "muted");
-
   bindStart();
-  bindHUDButtons();
-  bindTitleButtons();
+  bindHUD();
   bindSettings();
-  bindPhaseButtons();
-  bindZoneButtons();
 
-  const cache=getCache();
-  if(cache && cache.repo===getRepo() && cache.assetFiles && cache.cardFiles){
+  const cache = getCache();
+  if(cache && cache.repo===getRepo()){
     await applyImagesFromCache();
   }else{
     await rescanImages();
   }
 
-  el.boot.textContent="JS: 準備完了";
-  say("準備完了（STARTで開始）", "ok");
-  log("v60010：3×4構図復元 / 画像パス相対化", "ok");
+  el.boot.textContent="JS: OK（準備完了）";
+  log("v50000：iPhone向けレイアウト全面組み直し（fixed廃止・タップ安定）");
 }
 
 document.addEventListener("DOMContentLoaded", init);
