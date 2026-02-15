@@ -7,6 +7,10 @@
   --accent2:#b35bff;
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
+
+  /* ステージスロットサイズ（手札相当まで上げる） */
+  --stageGap: 10px;
+  --stageSlotMaxW: 72px; /* 手札幅と同等 */
 }
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
@@ -23,7 +27,7 @@ body{
 
 /* screens */
 .screen{ display:none; height:100%; }
-.screen.active{ display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+.screen.active{ display:flex; flex-direction:column; height:100svh; overflow:hidden; } /* iPhone Safari対策 */
 
 /* buttons */
 .btn{
@@ -122,7 +126,6 @@ body{
 }
 .enemyHandLabel{ font-weight:900; font-size:11px; color:var(--muted); letter-spacing:.14em; white-space:nowrap; }
 .enemyHand{ display:flex; gap:6px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
-
 .handBack{
   width:24px; height:34px;
   border-radius:9px;
@@ -157,12 +160,24 @@ body{
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
 
+/* ★ iPhoneで潰れないようにminmaxで最低高さを保証 */
 .grid{
   position:absolute;
   inset:0;
   display:grid;
-  grid-template-columns:repeat(4, 1fr);
-  grid-template-rows:repeat(6, 1fr);
+
+  /* D/W/O列を細めてC/Eの横幅を確保 */
+  grid-template-columns: minmax(58px, .55fr) 1fr 1fr 1fr;
+
+  /* 6行：最低高さを保証（ここがiPhoneの枠消失を止める） */
+  grid-template-rows:
+    minmax(74px, 1fr)
+    minmax(86px, 1.2fr)
+    minmax(86px, 1.2fr)
+    minmax(96px, 1.35fr)
+    minmax(96px, 1.35fr)
+    minmax(74px, 1fr);
+
   gap:10px;
   padding:10px;
 }
@@ -185,25 +200,30 @@ body{
   justify-content:center;
   gap:6px;
 }
-.pile .z{ font-size:12px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
-.pile .n{ font-size:18px; font-weight:1000; }
+.pile .z{ font-size:11px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
+.pile .n{ font-size:16px; font-weight:1000; }
 
 .stageRow{ padding:8px; display:flex; flex-direction:column; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:6px; font-weight:900; }
 
 .slots{
   display:flex;
-  gap:10px;
+  gap:var(--stageGap);
   align-items:center;
-  justify-content:flex-start;
-  min-height:48px; /* スロットの“見えない”を物理的に防止 */
+
+  /* 3枠が必ず見える */
+  justify-content:space-between;
+
+  /* 行が潰れても最低限見える */
+  min-height:58px;
 }
 
-/* ====== SLOT（小型固定） ====== */
+/* ====== SLOT：手札と同等サイズまで拡大 ======
+   3枚が必ず入るよう、行幅から自動算出して上限を手札幅に */
 .slot{
-  width:24px;
-  height:34px;
-  border-radius:9px;
+  width: min(var(--stageSlotMaxW), calc((100% - (var(--stageGap) * 2)) / 3));
+  aspect-ratio: 2 / 3;
+  border-radius:14px;
   border:1px dashed rgba(167,176,217,.35);
   background:rgba(6,8,14,.55);
   position:relative;
@@ -213,7 +233,6 @@ body{
 }
 .slot.enemySlot{ transform:rotate(180deg); }
 .slot.filled{ border-style:solid; border-color: rgba(89,242,255,.22); }
-
 .slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
@@ -223,7 +242,7 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:11px;
+  font-size:12px;
   font-weight:1000;
   letter-spacing:.12em;
   color:rgba(167,176,217,.85);
@@ -406,6 +425,7 @@ body{
 .pickMeta .t{ font-weight:1000; font-size:13px; }
 .pickMeta .s{ color:var(--muted); font-size:11px; margin-top:2px; }
 
+/* settings */
 .settings{ padding:12px; display:flex; flex-direction:column; gap:12px; }
 .setBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
 .setTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
@@ -420,4 +440,13 @@ body{
   background:rgba(0,0,0,.25);
   color:rgba(233,236,255,.95);
   outline:none;
+}
+
+/* iPhone向け：さらに圧縮してC/E行を守る */
+@media (max-width: 420px){
+  :root{ --stageGap: 8px; }
+  .grid{ gap:8px; padding:8px; grid-template-columns: minmax(54px, .52fr) 1fr 1fr 1fr; }
+  .pile .n{ font-size:15px; }
+  .rowTitle{ margin-bottom:5px; }
+  .slots{ min-height:54px; }
 }
