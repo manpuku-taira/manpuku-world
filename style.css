@@ -11,14 +11,17 @@
   /* スロットサイズ */
   --stageSlotMaxW: 74px;
 
-  /* ★C/Eの間隔：詰めすぎ解消（カード幅の約1/3に近づける） */
+  /* C/E間隔 */
   --stageGap: 18px;
 
-  /* 盤面縮尺（小画面で確実に上下を表示） */
+  /* 盤面縮尺 */
   --matScale: 1;
 
-  /* D/W/O列 */
+  /* 左列（相手のD/W/O） */
   --sideColMin: 44px;
+
+  /* 右側（自分のD/W/O）を相手と同サイズ感に見せるための制限 */
+  --pileRightMaxW: 56px;
 
   /* シールドバッジ */
   --shieldBadgeFont: 9px;
@@ -41,7 +44,7 @@ body{
 .screen.active{
   display:flex;
   flex-direction:column;
-  height:100dvh;           /* ★iPhone Safari対策 */
+  height:100dvh;
   height:100svh;
   overflow:hidden;
 }
@@ -193,10 +196,8 @@ body{
   position:absolute;
   inset:0;
   display:grid;
-
   grid-template-columns: minmax(var(--sideColMin), .42fr) 1fr 1fr 1fr;
   grid-template-rows: repeat(6, 1fr);
-
   gap:10px;
   padding:10px;
   min-height:0;
@@ -213,6 +214,7 @@ body{
 }
 .span3{ grid-column: span 3; }
 
+/* piles */
 .pile{
   display:flex;
   flex-direction:column;
@@ -223,10 +225,18 @@ body{
 .pile .z{ font-size:11px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:16px; font-weight:1000; }
 
+/* ★右側のpileだけ幅を固定して、相手側と同じサイズ感に統一 */
+.pileRight{
+  justify-self:center;
+  width:100%;
+  max-width: var(--pileRightMaxW);
+}
+
+/* stage rows */
 .stageRow{ padding:8px; display:flex; flex-direction:column; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:6px; font-weight:900; }
 
-/* ★3枚を中央寄せ + 余白を広げる */
+/* 3枚を中央寄せ + 余白 */
 .slots{
   display:flex;
   gap:var(--stageGap);
@@ -287,7 +297,7 @@ body{
 }
 .backCard.empty{ opacity:.2; }
 
-/* ★シールド表記を小さく */
+/* smaller badge */
 .shieldCount{
   position:absolute;
   right:8px;
@@ -463,13 +473,21 @@ body{
   outline:none;
 }
 
-/* ===== iPhone向け：上下両フィールドを必ず見せる ===== */
+/* ===== iPhone向け ===== */
 @media (max-width: 440px){
   :root{
-    --matScale: 0.74;          /* ★さらに下げて確実に収める */
-    --stageGap: 14px;          /* iPhoneでは少しだけ詰める（押しつぶし回避） */
+    /* ★盤面は少し大きく戻す（小さすぎ緩和） */
+    --matScale: 0.78;
+
+    /* ★ステージ上カードを縮小（大きすぎ対策） */
+    --stageSlotMaxW: 62px;
+
+    --stageGap: 14px;
     --sideColMin: 38px;
     --shieldBadgeFont: 8px;
+
+    /* 右pileの最大幅も少し小さく */
+    --pileRightMaxW: 52px;
   }
 
   .hud{ padding:8px; }
@@ -482,7 +500,7 @@ body{
   .handBack{ width:18px; height:26px; }
 
   .stage{ padding:6px; }
-  .grid{ gap:8px; padding:8px; } /* ★余白を減らして上下を確保 */
+  .grid{ gap:8px; padding:8px; }
 
   .handDock{ padding:8px; }
   .hand{ padding:8px; gap:8px; }
@@ -491,5 +509,5 @@ body{
 
 /* 超小型iPhone */
 @media (max-width: 390px){
-  :root{ --matScale: 0.70; }
+  :root{ --matScale: 0.74; }
 }
