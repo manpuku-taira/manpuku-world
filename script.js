@@ -1,9 +1,9 @@
 /* =========================================================
-  Manpuku World - v50002 (SCROLL STABLE / FIELD FIX)
+  Manpuku World - v50001 (SCROLL STABLE) + FIELD FIX
   FIX:
-   - タイトル画面にフィールド画像が出ない
-   - フィールド画像は #game の背景にのみ適用（bodyには貼らない）
-   - iOS崩壊要因になりやすい background-attachment: fixed を廃止
+   - タイトル画面にはフィールド背景を出さない（維持）
+   - スタート後：フィールド背景を「全体表示（contain）」にして拡大トリミングを禁止
+   - iPhone崩壊要因になりやすい background-attachment: fixed を使わない
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -299,49 +299,58 @@ const state = {
 };
 
 /* =========================================================
-   FIELD BACKGROUND CONTROL (v50002)
-   - タイトルでは出さない
-   - ゲーム(#game)背景にだけ適用
+   FIELD BACKGROUND (v50001-fieldfix)
+   - タイトル: なし
+   - ゲーム: contain（全体表示・トリミング禁止）
 ========================================================= */
-function clearFieldBackground(){
-  // title/game両方を「何も貼ってない」状態に戻す
-  if(el.title){
-    el.title.style.backgroundImage = "";
-    el.title.style.backgroundSize = "";
-    el.title.style.backgroundPosition = "";
-    el.title.style.backgroundRepeat = "";
+function clearFieldBg(){
+  if(document && document.body){
+    // 念のため body に残っていたら消す（旧版対策）
+    document.body.style.backgroundImage = "";
+    document.body.style.backgroundSize = "";
+    document.body.style.backgroundPosition = "";
+    document.body.style.backgroundRepeat = "";
+    document.body.style.backgroundAttachment = "";
   }
   if(el.game){
     el.game.style.backgroundImage = "";
     el.game.style.backgroundSize = "";
     el.game.style.backgroundPosition = "";
     el.game.style.backgroundRepeat = "";
-    // fixedは使わない（iOS崩壊回避）
     el.game.style.backgroundAttachment = "";
+    el.game.style.backgroundColor = "";
   }
 }
-function applyFieldBackgroundToGame(){
-  // フィールド画像が無ければ何もしない（既存のCSSでOK）
-  if(!state.img.fieldUrl || !el.game) return;
+function applyFieldBg(){
+  // スタート後・game表示中のみ
+  if(!state.started) return;
+  if(!el.game || !el.game.classList.contains("active")) return;
+  if(!state.img.fieldUrl) return;
 
-  // “bodyではなく game” に貼ることでレイアウト崩壊を避ける
+  // 全体が入るように contain。これで「拡大トリミング」は起きません。
   el.game.style.backgroundImage =
-    `radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
-     radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
+    `radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.10), transparent 60%),
+     radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.08), transparent 55%),
      url("${state.img.fieldUrl}")`;
 
-  el.game.style.backgroundSize = "auto, auto, cover";
+  // 重要：最後のレイヤー（url）を contain にする
+  el.game.style.backgroundSize = "auto, auto, contain";
   el.game.style.backgroundPosition = "center, center, center";
   el.game.style.backgroundRepeat = "no-repeat, no-repeat, no-repeat";
-  el.game.style.backgroundAttachment = "scroll"; // ← fixed禁止
+
+  // iOSで崩れやすい fixed は使わない
+  el.game.style.backgroundAttachment = "scroll";
+
+  // 余白が出るので下地色を付ける
+  el.game.style.backgroundColor = "#050714";
 }
-function syncFieldBackgroundVisibility(){
-  // started + game.active のときだけ貼る
-  clearFieldBackground();
-  if(state.started && el.game && el.game.classList.contains("active")){
-    applyFieldBackgroundToGame();
-  }
+function syncFieldBg(){
+  clearFieldBg();
+  applyFieldBg();
 }
+// iPhoneで「回転」やアドレスバー伸縮で再計算されずズレるのを防ぐ
+window.addEventListener("resize", ()=> { syncFieldBg(); }, {passive:true});
+window.addEventListener("orientationchange", ()=> { setTimeout(syncFieldBg, 120); }, {passive:true});
 
 /* ---------- UI helpers ---------- */
 function setActiveUI(){
@@ -402,6 +411,7 @@ function pickFieldFile(assetFiles){
   }
   return "";
 }
+
 function isBackNameLower(l){
   return (
     l === "card_back.png" ||
@@ -505,17 +515,19 @@ async function applyImagesFromCache(){
     return;
   }
 
-  // field（※ v50002: ここでは state.img.fieldUrl をセットするだけ。背景適用は開始後のみ）
+  // field（v50001-fieldfix：bodyには貼らない。URL保持だけ）
   state.img.fieldUrl = "";
   if(cache.fieldFile){
     const u = vercelPathAssets(cache.fieldFile);
     if(await validateImage(u)){
       state.img.fieldUrl = u;
-      log("OK フィールド読込：準備完了（タイトルには表示しません）", "muted");
+      log("OK フィールド読込：準備完了（ゲーム開始後に全体表示）", "muted");
     }else{
       state.img.fieldUrl = "";
       log(`NG フィールド読込失敗: ${u}`, "warn");
     }
+  }else{
+    state.img.fieldUrl = "";
   }
 
   // back
@@ -565,8 +577,8 @@ async function applyImagesFromCache(){
   if(miss.length) log(`カード画像未検出：${miss.join(", ")}`, "warn");
   else log("カード画像：20種すべて検出", "muted");
 
-  // v50002: 背景の見え方はここで同期（開始前は非表示）
-  syncFieldBackgroundVisibility();
+  // 重要：背景状態を同期（開始前は消える／開始後はcontainで出る）
+  syncFieldBg();
 
   renderAll();
 }
@@ -1662,15 +1674,13 @@ function bindStart(){
   const go = ()=>{
     if(state.started) return;
     state.started=true;
-
-    // 画面切替
     el.title.classList.remove("active");
     el.game.classList.add("active");
 
-    // v50002: ゲーム画面にだけフィールド背景を適用
-    syncFieldBackgroundVisibility();
+    // ★ここでフィールド背景を「contain」で適用
+    syncFieldBg();
 
-    log("対戦画面：表示OK（SCROLL / FIELD FIX）", "muted");
+    log("対戦画面：表示OK（SCROLL）", "muted");
     startGame();
   };
   el.btnStart.addEventListener("click", go, {passive:true});
@@ -1707,7 +1717,7 @@ function bindSettings(){
     state.img.cardUrlByNo = {};
     state.img.backUrl = "";
     state.img.fieldUrl = "";
-    syncFieldBackgroundVisibility();
+    syncFieldBg();
     renderAll();
   }, {passive:true});
 }
@@ -1740,8 +1750,8 @@ async function init(){
   el.boot.textContent = "JS: OK（初期化中…）";
   updateHUD();
 
-  // v50002: 初期は「タイトル」なので背景を必ず消す
-  clearFieldBackground();
+  // 旧版の body 背景が残っていたら消す（タイトルでは出さない）
+  syncFieldBg();
 
   bindStart();
   bindHUDButtons();
@@ -1759,12 +1769,9 @@ async function init(){
     await rescanImages();
   }
 
-  // v50002: ここでも「開始前」は背景を出さないことを保証
-  syncFieldBackgroundVisibility();
-
   el.boot.textContent = "JS: OK（準備完了）";
   say("準備完了", "ok");
-  log("SCROLL版：iPhone/iPad両対応 / 裏面自動検出 / フィールドはゲーム内のみ", "muted");
+  log("SCROLL版：iPhone/iPad両対応 / 裏面自動検出 / フィールド全体表示（contain）", "muted");
 }
 
 document.addEventListener("DOMContentLoaded", init);
