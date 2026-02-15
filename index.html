@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40100" />
+  <link rel="stylesheet" href="./style.css?v=40200" />
 </head>
 <body>
 
@@ -63,100 +63,77 @@
         <!-- Grid (6 rows × 4 cols) -->
         <div id="grid" class="grid">
 
-          <!-- ENEMY: row 1 (D + SSS) -->
+          <!-- ENEMY row1: D + S S S -->
           <div class="cell pile" data-click="aiDeck">
             <div class="pileCard" data-pile="AI_DECK"></div>
-            <div class="pileMeta">
-              <div class="z">D</div><div id="aiDeckN" class="n">0</div>
-            </div>
+            <div class="pileMeta"><div class="z">D</div><div id="aiDeckN" class="n">0</div></div>
           </div>
           <div class="cell shieldSlot" data-side="AI" data-idx="0">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
+            <div class="sTag">ENEMY SHIELD</div><div class="shieldCard"></div>
           </div>
           <div class="cell shieldSlot" data-side="AI" data-idx="1">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
+            <div class="sTag">ENEMY SHIELD</div><div class="shieldCard"></div>
           </div>
           <div class="cell shieldSlot" data-side="AI" data-idx="2">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
+            <div class="sTag">ENEMY SHIELD</div><div class="shieldCard"></div>
           </div>
 
-          <!-- ENEMY: row 2 (W + EEE) -->
+          <!-- ENEMY row2: W + (EEE span3) -->
           <div class="cell pile" data-click="aiWing">
             <div class="pileCard" data-pile="AI_WING"></div>
-            <div class="pileMeta">
-              <div class="z">W</div><div id="aiWingN" class="n">0</div>
-            </div>
+            <div class="pileMeta"><div class="z">W</div><div id="aiWingN" class="n">0</div></div>
           </div>
-          <div class="cell stageRow">
+          <div class="cell stageRow span3">
             <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-            <div id="aiE" class="slots enemyRow"></div>
+            <div id="aiE" class="slots"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
 
-          <!-- ENEMY: row 3 (O + CCC) -->
+          <!-- ENEMY row3: O + (CCC span3) -->
           <div class="cell pile" data-click="aiOutside">
             <div class="pileCard" data-pile="AI_OUT"></div>
-            <div class="pileMeta">
-              <div class="z">O</div><div id="aiOutN" class="n">0</div>
-            </div>
+            <div class="pileMeta"><div class="z">O</div><div id="aiOutN" class="n">0</div></div>
           </div>
-          <div class="cell stageRow">
+          <div class="cell stageRow span3">
             <div class="rowTitle">ENEMY C（キャラクター）</div>
-            <div id="aiC" class="slots enemyRow"></div>
+            <div id="aiC" class="slots"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
 
-          <!-- YOUR: row 4 (CCC + O) -->
-          <div class="cell stageRow pRow">
+          <!-- YOUR row4: (CCC span3) + O -->
+          <div class="cell stageRow span3">
             <div class="rowTitle">YOUR C（キャラクター）</div>
-            <div id="pC" class="slots pSlots"></div>
+            <div id="pC" class="slots"></div>
           </div>
-          <div class="cell stageRow pRow"></div>
-          <div class="cell stageRow pRow"></div>
-          <div class="cell pile pPile" data-click="pOutside">
+          <div class="cell pile" data-click="pOutside">
             <div class="pileCard" data-pile="P_OUT"></div>
-            <div class="pileMeta">
-              <div class="z">O</div><div id="pOutN" class="n">0</div>
-            </div>
+            <div class="pileMeta"><div class="z">O</div><div id="pOutN" class="n">0</div></div>
           </div>
 
-          <!-- YOUR: row 5 (EEE + W) -->
-          <div class="cell stageRow pRow">
+          <!-- YOUR row5: (EEE span3) + W -->
+          <div class="cell stageRow span3">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
-            <div id="pE" class="slots pSlots"></div>
+            <div id="pE" class="slots"></div>
           </div>
-          <div class="cell stageRow pRow"></div>
-          <div class="cell stageRow pRow"></div>
-          <div class="cell pile pPile" data-click="pWing">
+          <div class="cell pile" data-click="pWing">
             <div class="pileCard" data-pile="P_WING"></div>
-            <div class="pileMeta">
-              <div class="z">W</div><div id="pWingN" class="n">0</div>
-            </div>
+            <div class="pileMeta"><div class="z">W</div><div id="pWingN" class="n">0</div></div>
           </div>
 
-          <!-- YOUR: row 6 (SSS + D) -->
-          <div class="cell shieldSlot pRow" data-side="P1" data-idx="0">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
+          <!-- YOUR row6: S S S + D -->
+          <div class="cell shieldSlot" data-side="P1" data-idx="0">
+            <div class="sTag">YOUR SHIELD</div><div class="shieldCard"></div>
           </div>
-          <div class="cell shieldSlot pRow" data-side="P1" data-idx="1">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
+          <div class="cell shieldSlot" data-side="P1" data-idx="1">
+            <div class="sTag">YOUR SHIELD</div><div class="shieldCard"></div>
           </div>
-          <div class="cell shieldSlot pRow" data-side="P1" data-idx="2">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
+          <div class="cell shieldSlot" data-side="P1" data-idx="2">
+            <div class="sTag">YOUR SHIELD</div><div class="shieldCard"></div>
           </div>
-          <div class="cell pile pPile" data-click="pDeck">
+          <div class="cell pile" data-click="pDeck">
             <div class="pileCard" data-pile="P_DECK"></div>
-            <div class="pileMeta">
-              <div class="z">D</div><div id="pDeckN" class="n">0</div>
-            </div>
+            <div class="pileMeta"><div class="z">D</div><div id="pDeckN" class="n">0</div></div>
           </div>
 
         </div>
-
-        <!-- Arrow layer -->
-        <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
       </div>
     </div>
 
@@ -188,19 +165,7 @@
     </div>
   </div>
 
-  <!-- Zone -->
-  <div id="zoneM" class="modal">
-    <div class="back" data-close="zone"></div>
-    <div class="box smallBox">
-      <div class="boxHead">
-        <div id="zoneTitle" class="boxTitle">ZONE</div>
-        <button class="btn small ghost" data-close="zone">閉じる</button>
-      </div>
-      <div id="zoneList" class="zoneList"></div>
-    </div>
-  </div>
-
-  <!-- Choice (effect / cost selection) -->
+  <!-- Choice (thumb list) -->
   <div id="choiceM" class="modal">
     <div class="back" data-close="choice"></div>
     <div class="box smallBox">
@@ -259,15 +224,7 @@
             <button id="btnRescan" class="btn small">再スキャン</button>
             <button id="btnClearCache" class="btn small ghost">キャッシュ削除</button>
           </div>
-          <div class="setHint">assets/field.*、assets/cards、assets/card_back* を自動検出します。</div>
-        </div>
-
-        <div class="setBlock">
-          <div class="setTitle">サウンド</div>
-          <div class="setRow">
-            <button id="btnSound" class="btn small primary">SE: ON</button>
-          </div>
-          <div class="setHint">今は内蔵SE（ピコ音）です。後で音源ファイルに差し替え可能です。</div>
+          <div class="setHint">裏面は /assets/card_back.png.PNG も直接チェックします。</div>
         </div>
       </div>
     </div>
@@ -282,16 +239,15 @@
         <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
       <div class="help">
-        <div class="helpItem">・カード長押し：拡大＆テキスト確認（現在ATKも表示）</div>
-        <div class="helpItem">・手札タップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（通常）／見参カードは空きC長押し（無制限）</div>
-        <div class="helpItem">・MAIN：エフェクト/アイテム＝空きEをタップで配置（即時効果はその場で選択）</div>
-        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラ/シールドをタップ</div>
-        <div class="helpItem">・LOG：長押しでログ表示</div>
+        <div class="helpItem">・長押し：カード拡大（現在ATKも表示）</div>
+        <div class="helpItem">・手札タップ：選択</div>
+        <div class="helpItem">・MAIN：キャラ→空きCタップで登場（通常）／見参カード→空きC長押し（無制限）</div>
+        <div class="helpItem">・MAIN：エフェ/アイテム→空きEタップ（即時効果は直後に選択UI）</div>
+        <div class="helpItem">・BATTLE：自分キャラ→相手キャラ/シールド</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40100"></script>
+  <script src="./script.js?v=40200"></script>
 </body>
 </html>
