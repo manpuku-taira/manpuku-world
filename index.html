@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40007" />
+  <link rel="stylesheet" href="./style.css?v=50002" />
 </head>
 <body>
 
@@ -17,7 +17,7 @@
         <div class="logoTags">
           <div class="tag">CYBER FANTASY</div>
           <div class="tag">AI DUEL</div>
-          <div class="tag">B（派手＋スキップ）</div>
+          <div class="tag">SCROLL VIEW（iPhone対応）</div>
         </div>
         <div class="mini">画面タップ または START で開始</div>
         <div style="margin-top:14px;">
@@ -48,104 +48,130 @@
       </div>
     </div>
 
-    <!-- Announcement -->
-    <div id="announce" class="announce" aria-live="polite"></div>
-
-    <!-- Enemy Hand -->
+    <!-- ENEMY HAND (top) -->
     <div class="enemyHandDock">
       <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
       <div id="aiHand" class="enemyHand"></div>
     </div>
 
-    <!-- Stage -->
-    <div class="stage">
-      <div id="matRoot" class="mat">
-        <div id="fieldTop" class="field fieldTop"></div>
-        <div id="fieldBottom" class="field fieldBottom"></div>
+    <!-- MAIN SCROLL AREA -->
+    <div class="playArea" id="playArea">
 
-        <!-- Grid (6 rows × 4 cols) -->
-        <div id="grid" class="grid">
-
-          <!-- Row 1: ENEMY D + SSS -->
-          <div class="cell pile" data-click="aiDeck">
-            <div class="z">D</div><div id="aiDeckN" class="n">0</div>
-          </div>
-          <div class="cell shieldSlot" data-side="AI" data-idx="0">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="AI" data-idx="1">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="AI" data-idx="2">
-            <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
-          </div>
-
-          <!-- Row 2: ENEMY W + EEE (span 3) -->
-          <div class="cell pile" data-click="aiWing">
-            <div class="z">W</div><div id="aiWingN" class="n">0</div>
-          </div>
-          <div class="cell stageRow span3">
-            <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-            <div id="aiE" class="slots enemy"></div>
-          </div>
-
-          <!-- Row 3: ENEMY O + CCC (span 3) -->
-          <div class="cell pile" data-click="aiOutside">
-            <div class="z">O</div><div id="aiOutN" class="n">0</div>
-          </div>
-          <div class="cell stageRow span3">
-            <div class="rowTitle">ENEMY C（キャラクター）</div>
-            <div id="aiC" class="slots enemy"></div>
-          </div>
-
-          <!-- Row 4: YOUR CCC (span 3) + O -->
-          <div class="cell stageRow span3">
-            <div class="rowTitle">YOUR C（キャラクター）</div>
-            <div id="pC" class="slots"></div>
-          </div>
-          <div class="cell pile" data-click="pOutside">
-            <div class="z">O</div><div id="pOutN" class="n">0</div>
-          </div>
-
-          <!-- Row 5: YOUR EEE (span 3) + W -->
-          <div class="cell stageRow span3">
-            <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
-            <div id="pE" class="slots"></div>
-          </div>
-          <div class="cell pile" data-click="pWing">
-            <div class="z">W</div><div id="pWingN" class="n">0</div>
-          </div>
-
-          <!-- Row 6: YOUR SSS + D -->
-          <div class="cell shieldSlot" data-side="P1" data-idx="0">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="P1" data-idx="1">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell shieldSlot" data-side="P1" data-idx="2">
-            <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
-          </div>
-          <div class="cell pile" data-click="pDeck">
-            <div class="z">D</div><div id="pDeckN" class="n">0</div>
-          </div>
-
+      <!-- ENEMY MAT -->
+      <section class="matPanel enemy" aria-label="enemy mat">
+        <div class="matHead">
+          <div class="matTitle">ENEMY FIELD</div>
         </div>
 
-        <!-- Arrow layer (reserved) -->
-        <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        <div class="matBody">
+          <div class="piles">
+            <button class="pileBtn" id="aiDeckBtn" say="D">
+              <div class="pileTag">DECK</div>
+              <div class="pileCard back" id="aiDeckFace"></div>
+              <div class="pileN" id="aiDeckN">0</div>
+            </button>
+
+            <button class="pileBtn" id="aiWingBtn" say="W">
+              <div class="pileTag">WING</div>
+              <div class="pileCard face" id="aiWingFace"></div>
+              <div class="pileN" id="aiWingN">0</div>
+            </button>
+
+            <button class="pileBtn" id="aiOutBtn" say="O">
+              <div class="pileTag">OUT</div>
+              <div class="pileCard face" id="aiOutFace"></div>
+              <div class="pileN" id="aiOutN">0</div>
+            </button>
+          </div>
+
+          <div class="zones">
+            <div class="zoneRow">
+              <div class="zoneLabel">ENEMY C（キャラクター）</div>
+              <div id="aiC" class="slotRow enemy"></div>
+            </div>
+
+            <div class="zoneRow">
+              <div class="zoneLabel">ENEMY E（エフェクト/アイテム）</div>
+              <div id="aiE" class="slotRow enemy"></div>
+            </div>
+
+            <div class="zoneRow">
+              <div class="zoneLabel">ENEMY SHIELD</div>
+              <div id="aiS" class="slotRow shieldRow"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="divider">
+        <div class="dividerLine"></div>
+        <div class="dividerText">VS</div>
+        <div class="dividerLine"></div>
       </div>
+
+      <!-- YOU MAT -->
+      <section class="matPanel you" aria-label="your mat">
+        <div class="matHead">
+          <div class="matTitle">YOUR FIELD</div>
+          <div id="announce" class="announce">準備完了</div>
+        </div>
+
+        <div class="matBody">
+          <div class="piles">
+            <button class="pileBtn" id="pDeckBtn" say="D">
+              <div class="pileTag">DECK</div>
+              <div class="pileCard back" id="pDeckFace"></div>
+              <div class="pileN" id="pDeckN">0</div>
+            </button>
+
+            <button class="pileBtn" id="pWingBtn" say="W">
+              <div class="pileTag">WING</div>
+              <div class="pileCard face" id="pWingFace"></div>
+              <div class="pileN" id="pWingN">0</div>
+            </button>
+
+            <button class="pileBtn" id="pOutBtn" say="O">
+              <div class="pileTag">OUT</div>
+              <div class="pileCard face" id="pOutFace"></div>
+              <div class="pileN" id="pOutN">0</div>
+            </button>
+          </div>
+
+          <div class="zones">
+            <div class="zoneRow">
+              <div class="zoneLabel">YOUR C（キャラクター）</div>
+              <div id="pC" class="slotRow"></div>
+            </div>
+
+            <div class="zoneRow">
+              <div class="zoneLabel">YOUR E（エフェクト/アイテム）</div>
+              <div id="pE" class="slotRow"></div>
+            </div>
+
+            <div class="zoneRow">
+              <div class="zoneLabel">YOUR SHIELD</div>
+              <div id="pS" class="slotRow shieldRow"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="bottomPad"></div>
     </div>
 
-    <!-- Hand -->
+    <!-- HAND (bottom fixed area) -->
     <div class="handDock">
+      <div class="handTopBar">
+        <div class="handTitle">HAND</div>
+        <div class="handHint">タップ=選択 / 長押し=詳細</div>
+      </div>
       <div id="hand" class="hand"></div>
     </div>
 
-    <!-- FAB -->
-    <div class="fab">
-      <button id="btnNext" class="fabBtn">次のフェイズ</button>
-      <button id="btnEnd" class="fabBtn danger">ターン終了</button>
+    <!-- ACTION BAR (fixed, not overlapping hand taps) -->
+    <div class="actionBar">
+      <button id="btnNext" class="actBtn">次のフェイズ</button>
+      <button id="btnEnd" class="actBtn danger">ターン終了</button>
     </div>
 
   </div>
@@ -224,7 +250,7 @@
             <button id="btnRescan" class="btn small">再スキャン</button>
             <button id="btnClearCache" class="btn small ghost">キャッシュ削除</button>
           </div>
-          <div class="setHint">assets/field.*、assets/cards、assets/card_back.* を自動検出します。</div>
+          <div class="setHint">assets/field.*、assets/cards、assets/card_back.* を自動検出します（大小文字・二重拡張子も対応）。</div>
         </div>
       </div>
     </div>
@@ -239,16 +265,18 @@
         <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
       <div class="help">
-        <div class="helpItem">・カード長押し：拡大＆テキスト確認（現在ATKも表示）</div>
         <div class="helpItem">・手札タップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：C＝キャラ配置（見参カードは案内に従いコスト選択）</div>
-        <div class="helpItem">・MAIN：E＝アイテム/エフェクト配置（即時効果はその場で選択→ウイングへ）</div>
-        <div class="helpItem">・BATTLE：自分キャラタップで攻撃者選択 → 相手キャラ or シールドをタップ</div>
+        <div class="helpItem">・カード長押し：拡大＆テキスト確認（ATKは現在値を表示）</div>
+        <div class="helpItem">・MAIN：キャラ＝C空き枠タップで登場（キャラのみ）</div>
+        <div class="helpItem">・MAIN：エフェクト＝E空き枠タップ（Eのみ）</div>
+        <div class="helpItem">・MAIN：アイテム＝装備先キャラ選択（場にキャラが必要）</div>
+        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラ or 相手シールドをタップ</div>
+        <div class="helpItem">・シールド0：次の攻撃でダイレクト（勝敗）</div>
         <div class="helpItem">・LOG：長押しでログ表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40007"></script>
+  <script src="./script.js?v=50002"></script>
 </body>
 </html>
