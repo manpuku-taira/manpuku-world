@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=50001" />
+  <link rel="stylesheet" href="./style.css?v=40006" />
 </head>
 <body>
 
@@ -21,7 +21,7 @@
         </div>
         <div class="mini">画面タップ または START で開始</div>
         <div style="margin-top:14px;">
-          <button id="btnStart" class="btn primary" type="button">START</button>
+          <button id="btnStart" class="btn primary">START</button>
         </div>
         <div id="boot" class="mini" style="margin-top:12px;">JS: …</div>
       </div>
@@ -39,13 +39,12 @@
       </div>
       <div class="hudCenter">
         <div id="firstInfo">先攻：—</div>
-        <div id="announce" class="announce"> </div>
       </div>
       <div class="hudRight">
         <div id="chipActive" class="chip chipActive">YOUR TURN</div>
-        <button id="btnLog" class="iconBtn" title="ログ（長押し）" type="button">LOG</button>
-        <button id="btnHelp" class="iconBtn" title="ヘルプ" type="button">?</button>
-        <button id="btnSettings" class="iconBtn" title="設定" type="button">⚙</button>
+        <button id="btnLog" class="iconBtn" title="ログ（長押し）">LOG</button>
+        <button id="btnHelp" class="iconBtn" title="ヘルプ">?</button>
+        <button id="btnSettings" class="iconBtn" title="設定">⚙</button>
       </div>
     </div>
 
@@ -58,19 +57,16 @@
     <!-- Stage -->
     <div class="stage">
       <div id="matRoot" class="mat">
-
-        <!-- Field images -->
         <div id="fieldTop" class="field fieldTop"></div>
         <div id="fieldBottom" class="field fieldBottom"></div>
 
-        <!-- Grid -->
+        <!-- Grid (6 rows × 4 cols) -->
         <div id="grid" class="grid">
 
           <!-- ENEMY: row 1 (D + SSS) -->
           <div class="cell pile" data-click="aiDeck">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
-
           <div class="cell shieldSlot" data-side="AI" data-idx="0">
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
@@ -87,7 +83,7 @@
           </div>
           <div class="cell stageRow">
             <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-            <div id="aiE" class="slots enemy"></div>
+            <div id="aiE" class="slots"></div>
           </div>
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
@@ -106,7 +102,7 @@
           <!-- YOUR: row 4 (CCC + O) -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR C（キャラクター）</div>
-            <div id="pC" class="slots you"></div>
+            <div id="pC" class="slots"></div>
           </div>
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
@@ -117,7 +113,7 @@
           <!-- YOUR: row 5 (EEE + W) -->
           <div class="cell stageRow">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
-            <div id="pE" class="slots you"></div>
+            <div id="pE" class="slots"></div>
           </div>
           <div class="cell stageRow"></div>
           <div class="cell stageRow"></div>
@@ -143,19 +139,18 @@
 
         <!-- Arrow layer -->
         <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
-
       </div>
     </div>
 
     <!-- Hand -->
-    <div class="handDock" id="handDock">
+    <div class="handDock">
       <div id="hand" class="hand"></div>
     </div>
 
-    <!-- FAB (必ず押せるよう最前面固定) -->
-    <div class="fab" id="fab">
-      <button id="btnNext" class="fabBtn" type="button">次のフェイズ</button>
-      <button id="btnEnd" class="fabBtn danger" type="button">ターン終了</button>
+    <!-- FAB -->
+    <div class="fab">
+      <button id="btnNext" class="fabBtn">次のフェイズ</button>
+      <button id="btnEnd" class="fabBtn danger">ターン終了</button>
     </div>
 
   </div>
@@ -166,7 +161,7 @@
     <div class="box">
       <div class="boxHead">
         <div id="viewerTitle" class="boxTitle">CARD</div>
-        <button class="btn small ghost" data-close="viewer" type="button">閉じる</button>
+        <button class="btn small ghost" data-close="viewer">閉じる</button>
       </div>
       <div class="viewerBody">
         <img id="viewerImg" alt="" />
@@ -181,7 +176,7 @@
     <div class="box smallBox">
       <div class="boxHead">
         <div id="zoneTitle" class="boxTitle">ZONE</div>
-        <button class="btn small ghost" data-close="zone" type="button">閉じる</button>
+        <button class="btn small ghost" data-close="zone">閉じる</button>
       </div>
       <div id="zoneList" class="zoneList"></div>
     </div>
@@ -193,7 +188,7 @@
     <div class="box smallBox">
       <div class="boxHead">
         <div class="boxTitle">LOG</div>
-        <button class="btn small ghost" data-close="log" type="button">閉じる</button>
+        <button class="btn small ghost" data-close="log">閉じる</button>
       </div>
       <div id="logBody" class="logBody"></div>
     </div>
@@ -205,12 +200,12 @@
     <div class="confirmBox">
       <div class="boxHead">
         <div id="confirmTitle" class="boxTitle">確認</div>
-        <button class="btn small ghost" data-close="confirm" type="button">閉じる</button>
+        <button class="btn small ghost" data-close="confirm">閉じる</button>
       </div>
       <div id="confirmBody" class="confirmBody"></div>
       <div class="confirmBtns">
-        <button id="btnNo" class="btn ghost" type="button">キャンセル</button>
-        <button id="btnYes" class="btn primary" type="button">OK</button>
+        <button id="btnNo" class="btn ghost">キャンセル</button>
+        <button id="btnYes" class="btn primary">OK</button>
       </div>
     </div>
   </div>
@@ -221,7 +216,7 @@
     <div class="box smallBox">
       <div class="boxHead">
         <div class="boxTitle">設定</div>
-        <button class="btn small ghost" data-close="settings" type="button">閉じる</button>
+        <button class="btn small ghost" data-close="settings">閉じる</button>
       </div>
       <div class="settings">
         <div class="setBlock">
@@ -230,11 +225,19 @@
             <input id="repoInput" class="input" placeholder="owner/repo" />
           </div>
           <div class="setRow" style="margin-top:10px;">
-            <button id="btnRepoSave" class="btn primary small" type="button">保存</button>
-            <button id="btnRescan" class="btn small" type="button">再スキャン</button>
-            <button id="btnClearCache" class="btn small ghost" type="button">キャッシュ削除</button>
+            <button id="btnRepoSave" class="btn primary small">保存</button>
+            <button id="btnRescan" class="btn small">再スキャン</button>
+            <button id="btnClearCache" class="btn small ghost">キャッシュ削除</button>
           </div>
-          <div class="setHint">assets/field.*、assets/cards、assets/card_back.* を自動検出します（拡張子二重OK）。</div>
+          <div class="setHint">assets/field.*、assets/cards の画像を自動検出します。</div>
+        </div>
+
+        <div class="setBlock">
+          <div class="setTitle">サウンド</div>
+          <div class="setRow">
+            <button id="btnSound" class="btn small primary">SE: ON</button>
+          </div>
+          <div class="setHint">今は内蔵SE（ピコ音）です。後で音源ファイルに差し替え可能です。</div>
         </div>
       </div>
     </div>
@@ -246,19 +249,19 @@
     <div class="box smallBox">
       <div class="boxHead">
         <div class="boxTitle">操作</div>
-        <button class="btn small ghost" data-close="help" type="button">閉じる</button>
+        <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
       <div class="help">
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
-        <div class="helpItem">・手札タップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場／見参カードは空きCを長押しで見参</div>
-        <div class="helpItem">・MAIN：エフェクト/アイテム＝空きEをタップで配置（即時効果は直ちに解決）</div>
-        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラ/シールドをタップ</div>
+        <div class="helpItem">・手札をタップ：選択（紫枠）</div>
+        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（RANK4以下）／RANK5以上は空きCを長押しで見参（仮）</div>
+        <div class="helpItem">・MAIN：アイテム/エフェクト＝空きEをタップで配置（仮）</div>
+        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラまたはシールドをタップ</div>
         <div class="helpItem">・LOG：長押しでログ表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=50001"></script>
+  <script src="./script.js?v=40006"></script>
 </body>
 </html>
