@@ -20,7 +20,7 @@
   /* 左列（相手のD/W/O） */
   --sideColMin: 44px;
 
-  /* 右側（自分のD/W/O）を相手と同サイズ感に見せるための制限 */
+  /* 右側pile（自分）も相手と同サイズ感に寄せる */
   --pileRightMaxW: 56px;
 
   /* シールドバッジ */
@@ -39,7 +39,6 @@ body{
   overflow:hidden;
 }
 
-/* screens */
 .screen{ display:none; height:100%; }
 .screen.active{
   display:flex;
@@ -156,7 +155,12 @@ body{
 }
 
 /* stage */
-.stage{ flex:1 1 auto; padding:10px; min-height:0; overflow:hidden; }
+.stage{
+  flex:1 1 auto;
+  padding:10px;
+  min-height:0;
+  overflow:hidden;
+}
 .matWrap{
   width:100%;
   height:100%;
@@ -225,7 +229,7 @@ body{
 .pile .z{ font-size:11px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:16px; font-weight:1000; }
 
-/* ★右側のpileだけ幅を固定して、相手側と同じサイズ感に統一 */
+/* ★右側のpileだけ幅制限 */
 .pileRight{
   justify-self:center;
   width:100%;
@@ -236,7 +240,7 @@ body{
 .stageRow{ padding:8px; display:flex; flex-direction:column; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:6px; font-weight:900; }
 
-/* 3枚を中央寄せ + 余白 */
+/* 3枚を中央寄せ */
 .slots{
   display:flex;
   gap:var(--stageGap);
@@ -473,41 +477,48 @@ body{
   outline:none;
 }
 
-/* ===== iPhone向け ===== */
+/* ===== iPhone向け（空白を詰めて盤面を拡大） ===== */
 @media (max-width: 440px){
   :root{
-    /* ★盤面は少し大きく戻す（小さすぎ緩和） */
-    --matScale: 0.78;
+    /* ★空白を詰めた分、盤面を“約35%”拡大（v40021の0.78基準で1.05相当） */
+    --matScale: 1.05;
 
-    /* ★ステージ上カードを縮小（大きすぎ対策） */
-    --stageSlotMaxW: 62px;
+    /* ★フィールド上のカードは手札より小さく（はみ出し対策） */
+    --stageSlotMaxW: 52px;
 
-    --stageGap: 14px;
-    --sideColMin: 38px;
+    --stageGap: 16px;
+    --sideColMin: 36px;
     --shieldBadgeFont: 8px;
 
-    /* 右pileの最大幅も少し小さく */
-    --pileRightMaxW: 52px;
+    /* 右pileの最大幅も縮めて横の空白を回収 */
+    --pileRightMaxW: 48px;
   }
 
   .hud{ padding:8px; }
   .chip{ padding:7px 9px; font-size:11px; }
   .iconBtn{ padding:7px 9px; border-radius:11px; }
 
+  .noticeBar{ padding:5px 8px; }
   .noticeText{ font-size:12px; }
 
-  .enemyHandDock{ padding:2px 10px; }
+  /* ★相手ハンドと盤面の“空白”を詰める */
+  .enemyHandDock{ padding:2px 8px; }
+
   .handBack{ width:18px; height:26px; }
 
-  .stage{ padding:6px; }
-  .grid{ gap:8px; padding:8px; }
+  /* ★盤面の外側余白を詰める */
+  .stage{ padding:4px; }
+  .grid{ gap:7px; padding:7px; }
 
-  .handDock{ padding:8px; }
+  /* ★自分ハンドと盤面の“空白”を詰める */
+  .handDock{ padding:6px; }
   .hand{ padding:8px; gap:8px; }
-  .handCard{ width:64px; }
+
+  /* 手札は今の感覚を維持（フィールドより一回り大きい） */
+  .handCard{ width:62px; }
 }
 
-/* 超小型iPhone */
+/* 超小型iPhoneは少しだけ下げる */
 @media (max-width: 390px){
-  :root{ --matScale: 0.74; }
+  :root{ --matScale: 1.00; }
 }
