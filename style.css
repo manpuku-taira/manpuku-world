@@ -8,24 +8,22 @@
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
 
-  /* スロットサイズ */
+  /* スロットサイズ（C/E/SHIELD共通の基準） */
   --stageSlotMaxW: 74px;
 
-  /* C/E間隔 */
+  /* 3列の間隔 */
   --stageGap: 18px;
 
   /* 盤面縮尺 */
   --matScale: 1;
 
-  /* 左列（相手のD/W/O） */
+  /* 左列（相手pile） */
   --sideColMin: 44px;
 
-  /* 右側pile（自分）も相手と同サイズ感に寄せる */
+  /* 右側pile */
   --pileRightMaxW: 56px;
-
-  /* シールドバッジ */
-  --shieldBadgeFont: 9px;
 }
+
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
 body{
@@ -228,20 +226,15 @@ body{
 }
 .pile .z{ font-size:11px; letter-spacing:.22em; color:var(--muted); font-weight:1000; }
 .pile .n{ font-size:16px; font-weight:1000; }
-
-/* ★右側のpileだけ幅制限 */
-.pileRight{
-  justify-self:center;
-  width:100%;
-  max-width: var(--pileRightMaxW);
-}
+.pileRight{ justify-self:center; width:100%; max-width: var(--pileRightMaxW); }
 
 /* stage rows */
 .stageRow{ padding:8px; display:flex; flex-direction:column; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:6px; font-weight:900; }
 
 /* 3枚を中央寄せ */
-.slots{
+.slots,
+.shields{
   display:flex;
   gap:var(--stageGap);
   align-items:center;
@@ -249,7 +242,7 @@ body{
   min-height:56px;
 }
 
-/* slot */
+/* slot base */
 .slot{
   width: min(var(--stageSlotMaxW), calc((100% - (var(--stageGap) * 2)) / 3));
   aspect-ratio: 2 / 3;
@@ -265,6 +258,21 @@ body{
 .slot.filled{ border-style:solid; border-color: rgba(89,242,255,.22); }
 .slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
+
+/* shield cards look like cards, not dashed */
+.shieldCard{
+  width: min(var(--stageSlotMaxW), calc((100% - (var(--stageGap) * 2)) / 3));
+  aspect-ratio: 2 / 3;
+  border-radius:14px;
+  border:1px solid rgba(167,176,217,.22);
+  background:#070914;
+  position:relative;
+  overflow:hidden;
+  flex:0 0 auto;
+  box-shadow:0 10px 24px rgba(0,0,0,.18);
+}
+.shieldCard.enemy{ transform:rotate(180deg); }
+.shieldCard.empty{ opacity:.22; filter:saturate(.8); }
 
 .slotHint{
   position:absolute;
@@ -287,32 +295,6 @@ body{
 }
 .face.fallback{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
-}
-
-/* shields */
-.shieldSlot{ padding:8px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
-.sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; }
-.backCard{
-  flex:1;
-  border-radius:14px;
-  border:1px solid rgba(167,176,217,.22);
-  background:#070914;
-  background-size:cover; background-position:center;
-}
-.backCard.empty{ opacity:.2; }
-
-/* smaller badge */
-.shieldCount{
-  position:absolute;
-  right:8px;
-  top:8px;
-  font-size:var(--shieldBadgeFont);
-  font-weight:1000;
-  padding:3px 5px;
-  border-radius:9px;
-  background:rgba(0,0,0,.45);
-  border:1px solid rgba(89,242,255,.14);
-  color:rgba(233,236,255,.92);
 }
 
 /* hand */
@@ -364,7 +346,7 @@ body{
   background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92));
 }
 
-/* modals */
+/* modals (unchanged) */
 .modal{ display:none; position:fixed; inset:0; z-index:50; }
 .modal.show{ display:block; }
 .modal .back{ position:absolute; inset:0; background:rgba(0,0,0,.65); z-index:0; }
@@ -430,7 +412,6 @@ body{
 .confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; }
 .confirmBtns{ display:flex; gap:10px; padding:0 12px 12px; justify-content:flex-end; }
 
-/* picker */
 .pickBody{ padding:12px; }
 .pickHint{ font-size:14px; font-weight:900; color:rgba(233,236,255,.92); margin-bottom:10px; }
 .pickList{
@@ -460,7 +441,6 @@ body{
 .pickMeta .t{ font-weight:1000; font-size:13px; }
 .pickMeta .s{ color:var(--muted); font-size:11px; margin-top:2px; }
 
-/* settings */
 .settings{ padding:12px; display:flex; flex-direction:column; gap:12px; }
 .setBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
 .setTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
@@ -477,20 +457,13 @@ body{
   outline:none;
 }
 
-/* ===== iPhone向け（空白を詰めて盤面を拡大） ===== */
+/* ===== iPhone向け（現行の良好バランス維持） ===== */
 @media (max-width: 440px){
   :root{
-    /* ★空白を詰めた分、盤面を“約35%”拡大（v40021の0.78基準で1.05相当） */
     --matScale: 1.05;
-
-    /* ★フィールド上のカードは手札より小さく（はみ出し対策） */
     --stageSlotMaxW: 52px;
-
     --stageGap: 16px;
     --sideColMin: 36px;
-    --shieldBadgeFont: 8px;
-
-    /* 右pileの最大幅も縮めて横の空白を回収 */
     --pileRightMaxW: 48px;
   }
 
@@ -501,24 +474,16 @@ body{
   .noticeBar{ padding:5px 8px; }
   .noticeText{ font-size:12px; }
 
-  /* ★相手ハンドと盤面の“空白”を詰める */
   .enemyHandDock{ padding:2px 8px; }
-
   .handBack{ width:18px; height:26px; }
 
-  /* ★盤面の外側余白を詰める */
   .stage{ padding:4px; }
   .grid{ gap:7px; padding:7px; }
 
-  /* ★自分ハンドと盤面の“空白”を詰める */
   .handDock{ padding:6px; }
   .hand{ padding:8px; gap:8px; }
-
-  /* 手札は今の感覚を維持（フィールドより一回り大きい） */
   .handCard{ width:62px; }
 }
-
-/* 超小型iPhoneは少しだけ下げる */
 @media (max-width: 390px){
   :root{ --matScale: 1.00; }
 }
