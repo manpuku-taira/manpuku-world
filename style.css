@@ -7,23 +7,24 @@
   --ok: rgba(89,242,255,.95);
   --warn: rgba(255,77,109,.95);
 
-  /* iPhone safe area */
   --sab: env(safe-area-inset-bottom, 0px);
   --sat: env(safe-area-inset-top, 0px);
 
-  /* slot size: stable on iPhone */
-  --slotW: clamp(76px, 23vw, 108px);
-  --slotH: clamp(106px, 32vw, 150px);
-  --slotSmallW: clamp(64px, 19vw, 94px);
-  --slotSmallH: clamp(90px, 28vw, 132px);
+  /* iPhone: slot sizes (stable) */
+  --slotW: clamp(70px, 22vw, 102px);
+  --slotH: clamp(98px, 30vw, 142px);
 
-  --handW: clamp(72px, 20vw, 96px);
-  --handH: clamp(102px, 29vw, 140px);
+  --slotSmallW: clamp(62px, 19vw, 92px);
+  --slotSmallH: clamp(86px, 27vw, 128px);
+
+  --pileW: clamp(78px, 22vw, 104px);
 }
 
 *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
-html, body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-family: -apple-system, system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif; }
-body{ overscroll-behavior: none; }
+html, body{ height:100%; margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system, system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+body{ overflow:hidden; } /* ★スクロールで開始などが起きないよう固定 */
 
 /* screens */
 .screen{ display:none; height:100%; }
@@ -42,11 +43,7 @@ body{ overscroll-behavior: none; }
   padding: 18px;
   box-shadow: 0 10px 30px rgba(0,0,0,.35);
 }
-.titleLogo{
-  font-weight: 1000;
-  letter-spacing: .12em;
-  font-size: 24px;
-}
+.titleLogo{ font-weight: 1000; letter-spacing: .12em; font-size: 24px; }
 .titleSub{ margin-top: 8px; color: var(--muted); font-size: 13px; }
 .titleBtns{ display:grid; grid-template-columns: 1fr; gap:10px; margin-top: 16px; }
 .boot{ margin-top: 14px; font-size: 12px; color: var(--muted); }
@@ -60,21 +57,16 @@ body{ overscroll-behavior: none; }
   border-radius: 14px;
   font-weight: 900;
 }
-.btn.primary{ border-color: rgba(89,242,255,.35); box-shadow: 0 0 0 1px rgba(89,242,255,.08) inset; }
+.btn.primary{ border-color: rgba(89,242,255,.35); }
 .btn.danger{ border-color: rgba(255,77,109,.35); }
 .btn:disabled{ opacity:.45; }
 
-/* HUD sticky top */
+/* HUD */
 .hud{
-  position: sticky;
-  top: 0;
-  z-index: 20;
   padding: calc(10px + var(--sat)) 10px 10px;
   background: linear-gradient(to bottom, rgba(6,8,20,.95), rgba(6,8,20,.55));
-  backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255,255,255,.08);
-  display:flex;
-  gap:10px;
+  display:flex; gap:10px; align-items:center;
 }
 .hudLeft, .hudMid, .hudRight{ display:flex; gap:8px; align-items:center; }
 .hudLeft{ flex:1; }
@@ -92,7 +84,6 @@ body{ overscroll-behavior: none; }
 .chip.active{ border-color: rgba(89,242,255,.35); }
 .chip.active.enemy{ border-color: rgba(255,77,109,.35); }
 .firstInfo{ color: var(--muted); font-size: 12px; font-weight: 800; }
-
 .hudBtn{
   border:1px solid rgba(255,255,255,.14);
   background: rgba(18,22,40,.55);
@@ -103,69 +94,66 @@ body{ overscroll-behavior: none; }
   font-size: 12px;
 }
 
-/* board: scroll area between sticky top and sticky bottom */
-#game{
-  height:100%;
-  display:flex;
-  flex-direction: column;
-}
-.board{
-  position: relative;
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 12px 10px 16px;
+/* stage (fit without scroll) */
+#game{ height:100%; display:flex; flex-direction:column; }
+.stage{
+  position:relative;
+  flex:1;
+  padding: 10px 10px calc(10px + var(--sab));
+  overflow:hidden;
 }
 .fieldImg{
   position:absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;            /* ★根本：切れない */
+  object-fit: contain;          /* ★切れない */
   object-position: center;
-  opacity: .12;
-  pointer-events: none;
-  filter: saturate(.9) contrast(1.05);
-  transform: translateZ(0);
+  opacity: .22;                 /* ★見えるように少し濃く */
+  pointer-events:none;
 }
 
-/* sections */
+/* side panels */
 .side{
   position: relative;
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(18,22,40,.40);
   border-radius: 18px;
   padding: 10px;
-  overflow: hidden;
+  overflow:hidden;
 }
-.side.enemy{ box-shadow: 0 10px 24px rgba(0,0,0,.22); }
-.side.you{ box-shadow: 0 10px 24px rgba(0,0,0,.22); }
-
 .rowTitle{
   display:flex; align-items:center; justify-content:space-between;
-  gap:10px;
-  margin-bottom: 8px;
+  gap:10px; margin-bottom: 8px;
 }
 .rowName{ font-weight: 1000; letter-spacing: .12em; font-size: 13px; }
 .miniCounts{ display:flex; gap:10px; color: var(--muted); font-size: 12px; font-weight: 900; }
 
-.zones{ display:flex; flex-direction: column; gap: 10px; }
-.zoneBlock{ display:flex; align-items:flex-start; gap:10px; }
-.zoneLabel{
-  width: 64px;
-  min-width: 64px;
-  font-size: 12px;
+.divider{ height: 10px; }
+
+/* 3 rows × 4 columns layout */
+.grid34{
+  display:grid;
+  grid-template-columns: 62px 1fr var(--pileW);
+  grid-auto-rows: auto;
+  row-gap: 10px;
+  column-gap: 10px;
+  align-items:start;
+}
+.label{
   color: var(--muted);
   font-weight: 1000;
+  font-size: 12px;
   padding-top: 6px;
 }
-.zoneGrid{
+
+.grid3{
   display:grid;
   grid-template-columns: repeat(3, var(--slotW));
   gap: 10px;
   justify-content: center;
 }
-.zoneGrid.small{
+.grid3.small{
   grid-template-columns: repeat(3, var(--slotSmallW));
 }
 
@@ -178,7 +166,6 @@ body{ overscroll-behavior: none; }
   background: rgba(6,8,14,.55);
   overflow:hidden;
   position: relative;
-  touch-action: manipulation;
 }
 .slot.small{ width: var(--slotSmallW); height: var(--slotSmallH); }
 .slot.disabled{ opacity:.35; }
@@ -191,7 +178,6 @@ body{ overscroll-behavior: none; }
   background-position: center;
   background-repeat:no-repeat;
 }
-.face.enemyFlip{ filter: saturate(.9) brightness(.95); }
 .face.fallback{
   background: linear-gradient(135deg, rgba(89,242,255,.08), rgba(179,91,255,.08));
 }
@@ -208,22 +194,16 @@ body{ overscroll-behavior: none; }
   text-align: center;
 }
 
-/* piles */
-.piles{
-  display:flex;
-  gap:10px;
-  justify-content: center;
-  margin-top: 10px;
-}
+/* piles right column */
 .pileBtn{
   border:1px solid rgba(255,255,255,.14);
   background: rgba(12,14,26,.55);
   color: var(--text);
   border-radius: 14px;
   padding: 8px;
-  width: clamp(90px, 28vw, 120px);
+  width: var(--pileW);
 }
-.pileFace{
+.smallPile .pileFace{
   width: 100%;
   aspect-ratio: 3/4;
   border-radius: 12px;
@@ -239,22 +219,13 @@ body{ overscroll-behavior: none; }
   color: var(--muted);
 }
 
-/* divider */
-.divider{
-  height: 14px;
-}
-
-/* enemy hand line */
-.enemyHandLine{ margin-top: 10px; }
-.enemyHandLabel{ font-size: 12px; color: var(--muted); font-weight: 1000; margin-bottom: 6px; }
-.enemyHand{
-  display:flex;
-  gap:6px;
-  overflow:hidden;
-}
+/* hand areas */
+.handLine{ margin-top: 10px; }
+.handLineLabel{ font-size: 12px; color: var(--muted); font-weight: 1000; margin-bottom: 6px; }
+.enemyHand{ display:flex; gap:6px; overflow:hidden; }
 .handBack{
-  width: clamp(30px, 7vw, 38px);
-  height: clamp(44px, 10vw, 54px);
+  width: clamp(28px, 6.8vw, 36px);
+  height: clamp(40px, 9.6vw, 50px);
   border-radius: 8px;
   border:1px solid rgba(255,255,255,.14);
   background: rgba(6,8,14,.55);
@@ -262,23 +233,7 @@ body{ overscroll-behavior: none; }
   background-position: center;
 }
 
-/* bottom sticky: never overlaps because board is flex:1 above */
-.bottom{
-  position: sticky;
-  bottom: 0;
-  z-index: 30;
-  padding: 10px 10px calc(10px + var(--sab));
-  background: linear-gradient(to top, rgba(6,8,20,.96), rgba(6,8,20,.55));
-  backdrop-filter: blur(8px);
-  border-top: 1px solid rgba(255,255,255,.08);
-}
-.announce{
-  min-height: 22px;
-  color: var(--muted);
-  font-weight: 900;
-  font-size: 13px;
-}
-.handWrap{ margin-top: 8px; }
+.handWrap{ margin-top: 10px; }
 .handHint{ font-size: 12px; color: var(--muted); font-weight: 900; margin-bottom: 6px; }
 .hand{
   display:flex;
@@ -286,28 +241,35 @@ body{ overscroll-behavior: none; }
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 6px;
-  scroll-snap-type: x mandatory;
 }
 .handCard{
-  width: var(--handW);
-  height: var(--handH);
   flex: 0 0 auto;
+  width: clamp(70px, 20vw, 92px);
+  height: clamp(98px, 29vw, 132px);
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(6,8,14,.55);
   background-size: cover;
   background-position: center;
-  scroll-snap-align: start;
 }
 .handCard.sel{
   box-shadow: 0 0 0 2px rgba(89,242,255,.25) inset, 0 0 18px rgba(89,242,255,.12);
 }
+
+/* action bar */
 .actions{
-  display:flex;
-  gap:10px;
   margin-top: 8px;
+  display:grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap:10px;
+  align-items:center;
 }
-.actions .btn{ flex: 1; }
+.announce{
+  min-height: 22px;
+  color: var(--muted);
+  font-weight: 900;
+  font-size: 13px;
+}
 
 /* modal */
 .modal{
@@ -359,13 +321,7 @@ body{ overscroll-behavior: none; }
   background: rgba(6,8,14,.55);
   object-fit: cover;
 }
-.viewerText{
-  margin-top: 10px;
-  white-space: pre-wrap;
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.55;
-}
+.viewerText{ margin-top: 10px; white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
 .zoneList{ display:flex; flex-direction: column; gap:10px; }
 .zoneItem{
   display:flex; gap:10px; align-items:center;
@@ -385,12 +341,10 @@ body{ overscroll-behavior: none; }
 .zMeta .t{ font-weight: 1000; }
 .zMeta .s{ margin-top: 4px; color: var(--muted); font-weight: 900; font-size: 12px; }
 
-.confirmBody{ color: var(--text); font-weight: 800; white-space: pre-wrap; }
 .confirmBtns{ display:flex; gap:10px; margin-top: 10px; }
 .confirmBtns .btn{ flex: 1; }
-
-.formRow{ display:flex; flex-direction: column; gap:8px; }
-.label{ color: var(--muted); font-weight: 1000; font-size: 12px; }
+.formBtns{ display:grid; gap:10px; margin-top: 10px; }
+.label2{ color: var(--muted); font-weight: 1000; font-size: 12px; }
 .input{
   border:1px solid rgba(255,255,255,.14);
   background: rgba(6,8,14,.55);
@@ -399,8 +353,6 @@ body{ overscroll-behavior: none; }
   padding: 12px;
   font-weight: 900;
 }
-.formBtns{ display:grid; gap:10px; margin-top: 10px; }
-
 .help ul{ margin:0; padding-left: 18px; color: var(--text); font-weight: 800; }
 .logBody{ display:flex; flex-direction: column; gap:6px; }
 .logLine{ font-size: 12px; font-weight: 900; color: var(--muted); }
