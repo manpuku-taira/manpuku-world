@@ -12,10 +12,6 @@
   /* sizes */
   --handH: 132px;
   --actionH: 64px;
-
-  /* responsive slot sizes (必ず3枠入る) */
-  --slotW: clamp(64px, 20.5vw, 86px);
-  --slotGap: clamp(6px, 2.0vw, 12px);
 }
 
 *{ box-sizing:border-box; }
@@ -238,19 +234,18 @@ body{
 
 .slotRow{
   display:flex;
-  gap:var(--slotGap);
+  gap:12px;
   justify-content:center;
   align-items:center;
-  flex-wrap:nowrap;
 }
 @media (max-width:420px){
+  .slotRow{ gap:10px; }
   .matBody{ grid-template-columns: 84px 1fr; }
   .pileBtn{ width:84px; }
-  .zoneRow{ padding:9px; }
 }
 
 .slot{
-  width:var(--slotW);
+  width:86px;
   aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(167,176,217,.22);
@@ -259,7 +254,7 @@ body{
   overflow:hidden;
   flex:0 0 auto;
 }
-.slot.small{ width:var(--slotW); } /* シールドも同サイズに統一 */
+.slot.small{ width:78px; }
 .slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 .slot.disabled{ opacity:.45; }
@@ -287,6 +282,7 @@ body{
   border:1px solid rgba(89,242,255,.18);
 }
 
+.shieldRow .slot{ width:76px; } /* shieldは少し小さく */
 .shieldRow{ justify-content:flex-start; }
 .matPanel.you .shieldRow{ justify-content:flex-start; }
 .matPanel.enemy .shieldRow{ justify-content:flex-end; }
@@ -395,7 +391,6 @@ body{
   font-weight:1000;
   letter-spacing:.08em;
   box-shadow:var(--shadow);
-  touch-action: manipulation;
 }
 .actBtn:active{ transform:translateY(1px); }
 .actBtn.danger{
@@ -464,7 +459,7 @@ body{
 .logLine.muted{ color:rgba(167,176,217,.92); }
 .logLine.warn{ color:rgba(255,77,109,.95); }
 
-.confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; white-space:pre-wrap; }
+.confirmBody{ padding:14px 12px; font-size:14px; line-height:1.4; }
 .confirmBtns{ display:flex; gap:10px; padding:0 12px 12px; justify-content:flex-end; }
 
 .settings{ padding:12px; display:flex; flex-direction:column; gap:12px; }
