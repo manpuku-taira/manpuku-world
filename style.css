@@ -20,12 +20,11 @@ body{
     radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
     var(--bg);
   color:var(--text);
-  overflow:hidden;
 }
 
 /* screens */
 .screen{ display:none; height:100%; }
-.screen.active{ display:flex; flex-direction:column; min-height:0; }
+.screen.active{ display:flex; flex-direction:column; }
 
 /* buttons */
 .btn{
@@ -38,12 +37,12 @@ body{
   font-size:13px;
   letter-spacing:.06em;
   box-shadow:0 10px 24px rgba(0,0,0,.35);
-  -webkit-tap-highlight-color: transparent;
 }
 .btn:active{ transform:translateY(1px); }
 .btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
 .btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
 .btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
+.btn.danger{ border:1px solid rgba(255,77,109,.35); background:linear-gradient(180deg, rgba(255,77,109,.22), rgba(10,12,22,.92)); }
 
 .chip{
   padding:8px 10px;
@@ -77,37 +76,15 @@ body{
 /* hud */
 .hud{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
   gap:10px;
-  padding:10px 10px 8px;
+  padding:10px;
   border-bottom:1px solid rgba(89,242,255,.12);
   background:rgba(0,0,0,.18);
 }
 .hudLeft,.hudRight{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.hudCenter{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:flex-start;
-  gap:6px;
-  padding-top:2px;
-}
-#firstInfo{ font-weight:900; color:var(--muted); letter-spacing:.12em; font-size:12px; }
-.announce{
-  width:min(560px, 92vw);
-  font-weight:900;
-  font-size:13px;
-  letter-spacing:.06em;
-  color:rgba(233,236,255,.95);
-  text-align:center;
-  padding:6px 10px;
-  border-radius:14px;
-  border:1px solid rgba(89,242,255,.12);
-  background:rgba(6,8,14,.35);
-  min-height:28px;
-}
+.hudCenter{ font-weight:900; color:var(--muted); letter-spacing:.12em; }
 
 .iconBtn{
   border:1px solid rgba(89,242,255,.18);
@@ -116,12 +93,11 @@ body{
   padding:8px 10px;
   border-radius:12px;
   font-weight:1000;
-  -webkit-tap-highlight-color: transparent;
 }
 
 /* enemy hand */
 .enemyHandDock{
-  padding:8px 10px 6px;
+  padding:8px 10px;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -130,7 +106,7 @@ body{
 .enemyHandLabel{ font-weight:900; font-size:12px; color:var(--muted); letter-spacing:.14em; }
 .enemyHand{ display:flex; gap:8px; overflow:hidden; justify-content:flex-end; align-items:center; flex:1; }
 .handBack{
-  width:30px; height:44px;
+  width:34px; height:48px;
   border-radius:10px;
   border:1px solid rgba(167,176,217,.22);
   background:linear-gradient(180deg, rgba(10,12,22,.85), rgba(6,8,14,.85));
@@ -139,18 +115,11 @@ body{
 }
 
 /* stage */
-.stage{
-  flex:1;
-  padding:10px;
-  min-height:0;
-  overflow:auto; /* iPhoneで自分側が見えない問題を根本解消：スクロール前提で必ず到達できる */
-  -webkit-overflow-scrolling: touch;
-}
+.stage{ flex:1; padding:10px; min-height:0; }
 .mat{
   position:relative;
   width:100%;
-  min-height:720px; /* iPhoneで潰れない下限 */
-  height:clamp(720px, 120vh, 1100px); /* 画面が小さくても両面が成立する */
+  height:100%;
   border:1px solid rgba(89,242,255,.12);
   border-radius:18px;
   overflow:hidden;
@@ -158,7 +127,7 @@ body{
   background:rgba(0,0,0,.22);
 }
 
-/* field images */
+/* field images (top/bottom) */
 .field{
   position:absolute;
   left:0; right:0;
@@ -204,23 +173,25 @@ body{
 .stageRow{ padding:10px; }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; font-weight:900; }
 
-/* slots */
+/* iPhoneでも3枠が潰れないように固定（重要） */
 .slots{
   display:flex;
   align-items:center;
-  justify-content:center; /* 左詰め防止 */
-  gap:12px; /* 「詰めすぎ」対策：カード幅の約1/3程度の余白感 */
+  justify-content:center;
+  gap:12px;
+  width:100%;
 }
+
+/* IMPORTANT: empty slot visible */
 .slot{
-  width:82px;
-  height:114px;
+  width:clamp(52px, 18vw, 92px);
+  aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(167,176,217,.22);
   background:rgba(6,8,14,.55);
   position:relative;
   overflow:hidden;
   flex:0 0 auto;
-  touch-action: manipulation;
 }
 .slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
@@ -239,11 +210,10 @@ body{
 .shieldSlot{ padding:10px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
 .sTag{ font-size:10px; letter-spacing:.18em; color:var(--muted); font-weight:900; }
 .backCard{
-  width:82px;
-  height:114px;
+  flex:1;
   border-radius:14px;
   border:1px solid rgba(167,176,217,.22);
-  background:#070914;
+  background: #070914;
   background-size:cover; background-position:center;
 }
 .backCard.empty{ opacity:.2; }
@@ -260,14 +230,11 @@ body{
 }
 
 /* hand */
-.handDock{
-  padding:10px 10px calc(18px + env(safe-area-inset-bottom));
-}
+.handDock{ padding:10px; }
 .hand{
   display:flex;
   gap:10px;
   overflow-x:auto;
-  -webkit-overflow-scrolling: touch;
   padding:10px;
   border:1px solid rgba(89,242,255,.12);
   border-radius:18px;
@@ -275,29 +242,27 @@ body{
   box-shadow:var(--shadow);
 }
 .handCard{
-  width:86px;
+  width:92px;
   flex:0 0 auto;
-  height:122px;
+  aspect-ratio:2/3;
   border-radius:14px;
   border:1px solid rgba(89,242,255,.18);
   background:rgba(6,8,14,.55);
   background-size:cover;
   background-position:center;
   box-shadow:var(--shadow);
-  touch-action: manipulation;
 }
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* FAB: 押せない問題の根本対策（常に最前面・安全域回避・pointer-events保証） */
+/* fab */
 .fab{
   position:fixed;
   right:10px;
-  bottom:calc(12px + env(safe-area-inset-bottom));
+  bottom:12px;
   display:flex;
   gap:10px;
-  z-index:9999;
-  pointer-events:auto;
+  z-index:10;
 }
 .fabBtn{
   border:1px solid rgba(89,242,255,.22);
@@ -308,8 +273,6 @@ body{
   font-weight:1000;
   letter-spacing:.08em;
   box-shadow:var(--shadow);
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 .fabBtn.danger{
   border:1px solid rgba(255,77,109,.35);
@@ -317,7 +280,7 @@ body{
 }
 
 /* modals */
-.modal{ display:none; position:fixed; inset:0; z-index:10000; }
+.modal{ display:none; position:fixed; inset:0; z-index:50; }
 .modal.show{ display:block; }
 .back{ position:absolute; inset:0; background:rgba(0,0,0,.65); }
 .box{
@@ -368,7 +331,7 @@ body{
 
 .zoneList{ padding:12px; display:flex; flex-direction:column; gap:8px; max-height:74vh; overflow:auto; }
 .zoneItem{ display:flex; gap:10px; align-items:center; padding:10px; border-radius:14px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
-.zThumb{ width:54px; height:76px; border-radius:10px; border:1px solid rgba(167,176,217,.18); background-size:cover; background-position:center; }
+.zThumb{ width:54px; aspect-ratio:2/3; border-radius:10px; border:1px solid rgba(167,176,217,.18); background-size:cover; background-position:center; }
 .zMeta .t{ font-weight:1000; font-size:13px; }
 .zMeta .s{ color:var(--muted); font-size:11px; }
 
@@ -393,11 +356,17 @@ body{
   border:1px solid rgba(89,242,255,.18);
   background:rgba(6,8,14,.55);
   color:var(--text);
+  outline:none;
 }
+.input::placeholder{ color:rgba(167,176,217,.7); }
 
-/* mobile微調整 */
-@media (max-width:430px){
-  .slot, .backCard{ width:74px; height:104px; }
-  .handCard{ width:82px; height:116px; }
-  .slots{ gap:10px; }
+.help{ padding:12px; display:flex; flex-direction:column; gap:8px; }
+.helpItem{ font-size:13px; color:rgba(233,236,255,.92); line-height:1.5; }
+
+/* small devices tuning */
+@media (max-width:420px){
+  .grid{ gap:8px; padding:8px; }
+  .stageRow{ padding:8px; }
+  .rowTitle{ margin-bottom:6px; }
+  .handCard{ width:84px; }
 }
