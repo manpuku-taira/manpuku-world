@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40010" />
+  <link rel="stylesheet" href="./style.css?v=40007" />
 </head>
 <body>
 
@@ -48,8 +48,8 @@
       </div>
     </div>
 
-    <!-- Banner (instructions) -->
-    <div id="banner" class="banner"></div>
+    <!-- Announcement -->
+    <div id="announce" class="announce" aria-live="polite"></div>
 
     <!-- Enemy Hand -->
     <div class="enemyHandDock">
@@ -66,12 +66,10 @@
         <!-- Grid (6 rows × 4 cols) -->
         <div id="grid" class="grid">
 
-          <!-- ENEMY: row 1 (D + SSS) -->
-          <div class="cell pile deckPile" data-click="aiDeck">
-            <div class="pileBack" aria-hidden="true"></div>
+          <!-- Row 1: ENEMY D + SSS -->
+          <div class="cell pile" data-click="aiDeck">
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
-
           <div class="cell shieldSlot" data-side="AI" data-idx="0">
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
@@ -82,51 +80,43 @@
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
 
-          <!-- ENEMY: row 2 (W + EEE) -->
+          <!-- Row 2: ENEMY W + EEE (span 3) -->
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
-
-          <!-- span 3 cols (FIX iPhone) -->
           <div class="cell stageRow span3">
             <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
             <div id="aiE" class="slots enemy"></div>
           </div>
 
-          <!-- ENEMY: row 3 (O + CCC) -->
+          <!-- Row 3: ENEMY O + CCC (span 3) -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
-
-          <!-- span 3 cols (FIX iPhone) -->
           <div class="cell stageRow span3">
             <div class="rowTitle">ENEMY C（キャラクター）</div>
             <div id="aiC" class="slots enemy"></div>
           </div>
 
-          <!-- YOUR: row 4 (CCC + O) -->
-          <!-- span 3 cols (FIX iPhone) -->
+          <!-- Row 4: YOUR CCC (span 3) + O -->
           <div class="cell stageRow span3">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
           </div>
-
           <div class="cell pile" data-click="pOutside">
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
-          <!-- YOUR: row 5 (EEE + W) -->
-          <!-- span 3 cols (FIX iPhone) -->
+          <!-- Row 5: YOUR EEE (span 3) + W -->
           <div class="cell stageRow span3">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
           </div>
-
           <div class="cell pile" data-click="pWing">
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
 
-          <!-- YOUR: row 6 (SSS + D) -->
+          <!-- Row 6: YOUR SSS + D -->
           <div class="cell shieldSlot" data-side="P1" data-idx="0">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
@@ -136,15 +126,13 @@
           <div class="cell shieldSlot" data-side="P1" data-idx="2">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
-
-          <div class="cell pile deckPile" data-click="pDeck">
-            <div class="pileBack" aria-hidden="true"></div>
+          <div class="cell pile" data-click="pDeck">
             <div class="z">D</div><div id="pDeckN" class="n">0</div>
           </div>
 
         </div>
 
-        <!-- Arrow layer -->
+        <!-- Arrow layer (reserved) -->
         <svg class="arrow" id="arrow" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
       </div>
     </div>
@@ -251,17 +239,16 @@
         <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
       <div class="help">
-        <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
+        <div class="helpItem">・カード長押し：拡大＆テキスト確認（現在ATKも表示）</div>
         <div class="helpItem">・手札タップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（通常）</div>
-        <div class="helpItem">・MAIN：見参＝空きCを長押し（回数制限なし／コスト選択あり）</div>
-        <div class="helpItem">・MAIN：アイテム/エフェクト＝手札から使用→対象選択（必要な場合）</div>
-        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラ or シールドをタップ</div>
+        <div class="helpItem">・MAIN：C＝キャラ配置（見参カードは案内に従いコスト選択）</div>
+        <div class="helpItem">・MAIN：E＝アイテム/エフェクト配置（即時効果はその場で選択→ウイングへ）</div>
+        <div class="helpItem">・BATTLE：自分キャラタップで攻撃者選択 → 相手キャラ or シールドをタップ</div>
         <div class="helpItem">・LOG：長押しでログ表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40010"></script>
+  <script src="./script.js?v=40007"></script>
 </body>
 </html>
