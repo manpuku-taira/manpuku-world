@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40016" />
+  <link rel="stylesheet" href="./style.css?v=40017" />
 </head>
 <body>
 
@@ -15,9 +15,9 @@
         <div class="logoMain">Manpuku World</div>
         <div class="logoSub">マンプクワールド</div>
         <div class="logoTags">
-          <div class="tag">CYBER FANTASY</div>
-          <div class="tag">AI DUEL</div>
           <div class="tag">Tap / LongPress</div>
+          <div class="tag">C/E 3 Slots Always Visible</div>
+          <div class="tag">v40017</div>
         </div>
         <div class="mini">画面タップ または START で開始</div>
         <div style="margin-top:14px;">
@@ -48,6 +48,11 @@
       </div>
     </div>
 
+    <!-- NOTICE (常時アナウンス) -->
+    <div class="noticeBar">
+      <div id="notice" class="noticeText">読み込み中…</div>
+    </div>
+
     <!-- Enemy Hand -->
     <div class="enemyHandDock">
       <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
@@ -60,7 +65,6 @@
         <div id="fieldTop" class="field fieldTop"></div>
         <div id="fieldBottom" class="field fieldBottom"></div>
 
-        <!-- Grid -->
         <div id="grid" class="grid">
 
           <!-- ROW 1 -->
@@ -199,6 +203,21 @@
     </div>
   </div>
 
+  <!-- Picker（見参コスト選択UI） -->
+  <div id="pickM" class="modal">
+    <div class="back" data-close="pick"></div>
+    <div class="box">
+      <div class="boxHead">
+        <div id="pickTitle" class="boxTitle">選択</div>
+        <button class="btn small ghost" data-close="pick">閉じる</button>
+      </div>
+      <div class="pickBody">
+        <div id="pickHint" class="pickHint">選んでください</div>
+        <div id="pickList" class="pickList"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings -->
   <div id="settingsM" class="modal">
     <div class="back" data-close="settings"></div>
@@ -233,15 +252,14 @@
         <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
       <div class="help">
-        <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
-        <div class="helpItem">・手札をタップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（通常召喚）</div>
-        <div class="helpItem">・MAIN：登場できないキャラ＝空きCを長押しで見参（コスト必須）</div>
-        <div class="helpItem">・MAIN：エフェクト/アイテム＝空きEをタップで配置</div>
+        <div class="helpItem">・手札タップ：選択（紫枠）／長押し：拡大</div>
+        <div class="helpItem">・MAIN：キャラ（登場可）→ 空Cタップで登場（1ターン1回）</div>
+        <div class="helpItem">・MAIN：キャラ（登場不可）→ 空C長押しで見参（無制限・コスト選択）</div>
+        <div class="helpItem">・MAIN：エフェクト/アイテム → 空Eタップで配置</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40016"></script>
+  <script src="./script.js?v=40017"></script>
 </body>
 </html>
