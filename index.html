@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=40006" />
+  <link rel="stylesheet" href="./style.css?v=40010" />
 </head>
 <body>
 
@@ -48,6 +48,9 @@
       </div>
     </div>
 
+    <!-- Banner (instructions) -->
+    <div id="banner" class="banner"></div>
+
     <!-- Enemy Hand -->
     <div class="enemyHandDock">
       <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
@@ -64,9 +67,11 @@
         <div id="grid" class="grid">
 
           <!-- ENEMY: row 1 (D + SSS) -->
-          <div class="cell pile" data-click="aiDeck">
+          <div class="cell pile deckPile" data-click="aiDeck">
+            <div class="pileBack" aria-hidden="true"></div>
             <div class="z">D</div><div id="aiDeckN" class="n">0</div>
           </div>
+
           <div class="cell shieldSlot" data-side="AI" data-idx="0">
             <div class="sTag">ENEMY SHIELD</div><div class="backCard"></div>
           </div>
@@ -81,42 +86,42 @@
           <div class="cell pile" data-click="aiWing">
             <div class="z">W</div><div id="aiWingN" class="n">0</div>
           </div>
-          <div class="cell stageRow">
+
+          <!-- span 3 cols (FIX iPhone) -->
+          <div class="cell stageRow span3">
             <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-            <div id="aiE" class="slots"></div>
+            <div id="aiE" class="slots enemy"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
 
           <!-- ENEMY: row 3 (O + CCC) -->
           <div class="cell pile" data-click="aiOutside">
             <div class="z">O</div><div id="aiOutN" class="n">0</div>
           </div>
-          <div class="cell stageRow">
+
+          <!-- span 3 cols (FIX iPhone) -->
+          <div class="cell stageRow span3">
             <div class="rowTitle">ENEMY C（キャラクター）</div>
             <div id="aiC" class="slots enemy"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
 
           <!-- YOUR: row 4 (CCC + O) -->
-          <div class="cell stageRow">
+          <!-- span 3 cols (FIX iPhone) -->
+          <div class="cell stageRow span3">
             <div class="rowTitle">YOUR C（キャラクター）</div>
             <div id="pC" class="slots"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
+
           <div class="cell pile" data-click="pOutside">
             <div class="z">O</div><div id="pOutN" class="n">0</div>
           </div>
 
           <!-- YOUR: row 5 (EEE + W) -->
-          <div class="cell stageRow">
+          <!-- span 3 cols (FIX iPhone) -->
+          <div class="cell stageRow span3">
             <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
             <div id="pE" class="slots"></div>
           </div>
-          <div class="cell stageRow"></div>
-          <div class="cell stageRow"></div>
+
           <div class="cell pile" data-click="pWing">
             <div class="z">W</div><div id="pWingN" class="n">0</div>
           </div>
@@ -131,7 +136,9 @@
           <div class="cell shieldSlot" data-side="P1" data-idx="2">
             <div class="sTag">YOUR SHIELD</div><div class="backCard"></div>
           </div>
-          <div class="cell pile" data-click="pDeck">
+
+          <div class="cell pile deckPile" data-click="pDeck">
+            <div class="pileBack" aria-hidden="true"></div>
             <div class="z">D</div><div id="pDeckN" class="n">0</div>
           </div>
 
@@ -229,15 +236,7 @@
             <button id="btnRescan" class="btn small">再スキャン</button>
             <button id="btnClearCache" class="btn small ghost">キャッシュ削除</button>
           </div>
-          <div class="setHint">assets/field.*、assets/cards の画像を自動検出します。</div>
-        </div>
-
-        <div class="setBlock">
-          <div class="setTitle">サウンド</div>
-          <div class="setRow">
-            <button id="btnSound" class="btn small primary">SE: ON</button>
-          </div>
-          <div class="setHint">今は内蔵SE（ピコ音）です。後で音源ファイルに差し替え可能です。</div>
+          <div class="setHint">assets/field.*、assets/cards、assets/card_back.* を自動検出します。</div>
         </div>
       </div>
     </div>
@@ -253,15 +252,16 @@
       </div>
       <div class="help">
         <div class="helpItem">・カード長押し：拡大＆テキスト確認</div>
-        <div class="helpItem">・手札をタップ：選択（紫枠）</div>
-        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（RANK4以下）／RANK5以上は空きCを長押しで見参（仮）</div>
-        <div class="helpItem">・MAIN：アイテム/エフェクト＝空きEをタップで配置（仮）</div>
-        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラまたはシールドをタップ</div>
+        <div class="helpItem">・手札タップ：選択（紫枠）</div>
+        <div class="helpItem">・MAIN：キャラ＝空きCをタップで登場（通常）</div>
+        <div class="helpItem">・MAIN：見参＝空きCを長押し（回数制限なし／コスト選択あり）</div>
+        <div class="helpItem">・MAIN：アイテム/エフェクト＝手札から使用→対象選択（必要な場合）</div>
+        <div class="helpItem">・BATTLE：自分キャラをタップで攻撃者選択 → 相手キャラ or シールドをタップ</div>
         <div class="helpItem">・LOG：長押しでログ表示</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=40006"></script>
+  <script src="./script.js?v=40010"></script>
 </body>
 </html>
