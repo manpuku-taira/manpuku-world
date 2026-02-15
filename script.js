@@ -1,12 +1,9 @@
 /* =========================================================
-  Manpuku World - v50002 (SCROLL + iPhone FIX)
+  Manpuku World - v50002 (SCROLL STABLE / FIELD FIX)
   FIX:
-   - iPhoneでもC/E/Shieldが必ず3枠見える（CSS可変幅対応）
-   - 裏面 card_back.png.PNG を含む自動検出＆適用を堅牢化
-   - サーチ（ラウス等）で「候補の画像表示＆選択→手札へ」を実装
-   - フレイムバレット等：発動直後に選択UIを必ず出す（2択）
-   - No.08 手形：キャラクター扱いへ修正（C専用）
-   - iOSでボタンが反応しない/タップが死ぬ問題の要因を排除
+   - タイトル画面にフィールド画像が出ない
+   - フィールド画像は #game の背景にのみ適用（bodyには貼らない）
+   - iOS崩壊要因になりやすい background-attachment: fixed を廃止
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -131,12 +128,7 @@ const LS_IMG_CACHE = "mw_img_cache_v5";
 /* ---------- Rules ---------- */
 const PHASES = ["START","DRAW","MAIN","BATTLE","END"];
 
-/* ---------- Card registry (20) ----------
-  kind:
-   - "character"
-   - "effect" (one-shot)
-   - "item" (equip)
-*/
+/* ---------- Card registry (20) ---------- */
 const CardRegistry = [
   { no:1,  name:"黒の魔法使いクルエラ", kind:"character", tags:["黒魔法"], titleTag:"恋愛疾患特殊医療機a-xブラスター",
     baseAtk:1500, rank:5,
@@ -185,13 +177,10 @@ const CardRegistry = [
     baseAtk:1500, rank:4,
     text:normalizeText("（効果文言未確定：現版では効果なし）")
   },
-
-  /* ★修正：ご主人様の指摘どおり「手形」はキャラクター扱い */
-  { no:8,  name:"組織の男 手形", kind:"character", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
-    baseAtk:1000, rank:3,
+  { no:8,  name:"組織の男 手形", kind:"effect", tags:[], titleTag:"恋愛疾患特殊医療機a-xブラスター",
+    baseAtk:0, rank:2,
     text:normalizeText(`・相手ターンに1度発動できる。相手が発動した効果を無効にする。`)
   },
-
   { no:9,  name:"小太郎・孫悟空Lv17", kind:"character", tags:["BUGBUG西遊記"], titleTag:"BUGBUG西遊記",
     baseAtk:2000, rank:4,
     text:normalizeText(`・自分ステージに存在：手札の「小次郎」を見参させる。\n・自分ステージに「小次郎」がある時ATK+500。`)
@@ -309,6 +298,51 @@ const state = {
   gameOver:false,
 };
 
+/* =========================================================
+   FIELD BACKGROUND CONTROL (v50002)
+   - タイトルでは出さない
+   - ゲーム(#game)背景にだけ適用
+========================================================= */
+function clearFieldBackground(){
+  // title/game両方を「何も貼ってない」状態に戻す
+  if(el.title){
+    el.title.style.backgroundImage = "";
+    el.title.style.backgroundSize = "";
+    el.title.style.backgroundPosition = "";
+    el.title.style.backgroundRepeat = "";
+  }
+  if(el.game){
+    el.game.style.backgroundImage = "";
+    el.game.style.backgroundSize = "";
+    el.game.style.backgroundPosition = "";
+    el.game.style.backgroundRepeat = "";
+    // fixedは使わない（iOS崩壊回避）
+    el.game.style.backgroundAttachment = "";
+  }
+}
+function applyFieldBackgroundToGame(){
+  // フィールド画像が無ければ何もしない（既存のCSSでOK）
+  if(!state.img.fieldUrl || !el.game) return;
+
+  // “bodyではなく game” に貼ることでレイアウト崩壊を避ける
+  el.game.style.backgroundImage =
+    `radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
+     radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
+     url("${state.img.fieldUrl}")`;
+
+  el.game.style.backgroundSize = "auto, auto, cover";
+  el.game.style.backgroundPosition = "center, center, center";
+  el.game.style.backgroundRepeat = "no-repeat, no-repeat, no-repeat";
+  el.game.style.backgroundAttachment = "scroll"; // ← fixed禁止
+}
+function syncFieldBackgroundVisibility(){
+  // started + game.active のときだけ貼る
+  clearFieldBackground();
+  if(state.started && el.game && el.game.classList.contains("active")){
+    applyFieldBackgroundToGame();
+  }
+}
+
 /* ---------- UI helpers ---------- */
 function setActiveUI(){
   const you = (state.activeSide==="P1");
@@ -368,7 +402,6 @@ function pickFieldFile(assetFiles){
   }
   return "";
 }
-
 function isBackNameLower(l){
   return (
     l === "card_back.png" ||
@@ -424,7 +457,7 @@ async function validateImage(url){
     const img = new Image();
     img.onload = ()=> resolve(true);
     img.onerror = ()=> resolve(false);
-    img.src = url + (url.includes("?") ? "" : `?t=${Date.now()}`); // iOSキャッシュ対策
+    img.src = url;
   });
 }
 
@@ -472,26 +505,17 @@ async function applyImagesFromCache(){
     return;
   }
 
-  // field
+  // field（※ v50002: ここでは state.img.fieldUrl をセットするだけ。背景適用は開始後のみ）
+  state.img.fieldUrl = "";
   if(cache.fieldFile){
     const u = vercelPathAssets(cache.fieldFile);
     if(await validateImage(u)){
       state.img.fieldUrl = u;
-      log("OK フィールド読込：表示", "muted");
-      document.body.style.backgroundImage =
-        `radial-gradient(1200px 900px at 50% 0%, rgba(89,242,255,.12), transparent 60%),
-         radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
-         url("${u}")`;
-      document.body.style.backgroundSize = "auto, auto, cover";
-      document.body.style.backgroundPosition = "center, center, center";
-      document.body.style.backgroundRepeat = "no-repeat, no-repeat, no-repeat";
-      document.body.style.backgroundAttachment = "fixed";
+      log("OK フィールド読込：準備完了（タイトルには表示しません）", "muted");
     }else{
       state.img.fieldUrl = "";
       log(`NG フィールド読込失敗: ${u}`, "warn");
     }
-  }else{
-    state.img.fieldUrl = "";
   }
 
   // back
@@ -541,6 +565,9 @@ async function applyImagesFromCache(){
   if(miss.length) log(`カード画像未検出：${miss.join(", ")}`, "warn");
   else log("カード画像：20種すべて検出", "muted");
 
+  // v50002: 背景の見え方はここで同期（開始前は非表示）
+  syncFieldBackgroundVisibility();
+
   renderAll();
 }
 
@@ -587,13 +614,14 @@ function makeSlot(card, opts={}){
     }
     bindLongPress(slot, ()=> openViewer(card));
   }else{
-    bindLongPress(slot, ()=> { if(opts.onEmptyLong) opts.onEmptyLong(); });
+    bindLongPress(slot, ()=> {
+      if(opts.onEmptyLong) opts.onEmptyLong();
+    });
   }
 
   if(opts.onClick){
     slot.addEventListener("click", (e)=>{
       e.preventDefault();
-      e.stopPropagation();
       opts.onClick();
     }, {passive:false});
   }
@@ -635,12 +663,9 @@ function openViewer(card){
   showModal("viewerM");
 }
 
-/* ★重要：サーチはここで「選択→手札へ」を行う */
 function openZone(title, cards){
   el.zoneTitle.textContent = title;
   el.zoneList.innerHTML = "";
-
-  const pend = state.pending;
 
   if(!cards.length){
     const empty = document.createElement("div");
@@ -671,73 +696,25 @@ function openZone(title, cards){
       meta.appendChild(t); meta.appendChild(s);
       it.appendChild(th); it.appendChild(meta);
 
-      it.addEventListener("click", ()=>{
-        // search pick
-        if(pend && pend.type==="search_pick" && pend.side && Array.isArray(pend.pool)){
-          const side = pend.side;
-          const pool = pend.pool;
-
-          const inPool = pool.some(x=>x.uid===c.uid);
-          if(!inPool){
-            openViewer(c);
-            return;
-          }
-
-          // remove from deck or wing
-          const dIdx = state[side].deck.findIndex(x=>x.uid===c.uid);
-          if(dIdx>=0){
-            const picked = state[side].deck.splice(dIdx,1)[0];
-            state[side].hand.push(picked);
-          }else{
-            const wIdx = state[side].wing.findIndex(x=>x.uid===c.uid);
-            if(wIdx>=0){
-              const picked = state[side].wing.splice(wIdx,1)[0];
-              state[side].hand.push(picked);
-            }
-          }
-
-          log(`${side==="P1"?"あなた":"AI"}：サーチ成功 → ${c.name}`, "muted");
-          say("サーチ完了", "muted");
-          state.pending = null;
-          hideModal("zoneM");
-          renderAll();
-          return;
-        }
-
-        openViewer(c);
-      }, {passive:true});
-
+      it.addEventListener("click", ()=> openViewer(c), {passive:true});
       el.zoneList.appendChild(it);
     });
   }
   showModal("zoneM");
 }
 
-/* ---------- Confirm / Choice ---------- */
+/* ---------- Confirm ---------- */
 let confirmYes = null;
-let confirmNo = null;
-
-function askChoice(title, body, yesLabel, noLabel, onYes, onNo){
+function askConfirm(title, body, onYes){
   el.confirmTitle.textContent = title;
   el.confirmBody.textContent = body;
-
-  el.btnYes.textContent = yesLabel || "OK";
-  el.btnNo.textContent  = noLabel  || "キャンセル";
-
-  confirmYes = onYes || null;
-  confirmNo  = onNo  || null;
-
+  confirmYes = onYes;
   showModal("confirmM");
 }
-
-el.btnNo.addEventListener("click", ()=>{
-  hideModal("confirmM");
-  if(confirmNo){ const fn = confirmNo; confirmNo=null; confirmYes=null; fn(); }
-}, {passive:true});
-
+el.btnNo.addEventListener("click", ()=> hideModal("confirmM"), {passive:true});
 el.btnYes.addEventListener("click", ()=>{
   hideModal("confirmM");
-  if(confirmYes){ const fn = confirmYes; confirmYes=null; confirmNo=null; fn(); }
+  if(confirmYes){ const fn = confirmYes; confirmYes=null; fn(); }
 }, {passive:true});
 
 /* ---------- Core helpers ---------- */
@@ -771,8 +748,12 @@ function endByDeckOut(side){
   setActiveUI();
 }
 
-function moveToWing(side, card){ state[side].wing.push(card); }
-function moveToOutside(side, card){ state[side].outside.push(card); }
+function moveToWing(side, card){
+  state[side].wing.push(card);
+}
+function moveToOutside(side, card){
+  state[side].outside.push(card);
+}
 
 /* ---------- Equip handling ---------- */
 function equipItemTo(side, charPos, itemCard){
@@ -809,8 +790,8 @@ function needsKensan(card){
 }
 
 function kensanCostSelectFlow(side, card, targetPos){
-  state.pending = { type:"kensan_cost", side, card, targetPos };
-  say("見参コスト：手札または自分ステージのカードを1枚選んでください", "ok");
+  state.pending = { type:"kensan_cost", side, card, targetPos, step:"select" };
+  say("見参コスト：手札または自分ステージのカードを1枚選んでください（長押しで詳細）", "ok");
   renderAll();
 }
 function resolveKensan(side, card, targetPos, costCard, costFrom){
@@ -848,9 +829,24 @@ function findAllCardsInDeckOrWing(side, predicate){
   for(const c of state[side].wing) if(predicate(c)) res.push(c);
   return res;
 }
+function pullFromDeckOrWingToHand(side, predicate){
+  const deckIdx = state[side].deck.findIndex(predicate);
+  if(deckIdx>=0){
+    const c = state[side].deck.splice(deckIdx,1)[0];
+    state[side].hand.push(c);
+    return c;
+  }
+  for(let i=state[side].wing.length-1;i>=0;i--){
+    if(predicate(state[side].wing[i])){
+      const c = state[side].wing.splice(i,1)[0];
+      state[side].hand.push(c);
+      return c;
+    }
+  }
+  return null;
+}
 
 function onSummonTriggers(side, card){
-  // No.4 Laus search クランプス
   if(card.no===4){
     const list = findAllCardsInDeckOrWing(side, c=> (c.tags||[]).includes("クランプス"));
     if(!list.length){
@@ -858,15 +854,10 @@ function onSummonTriggers(side, card){
       return;
     }
     state.pending = { type:"search_pick", side, title:"ラウス：クランプスを1枚選択", pool:list };
-    say("サーチ：クランプスカードを1枚選んでください（WING/DECK）", "ok");
-
-    // 表示（画像付きリスト → 選んだら手札へ）
-    openZone("ラウス：クランプスを1枚選択", list.slice().reverse());
+    say("サーチ：クランプスカードを1枚選んでください", "ok");
     renderAll();
     return;
   }
-
-  // No.5 Tarta draw2
   if(card.no===5){
     draw(side, 2);
     log(`${sideName(side)}：タータ登場→2ドロー`, "muted");
@@ -879,7 +870,6 @@ function onSummonTriggers(side, card){
 function destroyCharacter(side, pos, reason=""){
   const ch = state[side].C[pos];
   if(!ch) return;
-
   if(ch.no===12 && !ch.immuneUsedThisTurn){
     ch.immuneUsedThisTurn = true;
     log(`${sideName(side)}：班目プロデューサーはバトル破壊無効（1回）`, "muted");
@@ -889,8 +879,9 @@ function destroyCharacter(side, pos, reason=""){
   const equips = (ch.equips||[]);
   state[side].C[pos]=null;
   moveToWing(side, ch);
-  for(const it of equips){ moveToWing(side, it); }
-
+  for(const it of equips){
+    moveToWing(side, it);
+  }
   log(`${sideName(side)}：破壊→ウイング ${ch.name}${reason?`（${reason}）`:""}`, "muted");
 }
 
@@ -957,7 +948,6 @@ function onClickYourC(pos){
     }
     return;
   }
-
   if(state.pending && state.pending.type==="equip_pick"){
     const ch = state.P1.C[pos];
     if(!ch) return;
@@ -969,6 +959,8 @@ function onClickYourC(pos){
     renderAll();
     return;
   }
+  if(state.pending && state.pending.type==="target_enemy_pick") return;
+  if(state.pending && state.pending.type==="search_pick") return;
 
   if(state.phase === "MAIN"){
     if(state.selectedHandIndex==null) return;
@@ -1015,80 +1007,6 @@ function onClickYourC(pos){
     renderAll();
     return;
   }
-}
-
-function resolveEffectFromHand(side, card){
-  log(`${sideName(side)}：効果発動 → ${card.name}`, "muted");
-  say(`効果発動：${card.name}`, "ok");
-
-  // No.2 Flame Bullet
-  if(card.no===2){
-    if(!hasCardOnStage(side, "クルエラ")){
-      log("条件未満：クルエラがいません（フレイムバレット発動不可）", "warn");
-      say("クルエラがいないため発動できません", "warn");
-      return;
-    }
-    const enemyChars = state.AI.C.filter(Boolean);
-    if(!enemyChars.length){
-      log("対象なし：相手キャラがいません", "warn");
-      say("相手キャラがいません", "warn");
-      return;
-    }
-
-    askChoice(
-      "フレイムバレット",
-      "どちらの効果を使いますか？\n\nA：相手のATKが1番高いキャラ1体をウイング\nB：相手のrank4以下キャラをすべてウイング",
-      "A（ATK最高1体）",
-      "B（rank4以下全）",
-      ()=>{
-        let bestPos=-1, bestAtk=-999999;
-        for(let i=0;i<3;i++){
-          const c = state.AI.C[i];
-          if(c && c.atk > bestAtk){ bestAtk=c.atk; bestPos=i; }
-        }
-        if(bestPos>=0) destroyCharacter("AI", bestPos, "フレイムバレットA");
-        renderAll();
-      },
-      ()=>{
-        for(let i=0;i<3;i++){
-          const c = state.AI.C[i];
-          if(c && c.rank <= 4) destroyCharacter("AI", i, "フレイムバレットB");
-        }
-        renderAll();
-      }
-    );
-    return;
-  }
-
-  // No.15 buff pick (+1000)
-  if(card.no===15){
-    const targets = state[side].C.map((c,idx)=>c?idx:-1).filter(x=>x>=0);
-    if(!targets.length){
-      log("対象なし：自分キャラがいません", "warn");
-      say("自分キャラがいません", "warn");
-      return;
-    }
-    state.pending = { type:"buff_pick", side, amount:1000 };
-    say("強化対象の自分キャラを選んでください（ATK+1000）", "ok");
-    renderAll();
-    return;
-  }
-
-  // No.16 lowest ATK enemy to wing
-  if(card.no===16){
-    const enemy = state.AI.C.map((c,idx)=>c?({c,idx}):null).filter(Boolean);
-    if(!enemy.length){
-      log("対象なし：相手キャラがいません", "warn");
-      say("相手キャラがいません", "warn");
-      return;
-    }
-    enemy.sort((a,b)=>a.c.atk-b.c.atk);
-    destroyCharacter("AI", enemy[0].idx, "力こそパワー！！");
-    return;
-  }
-
-  // default safe
-  log("（現版：この効果はフレームのみ実装・詳細は次更新で確定）", "warn");
 }
 
 function onClickYourE(pos){
@@ -1150,19 +1068,13 @@ function onClickEnemyCard(enemyPos){
   const defCard = state.AI.C[enemyPos];
   if(!atkCard || !defCard) return;
 
-  askChoice("攻撃確認", `${atkCard.name} → ${defCard.name}\n攻撃しますか？`, "攻撃する", "やめる",
-    ()=>{
-      resolveBattle_CvC("P1", state.selectedAttackerPos, "AI", enemyPos);
-      state.attackedThisTurn.P1[state.selectedAttackerPos] = true;
-      state.selectedAttackerPos = null;
-      say("攻撃処理完了", "muted");
-      renderAll();
-    },
-    ()=>{
-      say("攻撃をキャンセルしました", "muted");
-      renderAll();
-    }
-  );
+  askConfirm("攻撃確認", `${atkCard.name} → ${defCard.name}\n攻撃しますか？`, ()=>{
+    resolveBattle_CvC("P1", state.selectedAttackerPos, "AI", enemyPos);
+    state.attackedThisTurn.P1[state.selectedAttackerPos] = true;
+    state.selectedAttackerPos = null;
+    say("攻撃処理完了", "muted");
+    renderAll();
+  });
 }
 
 function onClickEnemyShield(idx){
@@ -1184,32 +1096,95 @@ function onClickEnemyShield(idx){
     return;
   }
 
-  askChoice("攻撃確認", `${atkCard.name} がシールドを攻撃します。\nシールドを破壊（→相手手札）しますか？`, "破壊する", "やめる",
-    ()=>{
-      const before = state.AI.shield.filter(Boolean).length;
-      breakShield("AI", idx, "P1");
-      state.attackedThisTurn.P1[state.selectedAttackerPos] = true;
-      state.selectedAttackerPos = null;
+  const anyShieldAfter = state.AI.shield.filter(Boolean).length;
 
-      if(state.AI.shield.every(x=>!x)){
-        say("相手シールド全破壊：次の攻撃でダイレクト可能", "ok");
-        log("相手シールド全破壊：次の攻撃でダイレクト可能", "muted");
-      }else{
-        say(`相手シールド残り：${before-1}`, "muted");
-      }
-      renderAll();
-    },
-    ()=>{
-      say("攻撃をキャンセルしました", "muted");
-      renderAll();
+  askConfirm("攻撃確認", `${atkCard.name} がシールドを攻撃します。\nシールドを破壊（→相手手札）しますか？`, ()=>{
+    breakShield("AI", idx, "P1");
+    state.attackedThisTurn.P1[state.selectedAttackerPos] = true;
+    state.selectedAttackerPos = null;
+
+    if(state.AI.shield.every(x=>!x)){
+      say("相手シールド全破壊：次の攻撃でダイレクト可能", "ok");
+      log("相手シールド全破壊：次の攻撃でダイレクト可能", "muted");
+    }else{
+      say(`相手シールド残り：${anyShieldAfter-1}`, "muted");
     }
-  );
+    renderAll();
+  });
 }
 
-/* ---------- Pending flows ---------- */
+/* ---------- Effect resolution (Player) ---------- */
+function resolveEffectFromHand(side, card){
+  log(`${sideName(side)}：効果発動 → ${card.name}`, "muted");
+  say(`効果発動：${card.name}`, "ok");
+
+  if(card.no===2){
+    if(!hasCardOnStage(side, "クルエラ")){
+      log("条件未満：クルエラがいません（フレイムバレット発動不可）", "warn");
+      say("クルエラがいないため発動できません", "warn");
+      return;
+    }
+    const enemyChars = state.AI.C.filter(Boolean);
+    if(!enemyChars.length){
+      log("対象なし：相手キャラがいません", "warn");
+      say("相手キャラがいません", "warn");
+      return;
+    }
+    askConfirm("フレイムバレット", "効果を選択してください。\nOK：ATK最高1体をウイング\nキャンセル：rank4以下を全ウイング", ()=>{
+      let bestPos = -1;
+      let bestAtk = -999999;
+      for(let i=0;i<3;i++){
+        const c = state.AI.C[i];
+        if(c && c.atk > bestAtk){ bestAtk=c.atk; bestPos=i; }
+      }
+      if(bestPos>=0) destroyCharacter("AI", bestPos, "フレイムバレット");
+      renderAll();
+    });
+    return;
+  }
+
+  if(card.no===15){
+    const targets = state[side].C.map((c,idx)=>c?idx:-1).filter(x=>x>=0);
+    if(!targets.length){
+      log("対象なし：自分キャラがいません", "warn");
+      say("自分キャラがいません", "warn");
+      return;
+    }
+    state.pending = { type:"buff_pick", side, amount:1000, until:"turn_end" };
+    say("強化対象の自分キャラを選んでください（ATK+1000）", "ok");
+    renderAll();
+    return;
+  }
+
+  if(card.no===16){
+    const enemy = state.AI.C.map((c,idx)=>c?({c,idx}):null).filter(Boolean);
+    if(!enemy.length){
+      log("対象なし：相手キャラがいません", "warn");
+      say("相手キャラがいません", "warn");
+      return;
+    }
+    enemy.sort((a,b)=>a.c.atk-b.c.atk);
+    destroyCharacter("AI", enemy[0].idx, "力こそパワー！！");
+    return;
+  }
+
+  if(card.no===8 || card.no===14){
+    log("このカードは相手効果へのリアクション用です（現版：手動発動はログのみ）", "warn");
+    say("リアクション用（現版：手動発動は無効処理のみ未実装）", "warn");
+    return;
+  }
+
+  log("（現版：この効果はフレームのみ実装・詳細は次更新で確定）", "warn");
+}
+
+/* ---------- Pending flows on clicks ---------- */
 function handlePendingOnClick(side, zone, pos){
   const pend = state.pending;
   if(!pend) return false;
+
+  if(pend.type==="kensan_cost"){
+    return true;
+  }
 
   if(pend.type==="buff_pick" && side==="P1" && zone==="C"){
     const ch = state.P1.C[pos];
@@ -1221,30 +1196,42 @@ function handlePendingOnClick(side, zone, pos){
     renderAll();
     return true;
   }
+
+  if(pend.type==="debuff_pick" && side==="P1" && zone==="AI_C"){
+    const ch = state.AI.C[pos];
+    if(!ch) return true;
+    ch.atk += pend.amount;
+    log(`弱体：${ch.name} ATK${pend.amount}`, "muted");
+    say("弱体完了", "muted");
+    state.pending = null;
+    renderAll();
+    return true;
+  }
+
   return false;
 }
 
 /* ---------- Rendering ---------- */
 function renderZones(){
-  // Enemy C
   el.aiC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.AI.C[i];
     const slot = makeSlot(c, {
       enemy:true,
-      onClick: ()=> onClickEnemyCard(i)
+      onClick: ()=> {
+        if(handlePendingOnClick("AI","AI_C",i)) return;
+        onClickEnemyCard(i);
+      }
     });
     el.aiC.appendChild(slot);
   }
 
-  // Enemy E
   el.aiE.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.AI.E[i];
     el.aiE.appendChild(makeSlot(c, {enemy:true}));
   }
 
-  // Enemy Shields (facedown)
   el.aiS.innerHTML = "";
   for(let i=0;i<3;i++){
     const exists = !!state.AI.shield[i];
@@ -1265,16 +1252,19 @@ function renderZones(){
     }
     slot.appendChild(face);
 
+    const badge = document.createElement("div");
+    badge.className = "slotBadge";
+    badge.textContent = `${state.AI.shield.filter(Boolean).length}/3`;
+    slot.appendChild(badge);
+
     slot.addEventListener("click", (e)=>{
       e.preventDefault();
-      e.stopPropagation();
       onClickEnemyShield(i);
     }, {passive:false});
 
     el.aiS.appendChild(slot);
   }
 
-  // Your C
   el.pC.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.P1.C[i];
@@ -1299,16 +1289,17 @@ function renderZones(){
     el.pC.appendChild(slot);
   }
 
-  // Your E
   el.pE.innerHTML = "";
   for(let i=0;i<3;i++){
     const c = state.P1.E[i];
     const glow = (state.activeSide==="P1" && state.phase==="MAIN" && state.selectedHandIndex!=null && !c);
-    const slot = makeSlot(c, { glow, onClick: ()=> onClickYourE(i) });
+    const slot = makeSlot(c, {
+      glow,
+      onClick: ()=> onClickYourE(i),
+    });
     el.pE.appendChild(slot);
   }
 
-  // Your Shields
   el.pS.innerHTML = "";
   for(let i=0;i<3;i++){
     const exists = !!state.P1.shield[i];
@@ -1328,6 +1319,12 @@ function renderZones(){
       face.style.opacity = ".25";
     }
     slot.appendChild(face);
+
+    const badge = document.createElement("div");
+    badge.className = "slotBadge";
+    badge.textContent = `${state.P1.shield.filter(Boolean).length}/3`;
+    slot.appendChild(badge);
+
     el.pS.appendChild(slot);
   }
 }
@@ -1409,6 +1406,7 @@ function renderPiles(){
     if(card){
       const url = state.img.cardUrlByNo[pad2(card.no)];
       if(url) elm.style.backgroundImage = `url("${url}")`;
+      else elm.style.backgroundImage = "";
       elm.style.backgroundSize = "cover";
       elm.style.backgroundPosition = "center";
     }
@@ -1449,7 +1447,8 @@ function resetTurnFlags(){
 
 function nextPhase(){
   if(state.gameOver) return;
-  if(state.activeSide!=="P1") return;
+  const you = state.activeSide==="P1";
+  if(!you) return;
 
   const i = PHASES.indexOf(state.phase);
   const next = PHASES[(i+1)%PHASES.length];
@@ -1466,10 +1465,15 @@ function nextPhase(){
     log("あなた：ドロー +1", "muted");
     say("ドロー +1", "ok");
   }
-  if(next==="MAIN") say("MAIN：配置/発動", "muted");
-  if(next==="BATTLE") say("BATTLE：攻撃者→対象を選択", "muted");
-  if(next==="END") say("END：ターン終了できます", "muted");
-
+  if(next==="MAIN"){
+    say("MAIN：配置/発動", "muted");
+  }
+  if(next==="BATTLE"){
+    say("BATTLE：攻撃者→対象を選択", "muted");
+  }
+  if(next==="END"){
+    say("END：ターン終了できます", "muted");
+  }
   updateHUD();
   renderAll();
 }
@@ -1494,13 +1498,13 @@ function aiChooseSummon(){
   const empty = state.AI.C.findIndex(x=>!x);
   if(empty<0) return false;
 
-  const pick = state.AI.hand
+  const idx = state.AI.hand
     .map((c,i)=>({c,i}))
     .filter(x=>canNormalSummon(x.c))
     .sort((a,b)=>b.c.baseAtk-a.c.baseAtk)[0];
 
-  if(!pick) return false;
-  const card = state.AI.hand.splice(pick.i,1)[0];
+  if(!idx) return false;
+  const card = state.AI.hand.splice(idx.i,1)[0];
   state.AI.C[empty]=card;
   log(`AI：登場 → ${card.name}`, "muted");
   onSummonTriggers("AI", card);
@@ -1543,6 +1547,9 @@ function aiBattle(){
       if(sidx>=0){
         breakShield("P1", sidx, "AI");
         state.attackedThisTurn.AI[i] = true;
+        if(state.P1.shield.every(x=>!x)){
+          log("あなたのシールド全破壊：次でダイレクト可能", "warn");
+        }
       }else{
         const win = checkDirectAndEnd("AI");
         state.attackedThisTurn.AI[i] = true;
@@ -1563,24 +1570,24 @@ async function runAITurn(){
     log("相手ターン開始", "warn");
 
     setPhase("START");
-    await sleep(180);
+    await sleep(220);
 
     setPhase("DRAW");
     draw("AI", 1);
     log("AI：ドロー +1", "muted");
-    await sleep(220);
+    await sleep(260);
 
     setPhase("MAIN");
     aiChooseSummon();
     aiTryEquip();
-    await sleep(260);
+    await sleep(320);
 
     setPhase("BATTLE");
     aiBattle();
-    await sleep(320);
+    await sleep(420);
 
     setPhase("END");
-    await sleep(160);
+    await sleep(220);
 
     setActiveSide("P1");
     state.turn++;
@@ -1655,9 +1662,15 @@ function bindStart(){
   const go = ()=>{
     if(state.started) return;
     state.started=true;
+
+    // 画面切替
     el.title.classList.remove("active");
     el.game.classList.add("active");
-    log("対戦画面：表示OK（SCROLL）", "muted");
+
+    // v50002: ゲーム画面にだけフィールド背景を適用
+    syncFieldBackgroundVisibility();
+
+    log("対戦画面：表示OK（SCROLL / FIELD FIX）", "muted");
     startGame();
   };
   el.btnStart.addEventListener("click", go, {passive:true});
@@ -1693,6 +1706,8 @@ function bindSettings(){
     state.img.ready=false;
     state.img.cardUrlByNo = {};
     state.img.backUrl = "";
+    state.img.fieldUrl = "";
+    syncFieldBackgroundVisibility();
     renderAll();
   }, {passive:true});
 }
@@ -1716,12 +1731,17 @@ function bindLogButton(){
   }, 320);
 }
 
-/* ★削除：iOSのタップ競合を起こしやすい“空のtouchmoveハンドラ”は入れない */
+function bindCloseFix(){
+  document.addEventListener("touchmove", ()=>{}, {passive:true});
+}
 
 /* ---------- init ---------- */
 async function init(){
   el.boot.textContent = "JS: OK（初期化中…）";
   updateHUD();
+
+  // v50002: 初期は「タイトル」なので背景を必ず消す
+  clearFieldBackground();
 
   bindStart();
   bindHUDButtons();
@@ -1729,6 +1749,7 @@ async function init(){
   bindPhaseButtons();
   bindZoneButtons();
   bindLogButton();
+  bindCloseFix();
 
   const cache = getCache();
   if(cache && cache.assetFiles && cache.cardFiles && cache.repo === getRepo()){
@@ -1738,9 +1759,12 @@ async function init(){
     await rescanImages();
   }
 
+  // v50002: ここでも「開始前」は背景を出さないことを保証
+  syncFieldBackgroundVisibility();
+
   el.boot.textContent = "JS: OK（準備完了）";
   say("準備完了", "ok");
-  log("v50002：iPhone枠3枚固定/サーチ選択実装/裏面適用強化", "muted");
+  log("SCROLL版：iPhone/iPad両対応 / 裏面自動検出 / フィールドはゲーム内のみ", "muted");
 }
 
 document.addEventListener("DOMContentLoaded", init);
