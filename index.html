@@ -73,14 +73,15 @@
           </div>
 
           <div class="lanes">
-            <div class="lane">
-              <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
-              <div id="aiE" class="slots"></div>
-            </div>
-
+            <!-- ★ ここを「C → E → SHIELD」に修正（ご主人様ルール準拠） -->
             <div class="lane">
               <div class="rowTitle">ENEMY C（キャラクター）</div>
               <div id="aiC" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
+              <div id="aiE" class="slots"></div>
             </div>
 
             <div class="lane">
@@ -143,7 +144,7 @@
       </section>
     </main>
 
-    <!-- ACTION BAR (no fixed overlay, sticky) -->
+    <!-- ACTION BAR -->
     <footer class="actionBar">
       <button id="btnNext" class="fabBtn">次のフェイズ</button>
       <button id="btnEnd" class="fabBtn danger">ターン終了</button>
