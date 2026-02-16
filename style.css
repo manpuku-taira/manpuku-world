@@ -9,7 +9,7 @@
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
 }
-*{ box-sizing:border-box; }
+*{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 html,body{ height:100%; }
 body{
   margin:0;
@@ -21,7 +21,6 @@ body{
   color:var(--text);
   overflow:hidden;
 }
-
 .screen{ display:none; height:100dvh; }
 .screen.active{ display:flex; flex-direction:column; height:100dvh; }
 
@@ -40,6 +39,20 @@ body{
 .logoSub{ margin-top:6px; font-size:14px; color:var(--muted); letter-spacing:.22em; }
 .mini{ margin-top:10px; font-size:12px; color:var(--muted); }
 
+.titleArt{
+  width:min(560px, 92vw);
+  height: clamp(140px, 26vh, 240px);
+  margin:14px auto 0;
+  border-radius:18px;
+  border:1px solid rgba(89,242,255,.14);
+  background:
+    linear-gradient(135deg, rgba(89,242,255,.08), rgba(179,91,255,.06)),
+    rgba(0,0,0,.12);
+  box-shadow: 0 14px 34px rgba(0,0,0,.35);
+  background-size:cover;
+  background-position:center;
+}
+
 /* buttons */
 .btn{
   border:1px solid rgba(89,242,255,.22);
@@ -55,6 +68,8 @@ body{
 .btn.small{ padding:8px 10px; border-radius:12px; font-size:12px; }
 .btn.ghost{ border:1px solid rgba(167,176,217,.22); background:rgba(16,20,38,.35); color:var(--muted); }
 .btn.primary{ border:1px solid rgba(89,242,255,.35); background:linear-gradient(135deg, rgba(89,242,255,.22), rgba(179,91,255,.14)); }
+
+.boxHeadRight{ display:flex; gap:8px; align-items:center; }
 
 /* HUD */
 .hud{
@@ -87,7 +102,7 @@ body{
 }
 .chip.subtle{ border:1px solid rgba(167,176,217,.18); color:var(--muted); }
 
-/* Main scroll area */
+/* Main */
 .main{
   flex:1;
   min-height:0;
@@ -130,10 +145,11 @@ body{
   height:50%;
   background-repeat:no-repeat;
   background-position:center;
-  /* ★フィールド画像の「拡大しすぎ」を抑える（少し縮小） */
-  background-size: 88% auto;
-  opacity:.88;
+  /* 拡大しすぎ対策：containのまま “少し小さく” */
+  background-size: 86% auto;
+  opacity:.9;
   pointer-events:none;
+  filter: saturate(.95) contrast(1.02);
 }
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
@@ -180,13 +196,19 @@ body{
   aspect-ratio: 2/3;
   border-radius: 14px;
   border: 1px solid rgba(167,176,217,.22);
-  background:linear-gradient(135deg, rgba(89,242,255,.08), rgba(179,91,255,.06));
+  background:#070914;
   background-size: cover;
   background-position: center;
   box-shadow: 0 10px 24px rgba(0,0,0,.25);
 }
+.pileCard.pileIcon{
+  background:
+    linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08)),
+    rgba(0,0,0,.12);
+}
 .pileCard.deckBack{
-  background:#070914;
+  background-size: cover;
+  background-position: center;
 }
 
 .lanes{
@@ -200,6 +222,7 @@ body{
   border-radius:16px;
   border:1px solid rgba(89,242,255,.12);
   background: rgba(10,12,22,.62);
+  position:relative;
 }
 .rowTitle{ font-size:10px; letter-spacing:.20em; color:var(--muted); margin-bottom:8px; font-weight:900; }
 
@@ -224,29 +247,6 @@ body{
 .slot.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .slot.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* ★装備/強化が目立つ表示（ATK上昇があるキャラ） */
-.slot.boosted{
-  border:1px solid rgba(89,242,255,.45);
-  box-shadow:0 0 0 2px rgba(89,242,255,.20), 0 10px 24px rgba(0,0,0,.25);
-}
-.atkBadge{
-  position:absolute;
-  right:6px; bottom:6px;
-  padding:4px 7px;
-  border-radius:999px;
-  font-size:10px;
-  font-weight:1000;
-  letter-spacing:.08em;
-  background:rgba(0,0,0,.55);
-  border:1px solid rgba(89,242,255,.28);
-  color:rgba(233,236,255,.95);
-  z-index:4;
-}
-.atkBadge.plus{
-  border:1px solid rgba(89,242,255,.45);
-  color:rgba(89,242,255,.95);
-}
-
 .face{
   position:absolute;
   inset:0;
@@ -255,6 +255,45 @@ body{
 }
 .face.fallback{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
+}
+
+/* ATK badge */
+.atkBadge{
+  position:absolute;
+  right:6px;
+  bottom:6px;
+  padding:3px 6px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:1000;
+  letter-spacing:.06em;
+  background: rgba(0,0,0,.55);
+  border:1px solid rgba(167,176,217,.24);
+}
+.atkBadge.plus{
+  border:1px solid rgba(89,242,255,.38);
+  box-shadow: 0 0 0 2px rgba(89,242,255,.10);
+}
+.equipBadge{
+  position:absolute;
+  left:6px;
+  top:6px;
+  width:18px;
+  height:18px;
+  border-radius:8px;
+  background: linear-gradient(135deg, rgba(89,242,255,.35), rgba(179,91,255,.22));
+  border:1px solid rgba(89,242,255,.30);
+  box-shadow: 0 8px 18px rgba(0,0,0,.25);
+}
+.equipBadge::after{
+  content:"⛭";
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:12px;
+  opacity:.95;
 }
 
 /* Shields */
@@ -273,27 +312,22 @@ body{
   background-position:center;
   box-shadow: 0 10px 24px rgba(0,0,0,.25);
   opacity:1;
-  position:relative;
 }
 .shieldCard.empty{ opacity:.18; }
 
-/* ★DIRECT表示（シールド0で視覚化） */
-.directIcon{
-  position:absolute;
-  inset:auto 0 8px 0;
-  margin:0 auto;
-  width:max-content;
-  padding:5px 9px;
-  border-radius:999px;
-  font-size:10px;
-  font-weight:1000;
-  letter-spacing:.12em;
-  border:1px solid rgba(255,77,109,.35);
-  background:rgba(255,77,109,.12);
-  color:rgba(255,77,109,.95);
+.directHint{
   display:none;
+  margin-top:8px;
+  padding:8px 10px;
+  border-radius:14px;
+  border:1px dashed rgba(89,242,255,.40);
+  color: rgba(233,236,255,.92);
+  font-weight:1000;
+  letter-spacing:.20em;
+  text-align:center;
+  background: rgba(89,242,255,.06);
 }
-.shieldCard.direct .directIcon{ display:block; }
+.directHint.show{ display:block; }
 
 /* Hand */
 .handDock{ padding:10px; }
@@ -317,11 +351,12 @@ body{
   background-size:cover;
   background-position:center;
   box-shadow:var(--shadow);
+  position:relative;
 }
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* Action bar (sticky) */
+/* Action bar */
 .actionBar{
   position:sticky;
   bottom:0;
@@ -439,6 +474,7 @@ body{
   outline:none;
 }
 
-/* Help */
-.help{ padding:12px; display:flex; flex-direction:column; gap:8px; }
-.helpItem{ font-size:13px; color:rgba(233,236,255,.92); line-height:1.5; }
+/* Result */
+.resultBody{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+.resultText{ font-weight:1000; letter-spacing:.12em; font-size:14px; color:rgba(233,236,255,.92); }
+.resultBtns{ display:flex; gap:10px; }
