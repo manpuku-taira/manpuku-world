@@ -11,7 +11,6 @@
 }
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
-
 body{
   margin:0;
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
@@ -20,8 +19,7 @@ body{
     radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
     var(--bg);
   color:var(--text);
-  overflow:hidden; /* 画面全体は固定、スクロールは .main のみ */
-  -webkit-text-size-adjust:100%;
+  overflow:hidden;
 }
 
 .screen{ display:none; height:100dvh; }
@@ -94,8 +92,7 @@ body{
   flex:1;
   min-height:0;
   overflow:auto;
-  padding-bottom: 10px;
-  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Enemy hand */
@@ -126,19 +123,17 @@ body{
   border-radius:18px;
   background:rgba(0,0,0,.22);
   box-shadow:var(--shadow);
-  overflow:hidden; /* ★ フィールド画像がはみ出して崩すのを防止 */
 }
-
-/* ★ フィールドは「薄い背景」固定。containをやめ、coverで安定表示（拡大事故/部分表示事故を防止） */
 .field{
   position:absolute;
-  inset:-6%;
+  left:0; right:0;
+  height:50%;
   background-repeat:no-repeat;
   background-position:center;
-  background-size:cover;
-  opacity:.22;          /* ★ 主役はカード。フィールドは薄く */
+  /* ★ 縮小寄りに調整（拡大で崩れるのを抑制） */
+  background-size: 92% auto;
+  opacity:.9;
   pointer-events:none;
-  filter: saturate(.9) contrast(.95);
 }
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
@@ -148,7 +143,7 @@ body{
   gap:10px;
   align-items:stretch;
   position:relative;
-  z-index:2; /* click priority */
+  z-index:2;
 }
 .enemySide{ margin-bottom:10px; }
 .yourSide{ margin-top:10px; }
@@ -189,6 +184,11 @@ body{
   background-size: cover;
   background-position: center;
   box-shadow: 0 10px 24px rgba(0,0,0,.25);
+}
+/* ★ W/O は裏面を出さない（空パネル） */
+.pileCard.pileBlank{
+  background: rgba(6,8,14,.55) !important;
+  background-image:none !important;
 }
 
 .lanes{
@@ -240,6 +240,9 @@ body{
   justify-content:center;
   gap:14px;
 }
+.shieldSlot{
+  position:relative;
+}
 .shieldCard{
   width: clamp(56px, 10.5vw, 96px);
   aspect-ratio: 2/3;
@@ -253,6 +256,24 @@ body{
 }
 .shieldCard.empty{ opacity:.18; }
 
+/* ★ DIRECT アイコン（シールド0枚のときに表示） */
+.directIcon{
+  position:absolute;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  border-radius:14px;
+  border:1px dashed rgba(89,242,255,.35);
+  background: rgba(89,242,255,.08);
+  color: rgba(233,236,255,.92);
+  font-weight:1000;
+  letter-spacing:.10em;
+  font-size:11px;
+}
+.shieldSlot.direct .directIcon{ display:flex; }
+.shieldSlot.direct .shieldCard{ opacity:.22; }
+
 /* Hand */
 .handDock{ padding:10px; }
 .hand{
@@ -264,7 +285,6 @@ body{
   border-radius:18px;
   background:var(--panel2);
   box-shadow:var(--shadow);
-  -webkit-overflow-scrolling: touch;
 }
 .handCard{
   width:80px;
@@ -280,9 +300,10 @@ body{
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* Action bar：固定ではなく「画面下の通常要素」。手札に被せない */
+/* Action bar */
 .actionBar{
-  flex:0 0 auto;
+  position:sticky;
+  bottom:0;
   display:flex;
   gap:10px;
   padding:10px;
