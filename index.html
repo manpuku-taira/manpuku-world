@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=50015" />
+  <link rel="stylesheet" href="./style.css?v=50014" />
 </head>
 <body>
 
@@ -16,6 +16,7 @@
         <div class="logoSub">マンプクワールド</div>
         <div class="mini">タップ または START</div>
 
+        <!-- タイトル画像は後で差し替えできるよう枠だけ用意 -->
         <div class="titleArt" id="titleArt" aria-hidden="true"></div>
 
         <div style="margin-top:14px;">
@@ -28,6 +29,7 @@
 
   <!-- GAME -->
   <div id="game" class="screen">
+    <!-- HUD -->
     <header class="hud">
       <div class="hudLeft">
         <div id="chipTurn" class="chip">TURN 1</div>
@@ -44,16 +46,20 @@
       </div>
     </header>
 
+    <!-- MAIN -->
     <main class="main">
+      <!-- Enemy Hand -->
       <section class="enemyHandDock">
         <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
         <div id="aiHand" class="enemyHand"></div>
       </section>
 
+      <!-- BOARD -->
       <section class="board">
         <div id="fieldTop" class="field fieldTop"></div>
         <div id="fieldBottom" class="field fieldBottom"></div>
 
+        <!-- ENEMY SIDE -->
         <div class="side enemySide">
           <div class="piles">
             <div class="pile" data-click="aiDeck">
@@ -71,6 +77,7 @@
           </div>
 
           <div class="lanes">
+            <!-- ここはご要望通り：上（手札寄り）= シールド → E → C -->
             <div class="lane">
               <div class="rowTitle">ENEMY SHIELD</div>
               <div class="shields">
@@ -95,6 +102,7 @@
 
         <div class="divider"></div>
 
+        <!-- YOUR SIDE -->
         <div class="side yourSide">
           <div class="lanes">
             <div class="lane">
@@ -118,6 +126,7 @@
             </div>
           </div>
 
+          <!-- ご要望：自分側は “手前にデッキ” = 縦列の一番下にデッキ -->
           <div class="piles">
             <div class="pile" data-click="pOutside">
               <div class="pileCard pileIcon" data-pile="P_OUT"></div>
@@ -133,13 +142,16 @@
             </div>
           </div>
         </div>
+
       </section>
 
+      <!-- HAND -->
       <section class="handDock">
         <div id="hand" class="hand"></div>
       </section>
     </main>
 
+    <!-- ACTION BAR -->
     <footer class="actionBar">
       <button id="btnNext" class="fabBtn">次のフェイズ</button>
       <button id="btnEnd" class="fabBtn danger">ターン終了</button>
@@ -176,7 +188,7 @@
     </div>
   </div>
 
-  <!-- Zone -->
+  <!-- Zone (Wing/Outside list) -->
   <div id="zoneM" class="modal">
     <div class="back" data-close="zone"></div>
     <div class="box smallBox">
@@ -263,6 +275,6 @@
     </div>
   </div>
 
-  <script src="./script.js?v=50015"></script>
+  <script src="./script.js?v=50014"></script>
 </body>
 </html>
