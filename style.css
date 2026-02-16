@@ -145,7 +145,6 @@ body{
   height:50%;
   background-repeat:no-repeat;
   background-position:center;
-  /* 拡大しすぎ対策：containのまま “少し小さく” */
   background-size: 86% auto;
   opacity:.9;
   pointer-events:none;
