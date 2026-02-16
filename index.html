@@ -4,72 +4,265 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=50015" />
 </head>
 <body>
 
-  <!-- タイトル画面 -->
+  <!-- TITLE -->
   <div id="title" class="screen active">
-    <div id="titleInner">
-      <!-- ロゴはJSが自動で img を差し込みます（title.PNG / title.png） -->
-      <div id="titleArt" aria-hidden="true"></div>
+    <div class="titleWrap">
+      <div class="logoBox">
+        <div class="logoMain">Manpuku World</div>
+        <div class="logoSub">マンプクワールド</div>
+        <div class="mini">タップ または START</div>
 
-      <button id="btnStart" class="btn primary" type="button">START</button>
-      <div class="hint">※STARTが押せない端末向け：画面のどこをタップしても開始できます</div>
+        <div class="titleArt" id="titleArt" aria-hidden="true"></div>
+
+        <div style="margin-top:14px;">
+          <button id="btnStart" class="btn primary">START</button>
+        </div>
+        <div id="boot" class="mini" style="margin-top:12px;">JS: …</div>
+      </div>
     </div>
   </div>
 
-  <!-- ゲーム画面 -->
+  <!-- GAME -->
   <div id="game" class="screen">
-    <header id="hud">
-      <div class="chips">
-        <span id="chipTurn" class="chip">TURN 1</span>
-        <span id="chipPhase" class="chip">START</span>
-        <span id="chipActive" class="chip">YOUR TURN</span>
+    <header class="hud">
+      <div class="hudLeft">
+        <div id="chipTurn" class="chip">TURN 1</div>
+        <div id="chipPhase" class="chip subtle">START</div>
       </div>
-      <div class="hudBtns">
-        <button id="btnNext" class="btn">NEXT</button>
-        <button id="btnEnd" class="btn">END</button>
+      <div class="hudCenter">
+        <div id="firstInfo">先攻：—</div>
+      </div>
+      <div class="hudRight">
+        <div id="chipActive" class="chip">YOUR TURN</div>
+        <button id="btnLog" class="iconBtn" title="ログ（長押し）">LOG</button>
+        <button id="btnHelp" class="iconBtn" title="ヘルプ">?</button>
+        <button id="btnSettings" class="iconBtn" title="設定">⚙</button>
       </div>
     </header>
 
-    <main id="board">
-      <div id="fieldTop" class="field"></div>
-      <div id="fieldBottom" class="field"></div>
+    <main class="main">
+      <section class="enemyHandDock">
+        <div id="enemyHandLabel" class="enemyHandLabel">ENEMY HAND ×0</div>
+        <div id="aiHand" class="enemyHand"></div>
+      </section>
 
-      <section class="zones">
-        <div class="zoneRow">
-          <div class="zoneLabel">ENEMY E</div>
-          <div id="aiE" class="zone"></div>
-        </div>
-        <div class="zoneRow">
-          <div class="zoneLabel">ENEMY C</div>
-          <div id="aiC" class="zone"></div>
+      <section class="board">
+        <div id="fieldTop" class="field fieldTop"></div>
+        <div id="fieldBottom" class="field fieldBottom"></div>
+
+        <div class="side enemySide">
+          <div class="piles">
+            <div class="pile" data-click="aiDeck">
+              <div class="pileCard deckBack" data-pile="AI_DECK"></div>
+              <div class="pileMeta"><div class="z">D</div><div id="aiDeckN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="aiWing">
+              <div class="pileCard pileIcon" data-pile="AI_WING"></div>
+              <div class="pileMeta"><div class="z">W</div><div id="aiWingN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="aiOutside">
+              <div class="pileCard pileIcon" data-pile="AI_OUT"></div>
+              <div class="pileMeta"><div class="z">O</div><div id="aiOutN" class="n">0</div></div>
+            </div>
+          </div>
+
+          <div class="lanes">
+            <div class="lane">
+              <div class="rowTitle">ENEMY SHIELD</div>
+              <div class="shields">
+                <div class="shieldSlot" data-side="AI" data-idx="0"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="AI" data-idx="1"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="AI" data-idx="2"><div class="shieldCard"></div></div>
+              </div>
+              <div class="directHint" id="aiDirectHint">DIRECT</div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
+              <div id="aiE" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">ENEMY C（キャラクター）</div>
+              <div id="aiC" class="slots"></div>
+            </div>
+          </div>
         </div>
 
-        <div class="zoneRow">
-          <div class="zoneLabel">YOUR C</div>
-          <div id="pC" class="zone"></div>
-        </div>
-        <div class="zoneRow">
-          <div class="zoneLabel">YOUR E</div>
-          <div id="pE" class="zone"></div>
+        <div class="divider"></div>
+
+        <div class="side yourSide">
+          <div class="lanes">
+            <div class="lane">
+              <div class="rowTitle">YOUR C（キャラクター）</div>
+              <div id="pC" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">YOUR E（エフェクト/アイテム）</div>
+              <div id="pE" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">YOUR SHIELD</div>
+              <div class="shields">
+                <div class="shieldSlot" data-side="P1" data-idx="0"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="1"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="2"><div class="shieldCard"></div></div>
+              </div>
+              <div class="directHint" id="pDirectHint">DIRECT</div>
+            </div>
+          </div>
+
+          <div class="piles">
+            <div class="pile" data-click="pOutside">
+              <div class="pileCard pileIcon" data-pile="P_OUT"></div>
+              <div class="pileMeta"><div class="z">O</div><div id="pOutN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="pWing">
+              <div class="pileCard pileIcon" data-pile="P_WING"></div>
+              <div class="pileMeta"><div class="z">W</div><div id="pWingN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="pDeck">
+              <div class="pileCard deckBack" data-pile="P_DECK"></div>
+              <div class="pileMeta"><div class="z">D</div><div id="pDeckN" class="n">0</div></div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="hands">
-        <div class="handLabel">YOUR HAND</div>
+      <section class="handDock">
         <div id="hand" class="hand"></div>
-
-        <div class="handLabel" id="enemyHandLabel">ENEMY HAND</div>
-        <div id="aiHand" class="hand enemy"></div>
       </section>
     </main>
+
+    <footer class="actionBar">
+      <button id="btnNext" class="fabBtn">次のフェイズ</button>
+      <button id="btnEnd" class="fabBtn danger">ターン終了</button>
+    </footer>
   </div>
 
-  <!-- ★重要：この boot は「JS: …」を出さない。表示もしない（CSS/JSで強制非表示） -->
-  <div id="boot" aria-hidden="true"></div>
+  <!-- Viewer -->
+  <div id="viewerM" class="modal">
+    <div class="back" data-close="viewer"></div>
+    <div class="box">
+      <div class="boxHead">
+        <div id="viewerTitle" class="boxTitle">CARD</div>
+        <div class="boxHeadRight">
+          <button id="btnCardAct" class="btn small primary">効果発動</button>
+          <button class="btn small ghost" data-close="viewer">閉じる</button>
+        </div>
+      </div>
+      <div class="viewerBody">
+        <img id="viewerImg" alt="" />
+        <div id="viewerText" class="viewerText"></div>
+      </div>
+    </div>
+  </div>
 
-  <script src="./app.js"></script>
+  <!-- Choice -->
+  <div id="choiceM" class="modal">
+    <div class="back" data-close="choice"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div id="choiceTitle" class="boxTitle">選択</div>
+        <button class="btn small ghost" data-close="choice">閉じる</button>
+      </div>
+      <div id="choiceBody" class="choiceBody"></div>
+    </div>
+  </div>
+
+  <!-- Zone -->
+  <div id="zoneM" class="modal">
+    <div class="back" data-close="zone"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div id="zoneTitle" class="boxTitle">ZONE</div>
+        <button class="btn small ghost" data-close="zone">閉じる</button>
+      </div>
+      <div id="zoneBody" class="choiceBody"></div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="resultM" class="modal">
+    <div class="back" data-close="result"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">RESULT</div>
+        <button class="btn small ghost" data-close="result">閉じる</button>
+      </div>
+      <div class="resultBody">
+        <div id="resultText" class="resultText"></div>
+        <div class="resultBtns">
+          <button id="btnNextGame" class="btn primary">NEXT GAME</button>
+          <button id="btnBackTitle" class="btn">TITLE</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div id="logM" class="modal">
+    <div class="back" data-close="log"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">LOG</div>
+        <button class="btn small ghost" data-close="log">閉じる</button>
+      </div>
+      <div id="logBody" class="logBody"></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settingsM" class="modal">
+    <div class="back" data-close="settings"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">設定</div>
+        <button class="btn small ghost" data-close="settings">閉じる</button>
+      </div>
+      <div class="settings">
+        <div class="setBlock">
+          <div class="setTitle">GitHub Repo（画像自動探索）</div>
+          <div class="setRow">
+            <input id="repoInput" class="input" placeholder="owner/repo" />
+          </div>
+          <div class="setRow" style="margin-top:10px;">
+            <button id="btnRepoSave" class="btn primary small">保存</button>
+            <button id="btnRescan" class="btn small">再スキャン</button>
+            <button id="btnClearCache" class="btn small ghost">キャッシュ削除</button>
+          </div>
+          <div class="setHint">裏面は /assets/card_back.png.PNG を優先チェックします。</div>
+          <div class="setHint">フィールドは /assets/field.* を自動探索します。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help -->
+  <div id="helpM" class="modal">
+    <div class="back" data-close="help"></div>
+    <div class="box smallBox">
+      <div class="boxHead">
+        <div class="boxTitle">操作</div>
+        <button class="btn small ghost" data-close="help">閉じる</button>
+      </div>
+      <div class="help">
+        <div class="helpItem">・長押し：拡大表示（現在ATK/補正込み）</div>
+        <div class="helpItem">・手札タップ：選択</div>
+        <div class="helpItem">・MAIN：キャラ→空きCタップで登場（通常はターン1回）</div>
+        <div class="helpItem">・MAIN：見参キャラ→空きCタップで即コスト選択へ</div>
+        <div class="helpItem">・MAIN：エフェ/アイテム→空きEタップで配置（エフェは即解決→ウイング）</div>
+        <div class="helpItem">・W（ウイング）タップ：カード一覧</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./script.js?v=50015"></script>
 </body>
 </html>
