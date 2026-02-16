@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=50001" />
+  <link rel="stylesheet" href="./style.css?v=50010" />
 </head>
 <body>
 
@@ -63,35 +63,16 @@
               <div class="pileMeta"><div class="z">D</div><div id="aiDeckN" class="n">0</div></div>
             </div>
             <div class="pile" data-click="aiWing">
-              <div class="pileCard pileBlank" data-pile="AI_WING"></div>
+              <div class="pileCard dim" data-pile="AI_WING"></div>
               <div class="pileMeta"><div class="z">W</div><div id="aiWingN" class="n">0</div></div>
             </div>
             <div class="pile" data-click="aiOutside">
-              <div class="pileCard pileBlank" data-pile="AI_OUT"></div>
+              <div class="pileCard dim" data-pile="AI_OUT"></div>
               <div class="pileMeta"><div class="z">O</div><div id="aiOutN" class="n">0</div></div>
             </div>
           </div>
 
           <div class="lanes">
-            <!-- ★ 敵：奥→手前（SHIELD → E → C） -->
-            <div class="lane">
-              <div class="rowTitle">ENEMY SHIELD</div>
-              <div class="shields">
-                <div class="shieldSlot" data-side="AI" data-idx="0">
-                  <div class="shieldCard"></div>
-                  <div class="directIcon">DIRECT</div>
-                </div>
-                <div class="shieldSlot" data-side="AI" data-idx="1">
-                  <div class="shieldCard"></div>
-                  <div class="directIcon">DIRECT</div>
-                </div>
-                <div class="shieldSlot" data-side="AI" data-idx="2">
-                  <div class="shieldCard"></div>
-                  <div class="directIcon">DIRECT</div>
-                </div>
-              </div>
-            </div>
-
             <div class="lane">
               <div class="rowTitle">ENEMY E（エフェクト/アイテム）</div>
               <div id="aiE" class="slots"></div>
@@ -100,6 +81,15 @@
             <div class="lane">
               <div class="rowTitle">ENEMY C（キャラクター）</div>
               <div id="aiC" class="slots"></div>
+            </div>
+
+            <div class="lane">
+              <div class="rowTitle">ENEMY SHIELD</div>
+              <div class="shields">
+                <div class="shieldSlot" data-side="AI" data-idx="0"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="AI" data-idx="1"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="AI" data-idx="2"><div class="shieldCard"></div></div>
+              </div>
             </div>
           </div>
         </div>
@@ -122,34 +112,26 @@
             <div class="lane">
               <div class="rowTitle">YOUR SHIELD</div>
               <div class="shields">
-                <div class="shieldSlot" data-side="P1" data-idx="0">
-                  <div class="shieldCard"></div>
-                  <div class="directIcon">DIRECT</div>
-                </div>
-                <div class="shieldSlot" data-side="P1" data-idx="1">
-                  <div class="shieldCard"></div>
-                  <div class="directIcon">DIRECT</div>
-                </div>
-                <div class="shieldSlot" data-side="P1" data-idx="2">
-                  <div class="shieldCard"></div>
-                  <div class="directIcon">DIRECT</div>
-                </div>
+                <div class="shieldSlot" data-side="P1" data-idx="0"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="1"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="2"><div class="shieldCard"></div></div>
               </div>
             </div>
           </div>
 
+          <!-- ★ご指定：自分側のみ「D と O」を入れ替え（手前＝D） -->
           <div class="piles">
+            <div class="pile" data-click="pOutside">
+              <div class="pileCard dim" data-pile="P_OUT"></div>
+              <div class="pileMeta"><div class="z">O</div><div id="pOutN" class="n">0</div></div>
+            </div>
+            <div class="pile" data-click="pWing">
+              <div class="pileCard dim" data-pile="P_WING"></div>
+              <div class="pileMeta"><div class="z">W</div><div id="pWingN" class="n">0</div></div>
+            </div>
             <div class="pile" data-click="pDeck">
               <div class="pileCard" data-pile="P_DECK"></div>
               <div class="pileMeta"><div class="z">D</div><div id="pDeckN" class="n">0</div></div>
-            </div>
-            <div class="pile" data-click="pWing">
-              <div class="pileCard pileBlank" data-pile="P_WING"></div>
-              <div class="pileMeta"><div class="z">W</div><div id="pWingN" class="n">0</div></div>
-            </div>
-            <div class="pile" data-click="pOutside">
-              <div class="pileCard pileBlank" data-pile="P_OUT"></div>
-              <div class="pileMeta"><div class="z">O</div><div id="pOutN" class="n">0</div></div>
             </div>
           </div>
         </div>
@@ -162,7 +144,7 @@
       </section>
     </main>
 
-    <!-- ACTION BAR -->
+    <!-- ACTION BAR (sticky) -->
     <footer class="actionBar">
       <button id="btnNext" class="fabBtn">次のフェイズ</button>
       <button id="btnEnd" class="fabBtn danger">ターン終了</button>
@@ -242,16 +224,17 @@
         <button class="btn small ghost" data-close="help">閉じる</button>
       </div>
       <div class="help">
-        <div class="helpItem">・長押し：拡大表示（テキスト＆ATK）</div>
+        <div class="helpItem">・長押し：拡大表示（テキスト＆現在ATK）</div>
         <div class="helpItem">・手札タップ：選択</div>
         <div class="helpItem">・MAIN：キャラ→空きCタップで登場（通常はターン1回）</div>
         <div class="helpItem">・MAIN：見参カード→空きC長押し（無制限）</div>
-        <div class="helpItem">・MAIN：エフェクト/アイテム→空きEタップ（発動時に即選択）</div>
-        <div class="helpItem">・BATTLE：自分Cタップ→相手C/シールドをタップ</div>
+        <div class="helpItem">・MAIN：エフェクト→空きEタップで即時発動（発動後ウイング）</div>
+        <div class="helpItem">・MAIN：アイテム→空きEタップで配置→装備先を選択（E枠を占有）</div>
+        <div class="helpItem">・BATTLE：自分Cを選ぶ→攻撃先（相手C/シールド）を選択</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=50001"></script>
+  <script src="./script.js?v=50010"></script>
 </body>
 </html>
