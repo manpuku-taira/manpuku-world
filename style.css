@@ -11,6 +11,7 @@
 }
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
+
 body{
   margin:0;
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
@@ -19,7 +20,8 @@ body{
     radial-gradient(900px 700px at 80% 40%, rgba(179,91,255,.10), transparent 55%),
     var(--bg);
   color:var(--text);
-  overflow:hidden;
+  overflow:hidden; /* 画面全体は固定、スクロールは .main のみ */
+  -webkit-text-size-adjust:100%;
 }
 
 .screen{ display:none; height:100dvh; }
@@ -92,7 +94,8 @@ body{
   flex:1;
   min-height:0;
   overflow:auto;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Enemy hand */
@@ -123,16 +126,19 @@ body{
   border-radius:18px;
   background:rgba(0,0,0,.22);
   box-shadow:var(--shadow);
+  overflow:hidden; /* ★ フィールド画像がはみ出して崩すのを防止 */
 }
+
+/* ★ フィールドは「薄い背景」固定。containをやめ、coverで安定表示（拡大事故/部分表示事故を防止） */
 .field{
   position:absolute;
-  left:0; right:0;
-  height:50%;
+  inset:-6%;
   background-repeat:no-repeat;
   background-position:center;
-  background-size:contain;
-  opacity:.9;
+  background-size:cover;
+  opacity:.22;          /* ★ 主役はカード。フィールドは薄く */
   pointer-events:none;
+  filter: saturate(.9) contrast(.95);
 }
 .fieldTop{ top:0; transform:rotate(180deg); }
 .fieldBottom{ bottom:0; }
@@ -228,13 +234,12 @@ body{
   background:linear-gradient(135deg, rgba(89,242,255,.10), rgba(179,91,255,.08));
 }
 
-/* Shields (always vertical cards) */
+/* Shields */
 .shields{
   display:flex;
   justify-content:center;
   gap:14px;
 }
-.shieldSlot{ }
 .shieldCard{
   width: clamp(56px, 10.5vw, 96px);
   aspect-ratio: 2/3;
@@ -259,6 +264,7 @@ body{
   border-radius:18px;
   background:var(--panel2);
   box-shadow:var(--shadow);
+  -webkit-overflow-scrolling: touch;
 }
 .handCard{
   width:80px;
@@ -274,10 +280,9 @@ body{
 .handCard.glow{ outline:2px solid rgba(89,242,255,.55); transform: translateY(-1px); }
 .handCard.sel{ outline:2px solid rgba(179,91,255,.55); transform: translateY(-1px); }
 
-/* Action bar (sticky, not fixed) */
+/* Action bar：固定ではなく「画面下の通常要素」。手札に被せない */
 .actionBar{
-  position:sticky;
-  bottom:0;
+  flex:0 0 auto;
   display:flex;
   gap:10px;
   padding:10px;
