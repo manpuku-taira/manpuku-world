@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Manpuku World</title>
-  <link rel="stylesheet" href="./style.css?v=50000" />
+  <link rel="stylesheet" href="./style.css?v=50001" />
 </head>
 <body>
 
@@ -63,20 +63,33 @@
               <div class="pileMeta"><div class="z">D</div><div id="aiDeckN" class="n">0</div></div>
             </div>
             <div class="pile" data-click="aiWing">
-              <div class="pileCard" data-pile="AI_WING"></div>
+              <div class="pileCard pileBlank" data-pile="AI_WING"></div>
               <div class="pileMeta"><div class="z">W</div><div id="aiWingN" class="n">0</div></div>
             </div>
             <div class="pile" data-click="aiOutside">
-              <div class="pileCard" data-pile="AI_OUT"></div>
+              <div class="pileCard pileBlank" data-pile="AI_OUT"></div>
               <div class="pileMeta"><div class="z">O</div><div id="aiOutN" class="n">0</div></div>
             </div>
           </div>
 
           <div class="lanes">
-            <!-- ★ ここを「C → E → SHIELD」に修正（ご主人様ルール準拠） -->
+            <!-- ★ 敵：奥→手前（SHIELD → E → C） -->
             <div class="lane">
-              <div class="rowTitle">ENEMY C（キャラクター）</div>
-              <div id="aiC" class="slots"></div>
+              <div class="rowTitle">ENEMY SHIELD</div>
+              <div class="shields">
+                <div class="shieldSlot" data-side="AI" data-idx="0">
+                  <div class="shieldCard"></div>
+                  <div class="directIcon">DIRECT</div>
+                </div>
+                <div class="shieldSlot" data-side="AI" data-idx="1">
+                  <div class="shieldCard"></div>
+                  <div class="directIcon">DIRECT</div>
+                </div>
+                <div class="shieldSlot" data-side="AI" data-idx="2">
+                  <div class="shieldCard"></div>
+                  <div class="directIcon">DIRECT</div>
+                </div>
+              </div>
             </div>
 
             <div class="lane">
@@ -85,12 +98,8 @@
             </div>
 
             <div class="lane">
-              <div class="rowTitle">ENEMY SHIELD</div>
-              <div class="shields">
-                <div class="shieldSlot" data-side="AI" data-idx="0"><div class="shieldCard"></div></div>
-                <div class="shieldSlot" data-side="AI" data-idx="1"><div class="shieldCard"></div></div>
-                <div class="shieldSlot" data-side="AI" data-idx="2"><div class="shieldCard"></div></div>
-              </div>
+              <div class="rowTitle">ENEMY C（キャラクター）</div>
+              <div id="aiC" class="slots"></div>
             </div>
           </div>
         </div>
@@ -113,9 +122,18 @@
             <div class="lane">
               <div class="rowTitle">YOUR SHIELD</div>
               <div class="shields">
-                <div class="shieldSlot" data-side="P1" data-idx="0"><div class="shieldCard"></div></div>
-                <div class="shieldSlot" data-side="P1" data-idx="1"><div class="shieldCard"></div></div>
-                <div class="shieldSlot" data-side="P1" data-idx="2"><div class="shieldCard"></div></div>
+                <div class="shieldSlot" data-side="P1" data-idx="0">
+                  <div class="shieldCard"></div>
+                  <div class="directIcon">DIRECT</div>
+                </div>
+                <div class="shieldSlot" data-side="P1" data-idx="1">
+                  <div class="shieldCard"></div>
+                  <div class="directIcon">DIRECT</div>
+                </div>
+                <div class="shieldSlot" data-side="P1" data-idx="2">
+                  <div class="shieldCard"></div>
+                  <div class="directIcon">DIRECT</div>
+                </div>
               </div>
             </div>
           </div>
@@ -126,11 +144,11 @@
               <div class="pileMeta"><div class="z">D</div><div id="pDeckN" class="n">0</div></div>
             </div>
             <div class="pile" data-click="pWing">
-              <div class="pileCard" data-pile="P_WING"></div>
+              <div class="pileCard pileBlank" data-pile="P_WING"></div>
               <div class="pileMeta"><div class="z">W</div><div id="pWingN" class="n">0</div></div>
             </div>
             <div class="pile" data-click="pOutside">
-              <div class="pileCard" data-pile="P_OUT"></div>
+              <div class="pileCard pileBlank" data-pile="P_OUT"></div>
               <div class="pileMeta"><div class="z">O</div><div id="pOutN" class="n">0</div></div>
             </div>
           </div>
@@ -228,11 +246,12 @@
         <div class="helpItem">・手札タップ：選択</div>
         <div class="helpItem">・MAIN：キャラ→空きCタップで登場（通常はターン1回）</div>
         <div class="helpItem">・MAIN：見参カード→空きC長押し（無制限）</div>
-        <div class="helpItem">・MAIN：エフェ/アイテム→空きEタップ（即時効果は直後に選択）</div>
+        <div class="helpItem">・MAIN：エフェクト/アイテム→空きEタップ（発動時に即選択）</div>
+        <div class="helpItem">・BATTLE：自分Cタップ→相手C/シールドをタップ</div>
       </div>
     </div>
   </div>
 
-  <script src="./script.js?v=50000"></script>
+  <script src="./script.js?v=50001"></script>
 </body>
 </html>
