@@ -110,7 +110,7 @@ function renderLogModal(){
 
 function bindLongPress(node, fn, ms=620){
   let t = null;
-  const start = (e)=> { clearTimeout(t); t = setTimeout(()=>fn(e), ms); };
+  const start = ()=> { clearTimeout(t); t = setTimeout(()=>fn(), ms); };
   const end = ()=> clearTimeout(t);
   node.addEventListener("mousedown", start);
   node.addEventListener("mouseup", end);
@@ -359,7 +359,6 @@ function sideName(side){ return side==="P1" ? "あなた" : "AI"; }
 function opponent(side){ return side==="P1" ? "AI" : "P1"; }
 
 function isFirstTurnBattleLocked(){
-  // ★修正③：ゲームのTURN1は先攻側の最初のターン。ここでは“バトル全禁止”
   return state.turn===1;
 }
 
@@ -673,7 +672,7 @@ async function applyImagesFromCache(){
     state.img.cardUrlByNo[k] = vercelPathCards(map[k]);
   }
 
-  // ★タイトル画像：title.PNG / title.png 両対応
+  // title.PNG / title.png
   const titleCandidates = ["/assets/title.PNG", "/assets/title.png"];
   let found = "";
   for(const u of titleCandidates){
@@ -936,7 +935,6 @@ function nextPhase(){
   const i = PHASES.indexOf(state.phase);
   const next = PHASES[(i+1)%PHASES.length];
 
-  // ★修正③：TURN1はBATTLEへ進めない（NEXT PHASEで飛ばす）
   if(next==="BATTLE" && isFirstTurnBattleLocked()){
     log("TURN1はバトルできません（自動でENDへ）", "warn");
     state.phase = "END";
@@ -1091,7 +1089,6 @@ async function onClickYourC(pos){
   if(state.activeSide!=="P1" || state.gameOver) return;
 
   if(state.phase==="BATTLE"){
-    // ★修正③：TURN1はBATTLE自体を封じるが、念のためガード
     if(isFirstTurnBattleLocked()){
       log("TURN1はバトルできません", "warn");
       return;
@@ -1106,7 +1103,7 @@ async function onClickYourC(pos){
   if(state.P1.C[pos]) return;
   if(state.selectedHandIndex==null) return;
 
-  const card = state.P1.hand[state.selectedHandIndex];
+  let card = state.P1.hand[state.selectedHandIndex];
   if(!isCharacter(card)){
     log("Cにはキャラクターのみ置けます", "warn");
     return;
@@ -1352,10 +1349,8 @@ async function resolveEffect(side, eff){
 async function onEnterTriggers(side, ctx){
   const {card} = ctx;
 
-  // 04 ラウス
   if(card.no===4){
     if(side==="AI"){
-      // ★修正②：AIはUIを出さずに自動でサーチ（可能なら）
       await searchFromDeckOrWingByTagAI("AI", "クランプス", 1);
       return;
     }
@@ -1365,7 +1360,6 @@ async function onEnterTriggers(side, ctx){
     return;
   }
 
-  // 05 タータ
   if(card.no===5){
     draw(side, 2);
     log(`${sideName(side)}：タータ登場→2ドロー`);
@@ -1373,7 +1367,6 @@ async function onEnterTriggers(side, ctx){
     return;
   }
 
-  // 11 司令
   if(card.no===11){
     if(side==="AI"){
       await aiTryShireiEquip("AI", ctx.pos);
@@ -1390,10 +1383,8 @@ async function onEnterTriggers(side, ctx){
     return;
   }
 
-  // 09/10：登場時 相方無料見参の提案（プレイヤーのみ）
   if(card.no===9 || card.no===10){
     if(side==="AI"){
-      // AIは後でMAINでやる（簡易）
       return;
     }
     await tryPartnerSummonUI("P1");
@@ -1574,7 +1565,6 @@ async function tryPartnerSummonUI(side){
     return;
   }
 
-  // ★修正①：コスト不要（無料見参）
   if(await askYesNo("相方見参", `手札の「${want.name}」をコスト不要で見参しますか？`)){
     const placed = p.hand.splice(want.idx,1)[0];
     p.C[empty] = placed;
@@ -1614,7 +1604,6 @@ async function searchFromDeckOrWingByTag(side, tag, n){
   renderAll();
 }
 
-// AI用：UIなしで1枚だけ自動取得（見つからなければ何もしない）
 async function searchFromDeckOrWingByTagAI(side, tag, n){
   const p = state[side];
   for(let k=0;k<n;k++){
@@ -1885,7 +1874,6 @@ async function aiTakeTurn(){
   await aiTryAnyShirei();
   await sleep(160);
 
-  // ★修正③：TURN1はAIもバトルしない（先攻がAIの時に必要）
   if(isFirstTurnBattleLocked()){
     log("AI：TURN1はバトルしません");
   }else{
@@ -2096,19 +2084,11 @@ function bindStart(){
     startGame();
   };
 
-  // ★タイトルが押せない問題対策：ボタン＆画面どちらでも開始
   el.btnStart.addEventListener("click", (e)=>{
     e.preventDefault();
     e.stopPropagation();
     go();
   }, {passive:false});
-
-  el.title.addEventListener("click", (e)=>{
-    // ボタン以外タップでも開始したい場合のみ（不要なら削除OK）
-    if(e.target && e.target.id==="btnStart") return;
-    // 画面誤爆が嫌なら以下1行をコメントアウトしてください
-    // go();
-  }, {passive:true});
 }
 
 function bindHUD(){
@@ -2192,7 +2172,7 @@ async function init(){
   }
 
   el.boot.textContent="JS: OK（準備完了）";
-  log("v50014+：完全版（丸ごと置換）");
+  log("v50014+：JSのみ再提出");
 }
 
 document.addEventListener("DOMContentLoaded", init);
