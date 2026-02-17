@@ -9,10 +9,8 @@
   --panel2: rgba(6,8,14,.68);
   --shadow: 0 12px 40px rgba(0,0,0,.45);
 }
-
 *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 html,body{ height:100%; }
-
 body{
   margin:0;
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
@@ -23,8 +21,6 @@ body{
   color:var(--text);
   overflow:hidden;
 }
-
-/* screen */
 .screen{ display:none; height:100dvh; }
 .screen.active{ display:flex; flex-direction:column; height:100dvh; }
 
@@ -236,7 +232,6 @@ body{
   flex-wrap:nowrap;
 }
 
-/* slot (C/E) */
 .slot{
   width: clamp(56px, 10.5vw, 96px);
   aspect-ratio:2/3;
@@ -300,32 +295,21 @@ body{
   opacity:.95;
 }
 
-/* Shields
-   ✅ 新HTMLは `.shieldSlot > .shieldCard` なので、ここを正しく定義し直す */
+/* Shields */
 .shields{
   display:flex;
   justify-content:center;
   gap:14px;
 }
-.shieldSlot{
+.shieldCard{
   width: clamp(56px, 10.5vw, 96px);
   aspect-ratio: 2/3;
   border-radius:14px;
   border:1px solid rgba(167,176,217,.22);
-  background:rgba(6,8,14,.20);
-  position:relative;
-  overflow:hidden;
-  flex:0 0 auto;
-  box-shadow: 0 10px 24px rgba(0,0,0,.18);
-  touch-action: manipulation;
-}
-.shieldCard{
-  position:absolute;
-  inset:0;
-  border-radius:14px;
   background:#070914;
   background-size:cover;
   background-position:center;
+  box-shadow: 0 10px 24px rgba(0,0,0,.25);
   opacity:1;
 }
 .shieldCard.empty{ opacity:.18; }
@@ -355,7 +339,6 @@ body{
   border-radius:18px;
   background:var(--panel2);
   box-shadow:var(--shadow);
-  -webkit-overflow-scrolling: touch;
 }
 .handCard{
   width:80px;
@@ -425,13 +408,11 @@ body{
   border-bottom:1px solid rgba(89,242,255,.12);
 }
 .boxTitle{ font-weight:1000; letter-spacing:.12em; font-size:13px; }
-
 .viewerBody{
   display:grid;
   grid-template-columns: 0.95fr 1.05fr;
   gap:12px;
   padding:12px;
-  min-height: 0;
 }
 .viewerBody img{
   width:100%;
@@ -439,32 +420,15 @@ body{
   border:1px solid rgba(167,176,217,.18);
   background:rgba(6,8,14,.55);
 }
-
-/* ✅ 拡大ビュー本文：スクロール確実化 */
 .viewerText{
   font-size:14px;
   line-height:1.6;
   white-space:pre-wrap;
   color:rgba(233,236,255,.92);
-  max-height: 56vh;
-  overflow:auto;
-  padding-right: 6px;
-  -webkit-overflow-scrolling: touch;
 }
-@media (max-width:720px){
-  .viewerBody{ grid-template-columns:1fr; }
-  .viewerText{ max-height: 46vh; }
-}
+@media (max-width:720px){ .viewerBody{ grid-template-columns:1fr; } }
 
-.choiceBody{
-  padding:12px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  max-height:74vh;
-  overflow:auto;
-  -webkit-overflow-scrolling: touch;
-}
+.choiceBody{ padding:12px; display:flex; flex-direction:column; gap:10px; max-height:74vh; overflow:auto; }
 .choiceMsg{ font-size:13px; color:rgba(233,236,255,.92); line-height:1.5; }
 .choiceList{ display:flex; flex-direction:column; gap:8px; }
 .choiceItem{
@@ -489,11 +453,10 @@ body{
 .choiceMeta .t{ font-weight:1000; font-size:13px; }
 .choiceMeta .s{ color:var(--muted); font-size:11px; margin-top:2px; }
 
-.logBody{ padding:12px; max-height:74vh; overflow:auto; -webkit-overflow-scrolling: touch; }
+.logBody{ padding:12px; max-height:74vh; overflow:auto; }
 .logLine{ margin:6px 0; font-size:12px; color:rgba(233,236,255,.92); }
 .logLine.warn{ color:rgba(255,77,109,.95); }
 
-/* Settings */
 .settings{ padding:12px; display:flex; flex-direction:column; gap:12px; }
 .setBlock{ padding:12px; border-radius:16px; border:1px solid rgba(89,242,255,.12); background:rgba(6,8,14,.55); }
 .setTitle{ font-weight:1000; letter-spacing:.12em; margin-bottom:8px; font-size:12px; }
