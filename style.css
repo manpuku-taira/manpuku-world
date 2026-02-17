@@ -8,6 +8,14 @@
   --accent:#7fd7ff;
   --danger:#ff6a7d;
   --ok:#7dffb2;
+
+  /* 安定レイアウト用の高さ基準（iPhoneでも崩れにくい） */
+  --hudH: 56px;
+  --rowGap: 10px;
+  --handH: 98px;
+  --shieldH: 78px;
+  --zoneH: 96px;
+  --statusH: 56px;
 }
 
 *{ box-sizing:border-box; }
@@ -18,11 +26,13 @@ body{
   background: radial-gradient(1200px 800px at 50% 10%, #14203a, var(--bg));
   color:var(--txt);
   -webkit-tap-highlight-color: transparent;
+  overflow:hidden; /* ★全体は固定。中身だけスクロール */
 }
 
 .screen{ display:none; height:100%; }
 .screen.active{ display:block; }
 
+/* -------- Title -------- */
 .titleWrap{
   height:100%;
   display:flex;
@@ -61,19 +71,18 @@ body{
 }
 .titleHint{ font-size:12px; color:var(--muted); }
 
+/* -------- HUD -------- */
 .hud{
-  height:56px;
+  height: var(--hudH);
   padding:10px 10px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
-  background: rgba(10,14,22,.6);
+  background: rgba(10,14,22,.65);
   border-bottom: 1px solid rgba(255,255,255,.08);
-  position: sticky;
-  top:0;
+  position: relative; /* ★stickyを外して崩れ防止 */
   z-index:10;
-  backdrop-filter: blur(10px);
 }
 .hudLeft{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .hudRight{ display:flex; gap:6px; align-items:center; }
@@ -101,40 +110,65 @@ body{
 .btnPrimary{ border-color: rgba(127,215,255,.35); }
 .btnDanger{ border-color: rgba(255,106,125,.35); }
 
+/* -------- Field (ここがレイアウト復元の中心) -------- */
 .field{
-  height: calc(100% - 56px);
-  display:flex;
-  flex-direction:column;
+  height: calc(100% - var(--hudH));
+  display:grid;
+  grid-template-rows: 1fr 1fr;  /* ★上：敵 / 下：自分 で固定 */
+  overflow:hidden;
 }
+
+/* 各サイドも固定行構造で崩れにくく */
 .fieldSide{
-  flex:1;
   padding:10px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
+  display:grid;
+  gap: var(--rowGap);
+  overflow:hidden; /* ★各サイド内のはみ出し抑制 */
   background-size: cover;
   background-position:center;
+  background-repeat:no-repeat;
 }
-.fieldSide.enemy{ filter: saturate(.95); }
-.fieldSide.you{ filter: saturate(1.02); }
 
-.row{ display:flex; align-items:center; gap:10px; }
+/* ENEMYは上：status→shield→E→C→hand */
+.fieldSide.enemy{
+  grid-template-rows:
+    var(--statusH)
+    var(--shieldH)
+    var(--zoneH)
+    var(--zoneH)
+    var(--handH);
+}
+
+/* YOUは下：hand→C→E→shield→status */
+.fieldSide.you{
+  grid-template-rows:
+    var(--handH)
+    var(--zoneH)
+    var(--zoneH)
+    var(--shieldH)
+    var(--statusH);
+}
+
+/* 共通 row */
+.row{ display:flex; align-items:center; gap:10px; min-height:0; }
 .statusRow{ justify-content:space-between; gap:8px; }
-.handRow{ justify-content:center; }
-.zoneRow{ align-items:flex-start; }
+.handRow{ justify-content:center; min-height:0; }
+.zoneRow{ align-items:center; min-height:0; }
 .zoneLabel{
   width:70px;
   color:var(--muted);
   font-size:12px;
-  padding-top:6px;
 }
 
+/* zoneは横並び固定 */
 .zone{
   flex:1;
   display:flex;
   gap:8px;
   justify-content:center;
+  min-width:0;
 }
+
 .slot{
   width:64px;
   height:88px;
@@ -143,6 +177,7 @@ body{
   background: rgba(255,255,255,.05);
   position:relative;
   overflow:hidden;
+  flex:0 0 auto;
 }
 .slot.glow{
   outline: 2px solid rgba(127,215,255,.35);
@@ -179,13 +214,17 @@ body{
 }
 .atkBadge.plus{ border-color: rgba(125,255,178,.45); }
 
+/* Handは高さ固定＋横スクロール */
 .hand{
   width:100%;
+  height: var(--handH);
   display:flex;
   gap:8px;
   overflow-x:auto;
+  overflow-y:hidden;
   padding:6px 2px;
   -webkit-overflow-scrolling: touch;
+  align-items:center;
 }
 .handCard, .handBack{
   width:64px;
@@ -198,21 +237,20 @@ body{
   flex: 0 0 auto;
   position:relative;
 }
-.handCard.glow{
-  outline: 2px solid rgba(127,215,255,.35);
-}
-.handCard.sel{
-  outline: 2px solid rgba(125,255,178,.5);
-}
+.handCard.glow{ outline: 2px solid rgba(127,215,255,.35); }
+.handCard.sel{ outline: 2px solid rgba(125,255,178,.5); }
 .enemyHandLabel{
   font-size:12px;
   color:var(--muted);
   white-space:nowrap;
+  flex: 0 0 auto;
 }
 
+/* Shieldは高さ固定＋中央 */
 .shieldRow{
   justify-content:center;
   position:relative;
+  height: var(--shieldH);
 }
 .shieldSlot{
   width:54px; height:72px;
@@ -246,6 +284,7 @@ body{
 }
 .directHint.show{ display:block; }
 
+/* Piles */
 .pile{
   width:90px;
   border-radius:14px;
@@ -253,10 +292,12 @@ body{
   background: rgba(255,255,255,.06);
   padding:8px 10px;
   text-align:center;
+  flex:0 0 auto;
 }
 .pileLabel{ font-size:11px; color:var(--muted); }
 .pileN{ font-size:18px; font-weight:900; }
 
+/* -------- Modal -------- */
 .modal{
   position:fixed; inset:0;
   display:none;
@@ -332,13 +373,13 @@ body{
   font-size:13px;
   line-height:1.45;
   color:var(--txt);
-  overflow:auto;               /* ★テキストをスクロール可能に */
-  max-height: 220px;           /* ★画像高さに合わせる */
+  overflow:auto;
   -webkit-overflow-scrolling: touch;
   border-radius:14px;
   border:1px solid rgba(255,255,255,.08);
   background: rgba(0,0,0,.20);
   padding:10px;
+  max-height: 220px;
 }
 
 .choiceMsg{ color:var(--muted); font-size:12px; margin-bottom:10px; white-space:pre-wrap; }
