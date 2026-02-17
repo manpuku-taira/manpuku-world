@@ -1,10 +1,13 @@
 /* =========================================================
-  Manpuku World - v50018 (Full Replace)
-  - NEW：手札上限(7)超過はターン終了時に「自分で選んで」ウイングへ（P1のみ）
-  - FIX：クルエラ(No.01) フィールド能力（毎ターン1回：黒魔法サーチ）を正式実装
-  - FIX：チェーン選択モーダルを閉じた際にAIが停止する問題（未解決Promise）を解消
-  - AI：不適切な行動を減らす戦闘判断の改善（勝てる戦い優先、ルール遵守強化）
-  - 先攻TURN1バトル禁止 / シールド破壊→破壊側手札へ 即時移動 は維持
+  Manpuku World - v50019 (Full Replace)
+  - UI方針変更：フィールド効果ボタンは基本的に消さない
+      → 不適切な時は「今は発動できません」とアナウンス（ログ）する
+      → 「毎ターン1回」はボタン非表示ではなく、押した時に使用済み通知
+  - FIX：クルエラ(No.01) 次ターン以降に効果ボタンが消える問題を解消
+  - AI強化：シールド破壊＝相手の手札供給なので、勝ち筋がない限り無駄に殴らない
+      → ①確殺（このターンで勝てる）ならシールド→ダイレクトを実行
+      → ②それ以外は「相手のATKが自分より低い相手」をあえて殴らない（盤面温存）
+      → ③危険（相手ATK>=自分ATK等）な相手だけ、必要なら戦闘で処理
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -311,7 +314,7 @@ function makeInstance(cardDef){
     tempAtk: 0,
     equipUid: null,
     equippedToUid: null,
-    used: { perTurn:false }, // ★毎ターン1回用
+    used: { perTurn:false }, // 毎ターン1回
     flags: {
       producerSavedThisTurn:false,
       attackedCountThisTurn:0,
@@ -346,8 +349,8 @@ const state = {
   img: { fieldUrl:"", backUrl:"", cardUrlByNo:{}, ready:false },
 
   limits: {
-    P1: { handgataUsed:false, cruellaUsed:false, tataUsed:false },
-    AI: { handgataUsed:false, cruellaUsed:false, tataUsed:false },
+    P1: { handgataUsed:false },
+    AI: { handgataUsed:false },
   }
 };
 
@@ -363,9 +366,6 @@ function opponent(side){ return side==="P1" ? "AI" : "P1"; }
 ========================================================= */
 function isFirstTurnNoBattleFor(side){
   return (state.turn === 1 && side === state.firstSide);
-}
-function isFirstTurnNoBattleNow(){
-  return isFirstTurnNoBattleFor(state.activeSide);
 }
 
 /* =========================================================
@@ -385,7 +385,7 @@ function onShieldBrokenToHand(defSide, shieldIdx, byAttackerName){
 function showModal(id){ $(id).classList.add("show"); }
 function hideModal(id){ $(id).classList.remove("show"); }
 
-/* ★v50018：choiceモーダルを閉じた場合も必ずPromise解決（AI停止防止） */
+/* choiceモーダル：閉じた場合も必ず解決（AI停止防止） */
 let choiceResolver = null;
 let choiceDefaultValue = null;
 
@@ -650,13 +650,11 @@ function clearEndTurnTemps(side){
 }
 function resetPerTurn(side){
   state.limits[side].handgataUsed = false;
-  state.limits[side].cruellaUsed = false;
-  state.limits[side].tataUsed = false;
 
   const p = state[side];
   for(const c of p.C){
     if(!c) continue;
-    c.used.perTurn = false; // ★毎ターン復帰
+    c.used.perTurn = false; // 毎ターン復帰
     c.flags.attackedCountThisTurn = 0;
     c.flags.producerSavedThisTurn = false;
   }
@@ -686,6 +684,12 @@ function calcCurrentAtk(side, card){
   return atk;
 }
 
+/* ★v50019：ボタンは消さない方針。押したら「今は無理」を通知。 */
+function hasFieldAbilityFor(card){
+  if(!card || !isCharacter(card)) return false;
+  return [1,3,6,9,10,5,13].includes(card.no);
+}
+
 function openViewer(card, ctx){
   el.viewerTitle.textContent = card.name;
 
@@ -711,37 +715,12 @@ function openViewer(card, ctx){
 
   state.viewer = { side: ctx?.side||null, zone: ctx?.zone||null, pos: ctx?.pos??null, uid: card.uid };
 
-  el.btnCardAct.style.display = canActivateFromViewer(card, ctx) ? "inline-block" : "none";
+  // ★消さない：能力持ちなら常に表示（相手のカードは表示しない）
+  const canShow = (ctx?.side==="P1" && ctx?.zone==="C" && hasFieldAbilityFor(card)) ||
+                  (ctx?.side==="P1" && ctx?.zone==="C" && card.no===13); // 13は相手ターンでも可
+  el.btnCardAct.style.display = canShow ? "inline-block" : "none";
+
   showModal("viewerM");
-}
-
-function canActivateFromViewer(card, ctx){
-  if(state.gameOver) return false;
-
-  const side = ctx?.side;
-  const zone = ctx?.zone;
-  const pos  = ctx?.pos;
-  if(!side) return false;
-  if(zone!=="C") return false;
-
-  // 相手ターンでも使えるのはNo.13だけ
-  if(side==="P1"){
-    if(card.no===13) return true;
-
-    // 自分のターン MAINのみ
-    if(state.activeSide!=="P1") return false;
-    if(state.phase!=="MAIN") return false;
-
-    // 毎ターン1回系は、使用済みならボタンを出さない
-    if(card.used?.perTurn) return false;
-
-    // MAINで起動できるキャラ（必要分のみ実装）
-    if([1,3,6,9,10,5].includes(card.no)) return true;
-    return false;
-  }
-
-  // AI側のボタンは出さない
-  return false;
 }
 
 el.btnCardAct.addEventListener("click", async ()=>{
@@ -959,7 +938,7 @@ function draw(side, n=1){
   }
 }
 
-/* ★v50018：ターン終了時の手札上限処理（P1は選択式） */
+/* 手札上限（7）ターン終了時：P1は選択式 / AIは自動 */
 async function enforceHandLimitEnd(side){
   const p = state[side];
   if(p.hand.length <= 7) return;
@@ -974,7 +953,6 @@ async function enforceHandLimitEnd(side){
     return;
   }
 
-  // あなた：選んでウイングへ
   log("手札上限超過：7枚になるまで捨て札（ウイング送り）を選択してください", "warn");
   while(p.hand.length > 7){
     const items = p.hand.map((c, i)=>({
@@ -987,7 +965,7 @@ async function enforceHandLimitEnd(side){
       "手札上限（7枚）",
       `現在：${p.hand.length}枚。ウイングへ送るカードを選んでください（残り${p.hand.length-7}枚）`,
       items,
-      { defaultValue: "0" } // 閉じても止まらない
+      { defaultValue: "0" }
     );
     const idx = Math.max(0, Math.min(p.hand.length-1, Number(pick)));
     const moved = p.hand.splice(idx,1)[0];
@@ -1002,7 +980,7 @@ async function nextPhase(){
   const i = PHASES.indexOf(state.phase);
   const next = PHASES[(i+1)%PHASES.length];
 
-  if(next==="BATTLE" && isFirstTurnNoBattleNow()){
+  if(next==="BATTLE" && isFirstTurnNoBattleFor(state.activeSide)){
     log("先行1ターン目はバトルできません（BATTLEをスキップ）", "warn");
     state.phase = "END";
     await enforceHandLimitEnd(state.activeSide);
@@ -1208,7 +1186,7 @@ async function runNegationChain(activatorSide, activatedName){
         "チェーン（無効化）",
         `${buildChainText(chain)}\n\n相手の発動に反応しますか？`,
         items,
-        { defaultValue:"NO" } // ★閉じてもNO扱い
+        { defaultValue:"NO" }
       );
 
       if(v==="NO" || v==="__CANCEL__") break;
@@ -1240,7 +1218,6 @@ async function runNegationChain(activatorSide, activatedName){
     }
 
     if(responder==="AI"){
-      // AIは基本「記憶抹消優先→手形」
       if(canM){
         const me = takeMemoryEraseFromHand("AI");
         if(me){
@@ -1277,20 +1254,44 @@ async function runNegationChain(activatorSide, activatedName){
   return {negated};
 }
 
-/* ---------------- Field abilities（v50018：正式実装） ---------------- */
+/* ---------------- Field abilities（v50019：ボタン常駐・不適切時は通知） ---------------- */
+function requireYourMainForFieldAbility(side, card){
+  // No.13だけ例外（相手ターン可）
+  if(card.no===13) return true;
+
+  if(side!=="P1"){
+    log("この操作はあなた側のみ可能です", "warn");
+    return false;
+  }
+  if(state.activeSide!=="P1"){
+    log("今はあなたのターンではありません（効果は発動できません）", "warn");
+    return false;
+  }
+  if(state.phase!=="MAIN"){
+    log("今はMAINフェイズではありません（効果は発動できません）", "warn");
+    return false;
+  }
+  return true;
+}
+
 async function activateFieldCardAbility(side, zone, pos, card){
   if(state.gameOver) return;
   if(zone!=="C") return;
 
-  // No.13 は相手ターンでもOK（ただしP1操作のみ）
-  if(card.no!==13){
-    if(side!=="P1") return;
-    if(state.activeSide!=="P1") { log("自分のターンではありません", "warn"); return; }
-    if(state.phase!=="MAIN") { log("MAINフェイズのみ使用できます", "warn"); return; }
-    if(card.used?.perTurn){ log("このカードの効果はこのターン使用済みです", "warn"); return; }
+  if(!hasFieldAbilityFor(card)){
+    log("このカードに起動効果はありません", "warn");
+    return;
   }
 
-  // No.01 クルエラ：黒魔法サーチ（毎ターン1回）
+  if(!requireYourMainForFieldAbility(side, card)) return;
+
+  // 毎ターン1回
+  if(card.used?.perTurn){
+    log("このカードの効果はこのターンすでに使用済みです", "warn");
+    return;
+  }
+
+  // No.01 クルエラ：黒魔法サーチ
   if(card.no===1){
     const react = await runNegationChain("P1", `発動：${card.name}（黒魔法サーチ）`);
     if(react.negated){ log("クルエラ：効果は無効になりました", "warn"); return; }
@@ -1300,22 +1301,20 @@ async function activateFieldCardAbility(side, zone, pos, card){
       card.used.perTurn = true;
       log("クルエラ：このターンの効果使用済み");
     }
-    renderAll();
     return;
   }
 
-  // No.03 ニコラ：ATK+1000（毎ターン1回）
+  // No.03 ニコラ：ATK+1000
   if(card.no===3){
     const react = await runNegationChain("P1", `発動：${card.name}（ATK+1000）`);
     if(react.negated){ log("ニコラ：効果は無効になりました", "warn"); return; }
     card.tempAtk += 1000;
     card.used.perTurn = true;
     log("ニコラ：ATK+1000（ターン終了まで）");
-    renderAll();
     return;
   }
 
-  // No.06 エフィ：相手1体ATK-1000（毎ターン1回）
+  // No.06 エフィ：相手1体ATK-1000
   if(card.no===6){
     const react = await runNegationChain("P1", `発動：${card.name}（ATK-1000）`);
     if(react.negated){ log("エフィ：効果は無効になりました", "warn"); return; }
@@ -1342,11 +1341,10 @@ async function activateFieldCardAbility(side, zone, pos, card){
     target.tempAtk -= 1000;
     card.used.perTurn = true;
     log(`エフィ：${target.name} ATK-1000（ターン終了まで）`);
-    renderAll();
     return;
   }
 
-  // No.09/10：相方を手札から見参（毎ターン1回）
+  // No.09/10：相方を手札から見参
   if(card.no===9 || card.no===10){
     const needNo = (card.no===9) ? 10 : 9;
     const idx = state.P1.hand.findIndex(c=>c && c.no===needNo);
@@ -1361,7 +1359,6 @@ async function activateFieldCardAbility(side, zone, pos, card){
     state.P1.C[empty] = toPlace;
     card.used.perTurn = true;
     log(`見参：${toPlace.name}`);
-    renderAll();
     return;
   }
 
@@ -1404,23 +1401,23 @@ async function activateFieldCardAbility(side, zone, pos, card){
       renderAll();
     }
 
-    // BUGBUG titleTagをn枚サーチ（デッキから）
     if(n>0){
       const got = await searchFromDeckByTitleTag("P1", "BUGBUG西遊記", n);
       if(got>0) log(`タータ：BUGBUG西遊記 を ${got}枚 手札へ`);
     }
 
     card.used.perTurn = true;
-    renderAll();
     return;
   }
 
-  // No.13 スタマックス：相手ターンでも可
+  // No.13 スタマックス：相手ターンでも可（ただしP1操作のみ）
   if(card.no===13){
-    const owner = side; // 呼び元 side
-    if(owner!=="P1" && owner!=="AI") return;
+    const owner = side;
+    if(owner!=="P1"){
+      log("スタマックスの起動はあなた側のみ可能です", "warn");
+      return;
+    }
 
-    // P1操作は許可（相手ターンでも）
     const react = await runNegationChain(owner, `発動：${card.name}（ATK-1000）`);
     if(react.negated){ log("スタマックス：効果は無効になりました", "warn"); return; }
 
@@ -1445,14 +1442,10 @@ async function activateFieldCardAbility(side, zone, pos, card){
 
     target.tempAtk -= 1000;
 
-    // 自身をウイングへ
     await sendCharacterToWing(owner, card.uid);
     log(`スタマックス：${target.name} ATK-1000（ターン終了まで）／自身→ウイング`);
-    renderAll();
     return;
   }
-
-  log("（このカードのフィールド効果は未実装です）", "warn");
 }
 
 /* ---------------- Search helpers ---------------- */
@@ -1482,7 +1475,7 @@ async function searchFromDeckOrWingByNameContains(side, needle, n){
       card:x.c
     }));
     const pick = await askChoice("サーチ", `「${needle}」を手札に加える（${k+1}/${n}）`, items, {defaultValue:"__CANCEL__"});
-    if(pick==="__CANCEL__") return (k>0); // 途中キャンセルは取得分だけ成立
+    if(pick==="__CANCEL__") return (k>0);
 
     const [src, uid] = String(pick).split(":");
     const moved = (src==="deck") ? removeFromZone(p.deck, uid) : removeFromZone(p.wing, uid);
@@ -1497,7 +1490,6 @@ async function searchFromDeckByTitleTag(side, titleTag, n){
   const p = state[side];
   let got = 0;
 
-  // デッキから該当を抽出（順序維持で取り出す）
   for(let k=0;k<n;k++){
     const idx = p.deck.findIndex(c=>c && c.titleTag===titleTag);
     if(idx<0) break;
@@ -1507,6 +1499,51 @@ async function searchFromDeckByTitleTag(side, titleTag, n){
   }
   renderAll();
   return got;
+}
+
+/* ---------------- Tag Search ---------------- */
+async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
+  const p = state[side];
+  const pool = [
+    ...p.deck.map(c=>({src:"deck", c})),
+    ...p.wing.map(c=>({src:"wing", c}))
+  ].filter(x=>x.c && x.c.tags.includes(tag));
+  if(!pool.length){ log(`サーチ失敗：タグ「${tag}」が見つかりません`, "warn"); return; }
+
+  for(let k=0;k<n;k++){
+    if(opt.aiAuto){
+      const pick = pool[0];
+      if(pick.src==="deck"){
+        const moved = removeFromZone(p.deck, pick.c.uid);
+        if(moved) p.hand.push(moved);
+      }else{
+        const moved = removeFromZone(p.wing, pick.c.uid);
+        if(moved) p.hand.push(moved);
+      }
+      log(`AI：サーチ（${tag}）`);
+      continue;
+    }
+
+    const items = pool.map(x=>({
+      label:`${x.c.name}`,
+      sub:`${x.src.toUpperCase()} / TAG:${tag}`,
+      value:`${x.src}:${x.c.uid}`,
+      card:x.c
+    }));
+    const pick = await askChoice("サーチ", `タグ「${tag}」を手札に加える（${k+1}/${n}）`, items, {defaultValue:"__CANCEL__"});
+    if(pick==="__CANCEL__") return;
+
+    const [src, uid] = String(pick).split(":");
+    if(src==="deck"){
+      const moved = removeFromZone(p.deck, uid);
+      if(moved) p.hand.push(moved);
+    }else{
+      const moved = removeFromZone(p.wing, uid);
+      if(moved) p.hand.push(moved);
+    }
+  }
+  log(`サーチ：タグ「${tag}」を手札へ`);
+  renderAll();
 }
 
 /* ---------------- Interactions (Your side) ---------------- */
@@ -1836,52 +1873,7 @@ async function resolveEffect(side, eff){
   log(`（未実装効果）${eff.name}`, "warn");
 }
 
-/* ---------------- Tag Search (existing) ---------------- */
-async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
-  const p = state[side];
-  const pool = [
-    ...p.deck.map(c=>({src:"deck", c})),
-    ...p.wing.map(c=>({src:"wing", c}))
-  ].filter(x=>x.c && x.c.tags.includes(tag));
-  if(!pool.length){ log(`サーチ失敗：タグ「${tag}」が見つかりません`, "warn"); return; }
-
-  for(let k=0;k<n;k++){
-    if(opt.aiAuto){
-      const pick = pool[0];
-      if(pick.src==="deck"){
-        const moved = removeFromZone(p.deck, pick.c.uid);
-        if(moved) p.hand.push(moved);
-      }else{
-        const moved = removeFromZone(p.wing, pick.c.uid);
-        if(moved) p.hand.push(moved);
-      }
-      log(`AI：サーチ（${tag}）`);
-      continue;
-    }
-
-    const items = pool.map(x=>({
-      label:`${x.c.name}`,
-      sub:`${x.src.toUpperCase()} / TAG:${tag}`,
-      value:`${x.src}:${x.c.uid}`,
-      card:x.c
-    }));
-    const pick = await askChoice("サーチ", `タグ「${tag}」を手札に加える（${k+1}/${n}）`, items, {defaultValue:"__CANCEL__"});
-    if(pick==="__CANCEL__") return;
-
-    const [src, uid] = String(pick).split(":");
-    if(src==="deck"){
-      const moved = removeFromZone(p.deck, uid);
-      if(moved) p.hand.push(moved);
-    }else{
-      const moved = removeFromZone(p.wing, uid);
-      if(moved) p.hand.push(moved);
-    }
-  }
-  log(`サーチ：タグ「${tag}」を手札へ`);
-  renderAll();
-}
-
-/* ---------------- Battle ---------------- */
+/* ---------------- Battle (Your side) ---------------- */
 async function selectAttacker(side, pos, card){
   if(side!=="P1") return;
 
@@ -2087,63 +2079,106 @@ function applyOppTurnStartEffects(sideWhoStartsTurn){
   }
 }
 
-/* ---------------- AI（戦闘判断改善） ---------------- */
-function aiEvalBattle(attacker, defender){
-  const a = calcCurrentAtk("AI", attacker);
-  const d = calcCurrentAtk("P1", defender);
-
-  // 期待値（簡易）：勝てるなら高評価、相打ちは中、負けは低
-  if(a > d) return 1000 + (a - d);
-  if(a === d) return 400; // 相打ち
-  return -800 - (d - a);
+/* =========================================================
+   AI（v50019：タクティクス重視）
+   - シールド破壊は相手の手札供給なので「確殺が見える時だけ」行う
+   - 相手ATKが自分より低いなら、不要な戦闘は避けて盤面温存
+========================================================= */
+function aiAvailableAttackers(){
+  return state.AI.C.map((c,i)=>({c,i})).filter(x=>!!x.c && x.c.flags.attackedCountThisTurn<1);
+}
+function aiHasDirectCapableAttacker(){
+  // まひる(7)は直接不可
+  return aiAvailableAttackers().some(x=>x.c.no!==7);
 }
 
-function aiPickBestAttack(){
-  const attackers = state.AI.C.map((c,i)=>({c,i})).filter(x=>!!x.c);
-  const defenders = state.P1.C.map((c,i)=>({c,i})).filter(x=>!!x.c);
+/* このターンで勝てるか：必要な「攻撃回数」が揃うならシールド→DIRECTを許可 */
+function aiCanLethalThisTurn(){
+  // 条件：相手キャラがいない（キャラがいる限りDIRECT不可＆シールド攻撃も不可）
+  const defenders = state.P1.C.filter(Boolean);
+  if(defenders.length>0) return false;
 
-  let best = null;
-
-  for(const at of attackers){
-    if(at.c.flags.attackedCountThisTurn>=1) continue;
-    for(const df of defenders){
-      const sc = aiEvalBattle(at.c, df.c);
-      if(!best || sc > best.score){
-        best = {type:"BATTLE", aPos:at.i, dUid:df.c.uid, score:sc};
-      }
-    }
+  const shields = countShields("P1");
+  if(shields===0){
+    // すでに0ならDIRECT可能なアタッカーがいれば勝ち
+    return aiHasDirectCapableAttacker();
   }
 
-  // 相手キャラがいなければシールド攻撃評価
-  if(defenders.length===0){
-    const sh = state.P1.shield.map((c,idx)=>({c,idx})).filter(x=>!!x.c);
-    if(sh.length){
-      for(const at of attackers){
-        if(at.c.flags.attackedCountThisTurn>=1) continue;
-        // シールド破壊は「相手に手札を与える」が、勝ち筋に寄与する場合は行く
-        // 簡易：自分が優勢（相手シールド残ってるうちは殴る）で +200
-        const sc = 200 + calcCurrentAtk("AI", at.c);
-        if(!best || sc > best.score){
-          best = {type:"SHIELD", aPos:at.i, sIdx:sh[0].idx, score:sc};
+  // 「シールドを全部割って、さらにDIRECTできる攻撃数」があるか
+  const atkCount = aiAvailableAttackers().length;
+  const need = shields + 1; // シールド枚数 + DIRECT 1回
+  if(atkCount < need) return false;
+
+  // DIRECTが可能なアタッカーが最低1体いる
+  if(!aiHasDirectCapableAttacker()) return false;
+
+  return true;
+}
+
+/* 相手が弱い（ATKが低い）なら殴らない：不要な戦闘でゲームを動かさない */
+function aiShouldAvoidHittingWeakerDefender(attacker, defender){
+  const a = calcCurrentAtk("AI", attacker);
+  const d = calcCurrentAtk("P1", defender);
+  return d < a; // ご主人様要望：こちら（AI）より下回るなら攻撃しない（温存）
+}
+
+/* 危険度：相手が同等以上なら「放置すると不利」なので処理候補にする */
+function aiThreatScore(defender){
+  const d = calcCurrentAtk("P1", defender);
+  // シンプルにATKの高さで評価
+  return d;
+}
+
+function aiPickBattleAction(){
+  const attackers = aiAvailableAttackers();
+  const defenders = state.P1.C.map((c,i)=>({c,i})).filter(x=>!!x.c);
+
+  if(!attackers.length) return null;
+
+  // 1) 確殺ルート（キャラなしのときだけ）
+  if(aiCanLethalThisTurn()){
+    const shields = state.P1.shield.map((c,idx)=>({c,idx})).filter(x=>!!x.c);
+    if(shields.length>0){
+      // まずシールドを割る（ただし順序は固定でOK）
+      return {type:"SHIELD", aPos: attackers[0].i, sIdx: shields[0].idx};
+    }
+    // シールド0ならDIRECT（まひる以外）
+    const dir = attackers.find(x=>x.c.no!==7);
+    if(dir) return {type:"DIRECT", aPos: dir.i};
+  }
+
+  // 2) キャラ戦闘：相手が危険（同等以上）な相手だけ処理
+  if(defenders.length>0){
+    let best = null;
+    for(const at of attackers){
+      for(const df of defenders){
+        // 弱い相手はあえて殴らない（盤面温存）
+        if(aiShouldAvoidHittingWeakerDefender(at.c, df.c)) continue;
+
+        // 勝敗評価（勝てるなら高いが、基本は危険除去目的）
+        const a = calcCurrentAtk("AI", at.c);
+        const d = calcCurrentAtk("P1", df.c);
+
+        // 危険な相手（ATK高い）ほど優先
+        const threat = aiThreatScore(df.c);
+
+        // 評価：勝てるなら +、負けるなら -、相打ちは中
+        let score = 0;
+        if(a > d) score = 3000 + (a - d) + threat;
+        else if(a === d) score = 1500 + threat;
+        else score = -2000 + threat - (d - a);
+
+        if(!best || score > best.score){
+          best = {type:"BATTLE", aPos: at.i, dUid: df.c.uid, score};
         }
       }
     }
+    // 処理すべき相手がいない（＝全員弱い）なら戦闘しない
+    return best ? best : null;
   }
 
-  // 直接攻撃（相手シールド0＆相手キャラ0）評価
-  if(defenders.length===0 && countShields("P1")===0){
-    for(const at of attackers){
-      if(at.c.flags.attackedCountThisTurn>=1) continue;
-      // まひるは直接不可
-      if(at.c.no===7) continue;
-      const sc = 999999;
-      if(!best || sc > best.score){
-        best = {type:"DIRECT", aPos:at.i, score:sc};
-      }
-    }
-  }
-
-  return best;
+  // 3) 相手キャラがいないが、確殺でない → シールドは殴らない（相手に手札供給しない）
+  return null;
 }
 
 async function aiTakeTurn(){
@@ -2153,11 +2188,11 @@ async function aiTakeTurn(){
   draw("AI", 1);
   await enforceHandLimitEnd("AI");
   renderAll();
-  await sleep(180);
+  await sleep(160);
 
   state.phase = "MAIN";
   renderAll();
-  await sleep(160);
+  await sleep(140);
 
   await aiMainPlay();
   await sleep(140);
@@ -2168,14 +2203,14 @@ async function aiTakeTurn(){
     await enforceHandLimitEnd("AI");
     clearEndTurnTemps("AI");
     renderAll();
-    await sleep(120);
+    await sleep(110);
     log("AI：ターン終了");
     return;
   }
 
   state.phase = "BATTLE";
   renderAll();
-  await sleep(160);
+  await sleep(140);
 
   await aiBattle();
 
@@ -2183,7 +2218,7 @@ async function aiTakeTurn(){
   await enforceHandLimitEnd("AI");
   clearEndTurnTemps("AI");
   renderAll();
-  await sleep(120);
+  await sleep(110);
 
   log("AI：ターン終了");
 }
@@ -2193,7 +2228,6 @@ function aiPickBestSummonFromHand(){
   const empty = findEmptyIndex(p.C);
   if(empty<0) return null;
 
-  // できるだけATKが高い通常登場キャラを優先（簡易強化）
   const candidates = p.hand
     .map((c,idx)=>({c,idx}))
     .filter(x=>x.c && isCharacter(x.c) && x.c.summon!=="kensan");
@@ -2205,7 +2239,7 @@ function aiPickBestSummonFromHand(){
 }
 
 async function aiMainPlay(){
-  // まず登場
+  // 登場
   const pick = aiPickBestSummonFromHand();
   if(pick){
     const c = state.AI.hand.splice(pick.handIdx,1)[0];
@@ -2215,7 +2249,7 @@ async function aiMainPlay(){
     await onEnterTriggers("AI", {zone:"C", pos:pick.cPos, card:c});
   }
 
-  // AIのメイン追加行動（例：クルエラがいるなら黒魔法サーチを狙う）
+  // クルエラがいるなら黒魔法サーチ（毎ターン1回）
   const cru = state.AI.C.find(x=>x && x.no===1 && !x.used.perTurn);
   if(cru){
     const react = await runNegationChain("AI", `発動：${cru.name}（黒魔法サーチ）`);
@@ -2232,18 +2266,21 @@ async function aiMainPlay(){
 
 async function aiBattle(){
   if(isFirstTurnNoBattleFor("AI")){
-    log("AI：先攻1ターン目バトル禁止（ガード発動）", "warn");
+    log("AI：先攻1ターン目バトル禁止（ガード）", "warn");
     return;
   }
 
-  // 最大3回（3体）分、最適行動を毎回選び直す
+  // 最大6手（実質3体分）まで
   for(let step=0; step<6; step++){
-    const action = aiPickBestAttack();
-    if(!action) break;
+    const action = aiPickBattleAction();
+    if(!action){
+      log("AI：バトルを見送る（盤面温存）");
+      break;
+    }
 
     const a = state.AI.C[action.aPos];
     if(!a) break;
-    if(a.flags.attackedCountThisTurn>=1) { a.flags.attackedCountThisTurn=1; continue; }
+    if(a.flags.attackedCountThisTurn>=1) continue;
 
     if(action.type==="DIRECT"){
       await finishGame("AI");
@@ -2255,7 +2292,7 @@ async function aiBattle(){
       if(ok){
         a.flags.attackedCountThisTurn += 1;
         renderAll();
-        await sleep(170);
+        await sleep(160);
       }
       continue;
     }
@@ -2289,7 +2326,7 @@ async function aiBattle(){
 
       a.flags.attackedCountThisTurn += 1;
       renderAll();
-      await sleep(190);
+      await sleep(170);
       continue;
     }
   }
@@ -2304,7 +2341,7 @@ async function finishGame(winnerSide){
   showModal("resultM");
 }
 
-/* ---------------- Bindings ---------------- */
+/* ---------------- Bindings / init ---------------- */
 function bindStart(){
   el.boot.textContent="JS: OK";
   const go = ()=>{
@@ -2384,7 +2421,6 @@ function bindResult(){
   }, {passive:true});
 }
 
-/* ---------------- init ---------------- */
 async function init(){
   bindStart();
   bindHUD();
@@ -2399,7 +2435,7 @@ async function init(){
   }
 
   el.boot.textContent="JS: OK（準備完了）";
-  log("v50018：完全版（丸ごと置換）");
+  log("v50019：UI常駐ボタン＋AIタクティクス強化（丸ごと置換）");
 }
 
 document.addEventListener("DOMContentLoaded", init);
