@@ -8,8 +8,9 @@
   - FIX: 攻撃済みの視覚化（⚔/半透明）
   - FIX: キャトルミューティレーション(17) 条件成立時の案内＋任意発動
   - FIX: シールド破壊カードは破壊された側の手札へ（P1/AI両方）
-  - FIX: 桜蘭の陰陽術 - 闘 -(15) バトル時アナウンス＋任意発動（双方）
-  - FIX: 見参コストは「キャラクターカードのみ」（手札 or Cのみ、E不可）
+  - FIX: 見参コストは「キャラクターカードのみ」（手札/ステージCのみ、Eは不可）
+  - FIX: 桜蘭の陰陽術(15) バトル時の使用確認を必ず表示（ATK数値明示）
+  - FIX: 選択モーダルを枠外タップで閉じても停止しない（NO扱いで続行）
   - AI: 可能な限り最適解寄り＋「何もせずターンエンド」抑止
 ========================================================= */
 
@@ -384,12 +385,33 @@ function getCardByUid(side, uid){
 function showModal(id){ $(id).classList.add("show"); }
 function hideModal(id){ $(id).classList.remove("show"); }
 
+/* ★ v50018: choiceモーダルが閉じられる時は必ずNOでresolve */
+let choiceResolver = null;
+function resolveChoiceIfOpenAsNo(){
+  if(choiceResolver){
+    const r = choiceResolver;
+    choiceResolver = null;
+    r("NO");
+  }
+}
+
 document.addEventListener("click", (e)=>{
   const t = e.target;
   if(!(t instanceof HTMLElement)) return;
+
+  // 枠外タップ（choiceモーダル背景）＝NO扱い
+  if(t === el.choiceM && el.choiceM.classList.contains("show")){
+    hideModal("choiceM");
+    resolveChoiceIfOpenAsNo();
+    return;
+  }
+
   const close = t.getAttribute("data-close");
   if(close==="viewer") hideModal("viewerM");
-  if(close==="choice") hideModal("choiceM");
+  if(close==="choice"){
+    hideModal("choiceM");
+    resolveChoiceIfOpenAsNo();
+  }
   if(close==="settings") hideModal("settingsM");
   if(close==="help") hideModal("helpM");
   if(close==="log") hideModal("logM");
@@ -397,7 +419,6 @@ document.addEventListener("click", (e)=>{
   if(close==="result") hideModal("resultM");
 });
 
-let choiceResolver = null;
 function askChoice(title, message, items){
   el.choiceTitle.textContent = title;
   el.choiceBody.innerHTML = "";
@@ -439,7 +460,11 @@ function askChoice(title, message, items){
 
     row.addEventListener("click", ()=>{
       hideModal("choiceM");
-      if(choiceResolver){ const r = choiceResolver; choiceResolver=null; r(it.value); }
+      if(choiceResolver){
+        const r = choiceResolver;
+        choiceResolver=null;
+        r(it.value);
+      }
     }, {passive:true});
 
     if(it.card){
@@ -702,17 +727,14 @@ function canActivateFromViewer(card, ctx){
   if(zone!=="C" && zone!=="E") return {ok:false, reason:"フィールド上のカードではありません"};
 
   if(side==="P1"){
-    // 相手ターンでもスタマックス(13)だけは可
     if(state.activeSide!=="P1"){
       if(card.no===13) return {ok:true, reason:""};
       return {ok:false, reason:"あなたのターンではありません"};
     }
-    // あなたターン
     if(state.phase!=="MAIN"){
       if(card.no===13) return {ok:true, reason:""};
       return {ok:false, reason:"メインフェイズではありません"};
     }
-    // MAIN中に任意発動できる一覧
     if([1,3,5,6,9,10,11,13].includes(card.no)) return {ok:true, reason:""};
     return {ok:false, reason:"このカードは任意発動の対象外です"};
   }
@@ -787,20 +809,17 @@ function makeSlot(card, side, ctx, opts={}){
       slot.appendChild(b);
     }
 
-    // ★攻撃表示（P1のCのみ）
     if(ctx?.side==="P1" && ctx?.zone==="C" && isCharacter(card)){
       const atkable = isAttackableNow_P1(card);
       const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
       const usedUp = (card.flags.attackedCountThisTurn >= maxAtk);
 
-      // 攻撃済みは半透明
       if(usedUp){
         slot.style.opacity = "0.55";
       }else{
         slot.style.opacity = "1";
       }
 
-      // BATTLE中で攻撃可能なら⚔
       if(atkable){
         const m = document.createElement("div");
         m.style.position = "absolute";
@@ -876,7 +895,6 @@ function renderZones(){
     const glow = (state.activeSide==="P1" && state.phase==="MAIN" && state.selectedHandIndex!=null && !c);
     const ctx = {side:"P1", zone:"C", pos:i};
     const slot = makeSlot(c, "P1", ctx, {glow});
-    // ★必ずクリックを付与（空でも）
     slot.addEventListener("click", ()=> onClickYourC(i), {passive:true});
     el.pC.appendChild(slot);
   }
@@ -887,7 +905,6 @@ function renderZones(){
     const glow = (state.activeSide==="P1" && state.phase==="MAIN" && state.selectedHandIndex!=null && !c);
     const ctx = {side:"P1", zone:"E", pos:i};
     const slot = makeSlot(c, "P1", ctx, {glow});
-    // ★必ずクリックを付与（空でも）
     slot.addEventListener("click", ()=> onClickYourE(i), {passive:true});
     el.pE.appendChild(slot);
   }
@@ -905,7 +922,7 @@ function announceHandSelection(){
 
   if(isCharacter(c)){
     if(c.summon==="kensan"){
-      log(`案内：見参キャラです。空きCをタップ→コスト選択→登場`);
+      log(`案内：見参キャラです。空きCをタップ→コスト選択（キャラのみ）→登場`);
     }else{
       log(`案内：キャラです。空きCをタップ→登場（通常はターン1回）`);
     }
@@ -1231,7 +1248,6 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     hasMemoryEraseInHand(defenderSide);
 
   if(!canHandgata && !canMemoryErase){
-    // 反応できない理由を、P1側だけ丁寧にログ
     if(defenderSide==="P1" && isOppTurnForDefender){
       const why = [];
       if(!hasHandgataOnField("P1")) why.push("手形（場にいない）");
@@ -1242,7 +1258,6 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     return {negated:false, counter:null};
   }
 
-  // P1が反応主体ならUI
   if(defenderSide==="P1"){
     const items = [];
     if(canHandgata){
@@ -1277,7 +1292,6 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     return {negated:false, counter:null};
   }
 
-  // AIが反応主体（強めに反応）
   if(defenderSide==="AI"){
     if(canMemoryErase){
       const me = takeMemoryEraseFromHand("AI");
@@ -1297,113 +1311,133 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
   return {negated:false, counter:null};
 }
 
-/* =========================================================
-   桜蘭の陰陽術 - 闘 - (15) バトル時：手札から任意発動
-========================================================= */
-function hasBattleBuff15InHand(side){
+/* ---------------- 桜蘭の陰陽術(15) バトル時処理 ---------------- */
+function hasSakuraRanInHand(side){
   return state[side].hand.some(c=>c && c.no===15);
 }
-function takeBattleBuff15FromHand(side){
-  const p = state[side];
-  const idx = p.hand.findIndex(c=>c && c.no===15);
+function takeSakuraRanFromHand(side){
+  const idx = state[side].hand.findIndex(c=>c && c.no===15);
   if(idx<0) return null;
-  return p.hand.splice(idx,1)[0];
+  return state[side].hand.splice(idx,1)[0];
 }
 
-// バトル直前：双方に「使用するか」確認する（しない場合は残すので次バトルで再案内）
-async function tryBattleBuff15BothSides(attackerSide, attackerCard, defenderSide, defenderCard){
-  if(state.gameOver) return;
+async function promptSakuraRanIfPossible_P1(attackerSide, attackerCard, defenderSide, defenderCard){
+  // P1の手札にある時だけUIを出す
+  if(!hasSakuraRanInHand("P1")) return false;
 
-  // P1側 → 必ず案内
-  if(hasBattleBuff15InHand("P1")){
-    log("案内：桜蘭の陰陽術 - 闘 -（手札）がバトル時に発動可能です");
-    const ok = await askYesNo("桜蘭の陰陽術 - 闘 -", `バトルが発生します。\n「桜蘭の陰陽術 - 闘 -」を使用しますか？（自分キャラATK+1000）`);
-    if(ok){
-      const pChars = state.P1.C.filter(Boolean);
-      if(!pChars.length){
-        log("桜蘭の陰陽術：自分キャラがいないため発動できません", "warn");
-      }else{
-        const pick = await askChoice(
-          "桜蘭の陰陽術 - 闘 -",
-          "ATK+1000する自分キャラクターを選択してください。",
-          pChars.map(c=>({
-            label:`${c.name}`,
-            sub:`ATK ${calcCurrentAtk("P1", c)} → ${calcCurrentAtk("P1", c)+1000}`,
-            value:c.uid,
-            card:c
-          }))
-        );
-        const uid = String(pick);
-        const target = state.P1.C.find(c=>c && c.uid===uid);
-        if(!target){
-          log("桜蘭の陰陽術：対象が無効です（不発）", "warn");
-        }else{
-          const eff = takeBattleBuff15FromHand("P1");
-          if(!eff){
-            log("桜蘭の陰陽術：手札にありません（失敗）", "warn");
-          }else{
-            target.tempAtk += 1000;
-            moveToWing("P1", eff);
-            log(`桜蘭の陰陽術：${target.name} ATK+1000（ターン終了まで）/ カード→ウイング`);
-            renderAll();
-          }
-        }
-      }
+  // バトルは「キャラ同士」の時のみ
+  if(!isCharacter(attackerCard) || !isCharacter(defenderCard)) return false;
+
+  // P1がバトルに関係している時だけ（攻撃側でも防御側でも）
+  const involved = (attackerSide==="P1" || defenderSide==="P1");
+  if(!involved) return false;
+
+  // 強化するのは「自分ステージのキャラ1体」＝基本は“自分が操作している側”のキャラ
+  // ここでは「P1の場のキャラ」を選べるようにする（テキスト通り）
+  const pChars = state.P1.C.filter(Boolean);
+  if(!pChars.length) return false;
+
+  const atkA = calcCurrentAtk(attackerSide, attackerCard);
+  const atkD = calcCurrentAtk(defenderSide, defenderCard);
+
+  // どれを+1000するかの候補を提示（親切）
+  const items = pChars.map(c=>{
+    const cur = calcCurrentAtk("P1", c);
+    return {
+      label:`${c.name}`,
+      sub:`現在ATK ${cur} → 使用後ATK ${cur+1000}`,
+      value:c.uid,
+      card:c
+    };
+  });
+
+  const msg =
+`現在のバトル
+攻撃側：${attackerCard.name}（ATK ${atkA}）
+防御側：${defenderCard.name}（ATK ${atkD}）
+
+「桜蘭の陰陽術 - 闘 -」を使用して
+自分ステージのキャラクター1体をATK+1000しますか？
+（枠外タップ＝使用しない）`;
+
+  const v = await askChoice("桜蘭の陰陽術 - 闘 -", msg, items.concat([{label:"使用しない", value:"NO"}]));
+  if(v==="NO") return false;
+
+  const target = state.P1.C.find(c=>c && c.uid===v);
+  if(!target){
+    log("桜蘭：対象が無効です（不発）", "warn");
+    return false;
+  }
+
+  const card = takeSakuraRanFromHand("P1");
+  if(!card){
+    log("桜蘭：手札にありません（不発）", "warn");
+    return false;
+  }
+
+  target.tempAtk += 1000;
+  moveToWing("P1", card);
+  log(`桜蘭：${target.name} ATK+1000（ターン終了まで） / 桜蘭→あなたウイング`);
+  renderAll();
+  return true;
+}
+
+function aiShouldUseSakuraRan(attackerSide, attackerCard, defenderSide, defenderCard){
+  if(!hasSakuraRanInHand("AI")) return null;
+  if(!isCharacter(attackerCard) || !isCharacter(defenderCard)) return null;
+
+  // AIの場のキャラを+1000できる（テキスト通り）
+  const aChars = state.AI.C.filter(Boolean);
+  if(!aChars.length) return null;
+
+  // AIのバトルが関係している時のみ
+  const involved = (attackerSide==="AI" || defenderSide==="AI");
+  if(!involved) return null;
+
+  // 目的：このバトルで有利にする、または次ターンの有利を作る
+  // まずは「今バトルに参加しているAIキャラ」を優先し、
+  // それでも有利にならないなら最大ATKのAIキャラに付与する
+  const atkA = calcCurrentAtk(attackerSide, attackerCard);
+  const atkD = calcCurrentAtk(defenderSide, defenderCard);
+
+  // AIが攻撃側の場合、+1000で勝てるなら使う
+  if(attackerSide==="AI"){
+    if(atkA <= atkD && (atkA + 1000) > atkD){
+      return attackerCard.uid;
     }
   }
 
-  // AI側 → 有利変化する時は基本使う（温存せず）
-  if(hasBattleBuff15InHand("AI")){
-    const a = attackerSide==="AI" ? attackerCard : defenderCard; // AIが関与する側の主要カード候補
-    // ターゲット選択：原則「このバトルに関与しているAI側キャラ」を優先、いなければ最高ATK
-    let target = null;
-    const aiChars = state.AI.C.filter(Boolean);
-    if(aiChars.length){
-      if(attackerSide==="AI" && attackerCard && state.AI.C.some(c=>c && c.uid===attackerCard.uid)){
-        target = attackerCard;
-      }else if(defenderSide==="AI" && defenderCard && state.AI.C.some(c=>c && c.uid===defenderCard.uid)){
-        target = defenderCard;
-      }else{
-        target = aiChars[0];
-        let bestAtk = calcCurrentAtk("AI", target);
-        for(const c of aiChars){
-          const atk = calcCurrentAtk("AI", c);
-          if(atk > bestAtk){ target=c; bestAtk=atk; }
-        }
-      }
-    }
-
-    // 判定：このバトル結果が改善するなら使用
-    const curAtkA = attackerCard ? calcCurrentAtk(attackerSide, attackerCard) : 0;
-    const curAtkD = defenderCard ? calcCurrentAtk(defenderSide, defenderCard) : 0;
-
-    let improves = false;
-    if(attackerSide==="AI" && attackerCard){
-      const buffed = curAtkA + 1000;
-      // 負け/相打ち→勝ち、負け→相打ち など改善
-      if(curAtkA <= curAtkD && buffed > curAtkD) improves = true;
-      else if(curAtkA < curAtkD && buffed === curAtkD) improves = true;
-    }
-    if(defenderSide==="AI" && defenderCard){
-      const buffed = curAtkD + 1000;
-      if(curAtkD < curAtkA && buffed >= curAtkA) improves = true; // 負け→相打ち/勝ち
-    }
-
-    // さらに：AIの盤面が貧弱（C1枚以下）なら優先的に使う（事故回避）
-    if(state.AI.C.filter(Boolean).length <= 1) improves = true;
-
-    if(improves && target){
-      const eff = takeBattleBuff15FromHand("AI");
-      if(eff){
-        target.tempAtk += 1000;
-        moveToWing("AI", eff);
-        log(`AI：桜蘭の陰陽術 - 闘 -（発動）→ ${target.name} ATK+1000`);
-        renderAll();
-      }
-    }else{
-      // AIはログを出し過ぎない（静かに温存）
+  // AIが防御側の場合、+1000で負け回避できるなら使う（=相打ち以上にする）
+  if(defenderSide==="AI"){
+    if(atkD < atkA && (atkD + 1000) >= atkA){
+      return defenderCard.uid;
     }
   }
+
+  // それ以外：最大ATKキャラ強化（任意）
+  let best = aChars[0];
+  let bestAtk = calcCurrentAtk("AI", best);
+  for(const c of aChars){
+    const a = calcCurrentAtk("AI", c);
+    if(a > bestAtk){ best=c; bestAtk=a; }
+  }
+  // ただし温存した方が良い局面もあるので、ここは控えめに
+  // 目安：AIの場が1体だけ or こちらの場が強い時にのみ使う
+  if(state.AI.C.filter(Boolean).length===1 || state.P1.C.filter(Boolean).length>=2){
+    return best.uid;
+  }
+  return null;
+}
+
+function aiUseSakuraRanIfDecided(targetUid){
+  const target = state.AI.C.find(c=>c && c.uid===targetUid);
+  if(!target) return false;
+  const card = takeSakuraRanFromHand("AI");
+  if(!card) return false;
+  target.tempAtk += 1000;
+  moveToWing("AI", card);
+  log(`AI：桜蘭の陰陽術 - 闘 -（${target.name} ATK+1000）`);
+  return true;
 }
 
 /* ---------------- Interactions (Your side) ---------------- */
@@ -1469,7 +1503,6 @@ async function onClickYourE(pos){
   renderAll();
   log(`E配置：${card.name}`);
 
-  // 発動直後：相手の手形/記憶抹消が反応
   const react = await checkReactiveNegation("P1", card, {zone:"E", pos});
 
   if(react.negated){
@@ -1490,9 +1523,7 @@ async function onClickYourE(pos){
   renderAll();
 }
 
-/* =========================================================
-   見参（コスト）：キャラクターカードのみ（手札 or Cのみ / Eは候補外）
-========================================================= */
+/* ★ v50018: 見参コストは「キャラクターカードのみ」 */
 async function doKensanSummon(side, cPos, handIdx){
   const p = state[side];
   const card = p.hand[handIdx];
@@ -1502,22 +1533,23 @@ async function doKensanSummon(side, cPos, handIdx){
 
   const cands = [];
 
-  // 手札：キャラクターのみ
+  // 手札：キャラのみ（見参本人以外）
   for(let i=0;i<p.hand.length;i++){
     if(i===handIdx) continue;
-    const hc = p.hand[i];
-    if(hc && isCharacter(hc)){
-      cands.push({from:"hand", idx:i, card:hc, label:`手札：${hc.name}`});
+    const c = p.hand[i];
+    if(!c) continue;
+    if(isCharacter(c)){
+      cands.push({from:"hand", idx:i, card:c, label:`手札：${c.name}`});
     }
   }
 
-  // C：キャラクターのみ（Eは不可）
+  // ステージ：Cのキャラのみ（Eは対象外）
   for(let i=0;i<3;i++){
-    if(p.C[i] && isCharacter(p.C[i])) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
+    if(p.C[i]) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
   }
 
   if(!cands.length){
-    log("見参：コスト候補なし（キャラクターカードが必要です）", "warn");
+    log("見参：コスト候補（キャラクター）がありません", "warn");
     return;
   }
 
@@ -1537,6 +1569,9 @@ async function doKensanSummon(side, cPos, handIdx){
     await stripEquipIfAny(side, moved);
     p.C[idx]=null;
     moveToWing(side, moved);
+  }else{
+    log("見参：不正な参照です", "warn");
+    return;
   }
 
   const placed = p.hand.splice(handIdx,1)[0];
@@ -1815,11 +1850,11 @@ async function canActivateEffectNow(side, eff){
     return hasOnStage(side, (c)=>c && c.no===1);
   }
   if(eff.no===14) return false; // 記憶抹消は反応専用
-  if(eff.no===15) return false; // バトル時専用（バトル処理側で案内・発動）
+  if(eff.no===15) return false; // 桜蘭の陰陽術はバトル時専用（下で処理）
   if(eff.no===16){
     return (state.activeSide===side && state.phase==="MAIN");
   }
-  if(eff.no===17) return false; // キャトルは反応専用（下で処理）
+  if(eff.no===17) return false; // キャトルは反応専用
   return (state.activeSide===side && state.phase==="MAIN");
 }
 
@@ -2088,8 +2123,10 @@ async function resolveBattle(attacker, defenderUid){
   const defender = state[enemySide].C.find(c=>c && c.uid===defenderUid);
   if(!defender){ log("対象が無効です", "warn"); return; }
 
-  // ★バトル直前：桜蘭の陰陽術 - 闘 -(15) を双方チェック（必ず案内）
-  await tryBattleBuff15BothSides("P1", attacker, "AI", defender);
+  // ★ v50018: 桜蘭の陰陽術（P1→AIの順で判定）
+  await promptSakuraRanIfPossible_P1("P1", attacker, "AI", defender);
+  const aiTargetUid = aiShouldUseSakuraRan("P1", attacker, "AI", defender);
+  if(aiTargetUid) aiUseSakuraRanIfDecided(aiTargetUid);
 
   const atkA = calcCurrentAtk("P1", attacker);
   const atkD = calcCurrentAtk("AI", defender);
@@ -2103,7 +2140,7 @@ async function resolveBattle(attacker, defenderUid){
     if(!saved){
       await sendCharacterToWing("P1", attacker.uid);
       log(`敗北：${attacker.name} → あなたウイング`);
-      await tryCattleTrigger_P1(); // ★キャトル判定
+      await tryCattleTrigger_P1();
     }else{
       log(`班目プロデューサー：バトル破壊を無効（このターン1回）`);
     }
@@ -2129,7 +2166,6 @@ async function breakShield(defSide, shieldIdx, attacker){
   if(!sh) return;
   state[defSide].shield[shieldIdx] = null;
 
-  // ★修正：シールド破壊カードは破壊された側の手札へ
   state[defSide].hand.push(sh);
   log(`シールド破壊：${sideName(defSide)} シールド${shieldIdx+1} → 手札へ`);
 
@@ -2196,7 +2232,6 @@ function takeCattleFromHand_P1(){
   return state.P1.hand.splice(idx,1)[0];
 }
 async function tryCattleTrigger_P1(){
-  // 条件：自分キャラが「バトルで」ウイングへ送られた直後に呼ぶ
   if(state.gameOver) return;
   if(!hasCattleInHand_P1()){
     log("キャトル：条件成立（手札にないため不発）", "warn");
@@ -2282,36 +2317,29 @@ function itemBonusForHost(item, host){
 }
 
 async function aiTakeTurn(){
-  // DRAW
   state.phase = "DRAW";
   draw("AI", 1);
   enforceHandLimit("AI");
   renderAll();
   await sleep(160);
 
-  // MAIN
   state.phase = "MAIN";
   renderAll();
   await sleep(140);
 
-  // 「何もしない」を減らすために、優先度付きで複数回試す
   let didSomething = false;
 
-  // 1) 除去
   didSomething = (await aiTryPlayEffect(2)) || didSomething;
   await sleep(90);
   didSomething = (await aiTryPlayEffect(16)) || didSomething;
   await sleep(90);
 
-  // 2) 装備
   didSomething = (await aiTryPlayBestItem()) || didSomething;
   await sleep(90);
 
-  // 3) 展開（強い順）
   didSomething = (await aiTryPlayBestCharacter()) || didSomething;
   await sleep(90);
 
-  // 4) もう一度：展開→装備→除去（手札が多い時の放置回避）
   if(state.AI.hand.length >= 6){
     didSomething = (await aiTryPlayBestCharacter()) || didSomething;
     await sleep(80);
@@ -2325,7 +2353,6 @@ async function aiTakeTurn(){
     log("AI：有効なプレイが見つからず（このターンは展開なし）", "warn");
   }
 
-  // BATTLE（TURN1は完全禁止）
   state.phase = "BATTLE";
   renderAll();
   await sleep(140);
@@ -2336,7 +2363,6 @@ async function aiTakeTurn(){
     await aiBattleBest();
   }
 
-  // END
   state.phase = "END";
   enforceHandLimit("AI");
   clearEndTurnTemps("AI");
@@ -2547,8 +2573,10 @@ async function aiBattleBest(){
       const t = state.P1.C.find(c=>c && c.uid===best.uid);
       if(!t) continue;
 
-      // ★バトル直前：桜蘭の陰陽術 - 闘 -(15) を双方チェック（P1は必ず案内）
-      await tryBattleBuff15BothSides("AI", a, "P1", t);
+      // ★ v50018: 桜蘭の陰陽術（P1→AI）
+      await promptSakuraRanIfPossible_P1("AI", a, "P1", t);
+      const aiTargetUid = aiShouldUseSakuraRan("AI", a, "P1", t);
+      if(aiTargetUid) aiUseSakuraRanIfDecided(aiTargetUid);
 
       const atkA = calcCurrentAtk("AI", a);
       const atkD = calcCurrentAtk("P1", t);
@@ -2588,7 +2616,6 @@ async function aiBattleBest(){
       if(!sh) continue;
       state.P1.shield[best.idx]=null;
 
-      // ★修正：シールド破壊 → 破壊された側の手札へ
       state.P1.hand.push(sh);
       log(`AI：シールド破壊（あなた）${best.idx+1} → あなた手札へ`);
 
@@ -2755,9 +2782,10 @@ async function init(){
   }
 
   el.boot.textContent="JS: OK（準備完了）";
-  log("v50018：丸ごと置換 完全版");
+  log("v50018：完全版（丸ごと置換）");
   log("確認：TURN1 AI攻撃禁止 / Viewerボタン常時表示 / 反応UI改善 / シールド破壊→手札 / 攻撃済み可視化 / キャトル案内");
-  log("確認：桜蘭の陰陽術(15) バトル時アナウンス＋任意発動（双方）/ 見参コストはキャラのみ");
+  log("追加：桜蘭の陰陽術（バトル時確認・ATK明示・枠外タップNOで続行）");
+  log("追加：見参コストはキャラクターのみ（手札キャラ / ステージCキャラ）");
 }
 
 document.addEventListener("DOMContentLoaded", init);
