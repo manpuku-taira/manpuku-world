@@ -6,12 +6,11 @@
   - FIX: 手形(08)/記憶抹消(14) 反応UI/不可理由ログ強化
   - FIX: 無効化された発動カードがEに残る問題を必ず掃除→ウイング
   - FIX: 攻撃済みの視覚化（⚔/半透明）
-  - FIX: キャトルミューティレーション(17) 場→ウイング発生時に常に案内＋任意発動（MAIN/BATTLE/相手バトル/効果）
+  - FIX: キャトルミューティレーション(17) 条件成立時の案内＋任意発動
   - FIX: シールド破壊カードは破壊された側の手札へ（P1/AI両方）
-  - FIX: 同名アイテム2枚目装備で旧装備が勝手にウイングへ行く問題
-        → プレイヤーは入替選択 / AIは有利時のみ入替
+  - FIX: 桜蘭の陰陽術 - 闘 -(15) バトル時アナウンス＋任意発動（双方）
+  - FIX: 見参コストは「キャラクターカードのみ」（手札 or Cのみ、E不可）
   - AI: 可能な限り最適解寄り＋「何もせずターンエンド」抑止
-        ＋「ATKで勝てない相手にはバトルしない（原則）」強化
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -369,6 +368,17 @@ function isEffect(c){ return c && c.type==="effect"; }
 function isItem(c){ return c && c.type==="item"; }
 function sideName(side){ return side==="P1" ? "あなた" : "AI"; }
 function opponent(side){ return side==="P1" ? "AI" : "P1"; }
+
+function getCardByUid(side, uid){
+  const p = state[side];
+  const zones = [p.hand, p.deck, p.shield, p.wing, p.outside, p.C, p.E];
+  for(const z of zones){
+    for(const it of z){
+      if(it && it.uid === uid) return it;
+    }
+  }
+  return null;
+}
 
 /* ---------------- Modals ---------------- */
 function showModal(id){ $(id).classList.add("show"); }
@@ -784,7 +794,11 @@ function makeSlot(card, side, ctx, opts={}){
       const usedUp = (card.flags.attackedCountThisTurn >= maxAtk);
 
       // 攻撃済みは半透明
-      slot.style.opacity = usedUp ? "0.55" : "1";
+      if(usedUp){
+        slot.style.opacity = "0.55";
+      }else{
+        slot.style.opacity = "1";
+      }
 
       // BATTLE中で攻撃可能なら⚔
       if(atkable){
@@ -1204,6 +1218,7 @@ function forceRemoveFromEIfPresent(side, card, ctx){
 // 戻り：{negated:boolean, counter:"HANDGATA"|"MEMORY"|null}
 async function checkReactiveNegation(activatorSide, activatedCard, ctx){
   const defenderSide = opponent(activatorSide);
+
   const isOppTurnForDefender = (state.activeSide === activatorSide);
 
   const canHandgata =
@@ -1216,6 +1231,7 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     hasMemoryEraseInHand(defenderSide);
 
   if(!canHandgata && !canMemoryErase){
+    // 反応できない理由を、P1側だけ丁寧にログ
     if(defenderSide==="P1" && isOppTurnForDefender){
       const why = [];
       if(!hasHandgataOnField("P1")) why.push("手形（場にいない）");
@@ -1226,6 +1242,7 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     return {negated:false, counter:null};
   }
 
+  // P1が反応主体ならUI
   if(defenderSide==="P1"){
     const items = [];
     if(canHandgata){
@@ -1260,7 +1277,7 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     return {negated:false, counter:null};
   }
 
-  // AI
+  // AIが反応主体（強めに反応）
   if(defenderSide==="AI"){
     if(canMemoryErase){
       const me = takeMemoryEraseFromHand("AI");
@@ -1280,62 +1297,113 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
   return {negated:false, counter:null};
 }
 
-/* ---------------- キャトルミューティレーション(17) ----------------
-   ★v50018: 「自分フィールド(C)のキャラがウイングへ行った」瞬間に、
-   MAIN/BATTLE/相手バトル/効果 すべてで案内＋任意発動を出す（安定性優先）
----------------------------------------------------------- */
-function hasCattleInHand_P1(){
-  return state.P1.hand.some(c=>c && c.no===17);
+/* =========================================================
+   桜蘭の陰陽術 - 闘 - (15) バトル時：手札から任意発動
+========================================================= */
+function hasBattleBuff15InHand(side){
+  return state[side].hand.some(c=>c && c.no===15);
 }
-function takeCattleFromHand_P1(){
-  const idx = state.P1.hand.findIndex(c=>c && c.no===17);
+function takeBattleBuff15FromHand(side){
+  const p = state[side];
+  const idx = p.hand.findIndex(c=>c && c.no===15);
   if(idx<0) return null;
-  return state.P1.hand.splice(idx,1)[0];
+  return p.hand.splice(idx,1)[0];
 }
-async function tryCattleTrigger_P1(reason=""){
+
+// バトル直前：双方に「使用するか」確認する（しない場合は残すので次バトルで再案内）
+async function tryBattleBuff15BothSides(attackerSide, attackerCard, defenderSide, defenderCard){
   if(state.gameOver) return;
 
-  if(!hasCattleInHand_P1()){
-    // 条件成立の旨だけはログ（必要なら消せますが、いまは「出ない」報告対策で残します）
-    log(`キャトル：条件成立（手札にないため不発）${reason?` / ${reason}`:""}`, "warn");
-    return;
+  // P1側 → 必ず案内
+  if(hasBattleBuff15InHand("P1")){
+    log("案内：桜蘭の陰陽術 - 闘 -（手札）がバトル時に発動可能です");
+    const ok = await askYesNo("桜蘭の陰陽術 - 闘 -", `バトルが発生します。\n「桜蘭の陰陽術 - 闘 -」を使用しますか？（自分キャラATK+1000）`);
+    if(ok){
+      const pChars = state.P1.C.filter(Boolean);
+      if(!pChars.length){
+        log("桜蘭の陰陽術：自分キャラがいないため発動できません", "warn");
+      }else{
+        const pick = await askChoice(
+          "桜蘭の陰陽術 - 闘 -",
+          "ATK+1000する自分キャラクターを選択してください。",
+          pChars.map(c=>({
+            label:`${c.name}`,
+            sub:`ATK ${calcCurrentAtk("P1", c)} → ${calcCurrentAtk("P1", c)+1000}`,
+            value:c.uid,
+            card:c
+          }))
+        );
+        const uid = String(pick);
+        const target = state.P1.C.find(c=>c && c.uid===uid);
+        if(!target){
+          log("桜蘭の陰陽術：対象が無効です（不発）", "warn");
+        }else{
+          const eff = takeBattleBuff15FromHand("P1");
+          if(!eff){
+            log("桜蘭の陰陽術：手札にありません（失敗）", "warn");
+          }else{
+            target.tempAtk += 1000;
+            moveToWing("P1", eff);
+            log(`桜蘭の陰陽術：${target.name} ATK+1000（ターン終了まで）/ カード→ウイング`);
+            renderAll();
+          }
+        }
+      }
+    }
   }
 
-  log(`キャトル：発動可能（相手キャラ1体を手札に戻す）${reason?` / ${reason}`:""}`);
-  const ok = await askYesNo("キャトルミューティレーション", "発動しますか？（相手キャラクター1体を手札に戻す）");
-  if(!ok) return;
+  // AI側 → 有利変化する時は基本使う（温存せず）
+  if(hasBattleBuff15InHand("AI")){
+    const a = attackerSide==="AI" ? attackerCard : defenderCard; // AIが関与する側の主要カード候補
+    // ターゲット選択：原則「このバトルに関与しているAI側キャラ」を優先、いなければ最高ATK
+    let target = null;
+    const aiChars = state.AI.C.filter(Boolean);
+    if(aiChars.length){
+      if(attackerSide==="AI" && attackerCard && state.AI.C.some(c=>c && c.uid===attackerCard.uid)){
+        target = attackerCard;
+      }else if(defenderSide==="AI" && defenderCard && state.AI.C.some(c=>c && c.uid===defenderCard.uid)){
+        target = defenderCard;
+      }else{
+        target = aiChars[0];
+        let bestAtk = calcCurrentAtk("AI", target);
+        for(const c of aiChars){
+          const atk = calcCurrentAtk("AI", c);
+          if(atk > bestAtk){ target=c; bestAtk=atk; }
+        }
+      }
+    }
 
-  const cattle = takeCattleFromHand_P1();
-  if(!cattle){ log("キャトル：手札にありません（失敗）", "warn"); return; }
+    // 判定：このバトル結果が改善するなら使用
+    const curAtkA = attackerCard ? calcCurrentAtk(attackerSide, attackerCard) : 0;
+    const curAtkD = defenderCard ? calcCurrentAtk(defenderSide, defenderCard) : 0;
 
-  const enemyChars = state.AI.C.filter(Boolean);
-  if(!enemyChars.length){
-    log("キャトル：相手キャラがいません（不発）", "warn");
-    moveToWing("P1", cattle);
-    return;
+    let improves = false;
+    if(attackerSide==="AI" && attackerCard){
+      const buffed = curAtkA + 1000;
+      // 負け/相打ち→勝ち、負け→相打ち など改善
+      if(curAtkA <= curAtkD && buffed > curAtkD) improves = true;
+      else if(curAtkA < curAtkD && buffed === curAtkD) improves = true;
+    }
+    if(defenderSide==="AI" && defenderCard){
+      const buffed = curAtkD + 1000;
+      if(curAtkD < curAtkA && buffed >= curAtkA) improves = true; // 負け→相打ち/勝ち
+    }
+
+    // さらに：AIの盤面が貧弱（C1枚以下）なら優先的に使う（事故回避）
+    if(state.AI.C.filter(Boolean).length <= 1) improves = true;
+
+    if(improves && target){
+      const eff = takeBattleBuff15FromHand("AI");
+      if(eff){
+        target.tempAtk += 1000;
+        moveToWing("AI", eff);
+        log(`AI：桜蘭の陰陽術 - 闘 -（発動）→ ${target.name} ATK+1000`);
+        renderAll();
+      }
+    }else{
+      // AIはログを出し過ぎない（静かに温存）
+    }
   }
-
-  const pick = await askChoice("キャトル", "手札に戻す相手キャラクターを選択してください。", enemyChars.map(c=>({
-    label:`${c.name}`,
-    sub:`ATK ${calcCurrentAtk("AI", c)}`,
-    value:c.uid,
-    card:c
-  })));
-
-  const uid = String(pick);
-  const pos = state.AI.C.findIndex(c=>c && c.uid===uid);
-  if(pos<0){
-    log("キャトル：対象が無効です", "warn");
-    moveToWing("P1", cattle);
-    return;
-  }
-  const target = state.AI.C[pos];
-  await stripEquipIfAny("AI", target);
-  state.AI.C[pos]=null;
-  state.AI.hand.push(target);
-  moveToWing("P1", cattle);
-  log(`キャトル：${target.name} をAI手札へ戻した / キャトル→あなたウイング`);
-  renderAll();
 }
 
 /* ---------------- Interactions (Your side) ---------------- */
@@ -1422,6 +1490,9 @@ async function onClickYourE(pos){
   renderAll();
 }
 
+/* =========================================================
+   見参（コスト）：キャラクターカードのみ（手札 or Cのみ / Eは候補外）
+========================================================= */
 async function doKensanSummon(side, cPos, handIdx){
   const p = state[side];
   const card = p.hand[handIdx];
@@ -1430,20 +1501,27 @@ async function doKensanSummon(side, cPos, handIdx){
   if(p.C[cPos]) return;
 
   const cands = [];
+
+  // 手札：キャラクターのみ
   for(let i=0;i<p.hand.length;i++){
     if(i===handIdx) continue;
-    cands.push({from:"hand", idx:i, card:p.hand[i], label:`手札：${p.hand[i].name}`});
+    const hc = p.hand[i];
+    if(hc && isCharacter(hc)){
+      cands.push({from:"hand", idx:i, card:hc, label:`手札：${hc.name}`});
+    }
   }
+
+  // C：キャラクターのみ（Eは不可）
   for(let i=0;i<3;i++){
-    if(p.C[i]) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
-    if(p.E[i]) cands.push({from:"E", idx:i, card:p.E[i], label:`E${i+1}：${p.E[i].name}`});
+    if(p.C[i] && isCharacter(p.C[i])) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
   }
+
   if(!cands.length){
-    log("見参：コスト候補なし", "warn");
+    log("見参：コスト候補なし（キャラクターカードが必要です）", "warn");
     return;
   }
 
-  const pick = await askChoice("見参（コスト）", "ウイングへ送るカードを1枚選んでください。", cands.map(x=>({
+  const pick = await askChoice("見参（コスト）", "ウイングへ送るキャラクターカードを1枚選んでください。", cands.map(x=>({
     label:x.label, value:`${x.from}:${x.idx}`, card:x.card
   })));
 
@@ -1458,11 +1536,6 @@ async function doKensanSummon(side, cPos, handIdx){
     const moved = p.C[idx];
     await stripEquipIfAny(side, moved);
     p.C[idx]=null;
-    moveToWing(side, moved);
-    // ★見参コストでの場→ウイングはキャトル対象にしない（仕様安定のため）
-  }else if(from==="E"){
-    const moved = p.E[idx];
-    p.E[idx]=null;
     moveToWing(side, moved);
   }
 
@@ -1501,51 +1574,15 @@ async function equipItemFromE(side, ePos, itemCard){
     return;
   }
 
-  // ★v50018: 旧装備がある場合は「勝手にウイングへ」しない
   if(host.equipUid){
     const old = findEquipInE(side, host.equipUid);
-    const oldName = old ? old.name : "（旧装備）";
-    const newName = itemCard.name;
-
-    // プレイヤーは選択式 / AIは有利時のみ入替（AIは別関数で処理するため、ここはP1想定）
-    if(side==="P1"){
-      const v = await askChoice(
-        "装備（入れ替え）",
-        `すでに装備があります：${oldName}\n新しい装備：${newName}\nどうしますか？`,
-        [
-          {label:"入れ替える（旧装備→ウイング）", value:"REPLACE", card: old || host},
-          {label:"入れ替えない（新しい装備→ウイング）", value:"KEEP", card: itemCard},
-        ]
-      );
-
-      if(v==="KEEP"){
-        // 新アイテムは消費（ウイングへ）
-        p.E[ePos]=null;
-        itemCard.equippedToUid = null;
-        moveToWing(side, itemCard);
-        log(`装備しない：${newName} → あなたウイング`);
-        return;
-      }
-
-      // 入替：旧装備を外してウイングへ
-      if(old){
-        const oldPos = p.E.findIndex(x=>x && x.uid===old.uid);
-        if(oldPos>=0) p.E[oldPos]=null;
-        old.equippedToUid = null;
-        moveToWing(side, old);
-        log(`装備入替：旧→ウイング ${old.name}`);
-      }
-      host.equipUid = null;
-    }else{
-      // 念のため（通常AIは別ロジック）
-      if(old){
-        const oldPos = p.E.findIndex(x=>x && x.uid===old.uid);
-        if(oldPos>=0) p.E[oldPos]=null;
-        old.equippedToUid = null;
-        moveToWing(side, old);
-      }
-      host.equipUid = null;
+    if(old){
+      const oldPos = p.E.findIndex(x=>x && x.uid===old.uid);
+      if(oldPos>=0) p.E[oldPos]=null;
+      moveToWing(side, old);
+      log(`装備更新：旧装備→ウイング ${old.name}`);
     }
+    host.equipUid = null;
   }
 
   itemCard._equipBonus = 0;
@@ -1727,10 +1764,6 @@ async function activateStamax(side, cPos, card){
   state[side].C[cPos] = null;
   moveToWing(side, card);
 
-  // ★場→ウイング（効果）なのでキャトル判定（安定性優先）
-  //    ※「自分の場のキャラが効果でいなくなった時も欲しい」要求に合わせる
-  await tryCattleTrigger_P1("（効果：スタマックス自身→ウイング）");
-
   t.tempAtk -= 1000;
   log(`スタマックス氏：自身→ウイング / ${t.name} ATK-1000（ターン終了まで）`);
   renderAll();
@@ -1764,33 +1797,6 @@ async function activateShireiEquip(side, cPos, card){
     return;
   }
 
-  // ★司令も装備入替ロジックに合わせる（旧装備があれば選択）
-  if(host.equipUid){
-    const old = findEquipInE(side, host.equipUid);
-    if(side==="P1"){
-      const v = await askChoice(
-        "司令（装備入替）",
-        `すでに装備があります：${old?old.name:"（旧装備）"}\n司令を装備化しますか？`,
-        [
-          {label:"入れ替える（旧装備→ウイング）", value:"REPLACE"},
-          {label:"入れ替えない（司令の効果をやめる）", value:"KEEP"},
-        ]
-      );
-      if(v==="KEEP"){
-        log("司令：装備化を取りやめました");
-        return;
-      }
-    }
-    if(old){
-      const oldPos = p.E.findIndex(x=>x && x.uid===old.uid);
-      if(oldPos>=0) p.E[oldPos]=null;
-      old.equippedToUid = null;
-      moveToWing(side, old);
-      log(`装備入替：旧→ウイング ${old.name}`);
-    }
-    host.equipUid = null;
-  }
-
   p.C[cPos] = null;
   p.E[ePos] = card;
   card.type = "item";
@@ -1809,11 +1815,11 @@ async function canActivateEffectNow(side, eff){
     return hasOnStage(side, (c)=>c && c.no===1);
   }
   if(eff.no===14) return false; // 記憶抹消は反応専用
-  if(eff.no===15) return false; // バトル時専用（未実装）
+  if(eff.no===15) return false; // バトル時専用（バトル処理側で案内・発動）
   if(eff.no===16){
     return (state.activeSide===side && state.phase==="MAIN");
   }
-  if(eff.no===17) return false; // キャトルは反応専用（別処理）
+  if(eff.no===17) return false; // キャトルは反応専用（下で処理）
   return (state.activeSide===side && state.phase==="MAIN");
 }
 
@@ -1848,12 +1854,12 @@ async function resolveEffect(side, eff){
       const mode = (r4.length>=2 && r4Value >= maxValue*1.05) ? "R4" : "MAX";
 
       if(mode==="MAX"){
-        await sendCharacterToWing(enemy, best.uid, "effect");
+        await sendCharacterToWing(enemy, best.uid);
         log(`AI：フレイムバレット（MAX）→ ${best.name} をウイングへ`);
         return;
       }else{
         for(const c of r4){
-          await sendCharacterToWing(enemy, c.uid, "effect");
+          await sendCharacterToWing(enemy, c.uid);
         }
         log(`AI：フレイムバレット（R4）→ rank4以下を全てウイングへ`);
         return;
@@ -1873,14 +1879,14 @@ async function resolveEffect(side, eff){
         const a = calcCurrentAtk(enemy, c);
         if(a > bestAtk){ best=c; bestAtk=a; }
       }
-      await sendCharacterToWing(enemy, best.uid, "effect");
+      await sendCharacterToWing(enemy, best.uid);
       log(`フレイムバレット：${best.name} をウイングへ`);
       return;
     }else{
       const toSend = state[enemy].C.filter(c=>c && (c.rank||0)<=4);
       if(!toSend.length){ log("対象がいません", "warn"); return; }
       for(const c of toSend){
-        await sendCharacterToWing(enemy, c.uid, "effect");
+        await sendCharacterToWing(enemy, c.uid);
       }
       log(`フレイムバレット：rank4以下を全てウイングへ`);
       return;
@@ -1904,7 +1910,7 @@ async function resolveEffect(side, eff){
           if(v > bestVal){ best=c; bestVal=v; }
         }
       }
-      await sendCharacterToWing(enemy, best.uid, "effect");
+      await sendCharacterToWing(enemy, best.uid);
       log(`AI：力こそパワー！！→ ${best.name} をウイングへ`);
       return;
     }
@@ -1915,7 +1921,7 @@ async function resolveEffect(side, eff){
       const a = calcCurrentAtk(enemy, c);
       if(a < bestAtk){ best=c; bestAtk=a; }
     }
-    await sendCharacterToWing(enemy, best.uid, "effect");
+    await sendCharacterToWing(enemy, best.uid);
     log(`力こそパワー！！：ATK最低の ${best.name} をウイングへ`);
     return;
   }
@@ -2082,19 +2088,22 @@ async function resolveBattle(attacker, defenderUid){
   const defender = state[enemySide].C.find(c=>c && c.uid===defenderUid);
   if(!defender){ log("対象が無効です", "warn"); return; }
 
+  // ★バトル直前：桜蘭の陰陽術 - 闘 -(15) を双方チェック（必ず案内）
+  await tryBattleBuff15BothSides("P1", attacker, "AI", defender);
+
   const atkA = calcCurrentAtk("P1", attacker);
   const atkD = calcCurrentAtk("AI", defender);
   log(`バトル：${attacker.name}(${atkA}) vs ${defender.name}(${atkD})`);
 
   if(atkA > atkD){
-    await sendCharacterToWing("AI", defender.uid, "battle");
+    await sendCharacterToWing("AI", defender.uid);
     log(`撃破：${defender.name} → AIウイング`);
   }else if(atkA < atkD){
     const saved = await tryProducerSave("P1", attacker);
     if(!saved){
-      await sendCharacterToWing("P1", attacker.uid, "battle");
+      await sendCharacterToWing("P1", attacker.uid);
       log(`敗北：${attacker.name} → あなたウイング`);
-      // ★v50018：sendCharacterToWing内でキャトル判定
+      await tryCattleTrigger_P1(); // ★キャトル判定
     }else{
       log(`班目プロデューサー：バトル破壊を無効（このターン1回）`);
     }
@@ -2102,9 +2111,10 @@ async function resolveBattle(attacker, defenderUid){
     const savedA = await tryProducerSave("P1", attacker);
     const savedD = await tryProducerSave("AI", defender);
     if(!savedA){
-      await sendCharacterToWing("P1", attacker.uid, "battle");
+      await sendCharacterToWing("P1", attacker.uid);
+      await tryCattleTrigger_P1();
     }
-    if(!savedD) await sendCharacterToWing("AI", defender.uid, "battle");
+    if(!savedD) await sendCharacterToWing("AI", defender.uid);
     log("相打ち：双方ウイング");
   }
 
@@ -2152,7 +2162,7 @@ async function stripEquipIfAny(side, characterCard){
   characterCard.equipUid = null;
 }
 
-async function sendCharacterToWing(side, uid, reason=""){
+async function sendCharacterToWing(side, uid){
   const p = state[side];
   const pos = p.C.findIndex(c=>c && c.uid===uid);
   if(pos<0) return;
@@ -2160,12 +2170,6 @@ async function sendCharacterToWing(side, uid, reason=""){
   await stripEquipIfAny(side, card);
   p.C[pos]=null;
   moveToWing(side, card);
-
-  // ★v50018：P1の場→ウイングなら、原因がbattle/effect問わずキャトル案内
-  //  ※「出ない」不具合対策として、ここで必ず拾う
-  if(side==="P1"){
-    await tryCattleTrigger_P1(reason ? `（場→ウイング / ${reason}）` : "（場→ウイング）");
-  }
 }
 
 /* ---------------- Enemy picker for P1 ---------------- */
@@ -2180,6 +2184,60 @@ async function pickEnemyCharacter(enemySide, title, message){
     card:c
   })));
   return state[enemySide].C.find(c=>c && c.uid===pick) || null;
+}
+
+/* ---------------- キャトルミューティレーション(17) ---------------- */
+function hasCattleInHand_P1(){
+  return state.P1.hand.some(c=>c && c.no===17);
+}
+function takeCattleFromHand_P1(){
+  const idx = state.P1.hand.findIndex(c=>c && c.no===17);
+  if(idx<0) return null;
+  return state.P1.hand.splice(idx,1)[0];
+}
+async function tryCattleTrigger_P1(){
+  // 条件：自分キャラが「バトルで」ウイングへ送られた直後に呼ぶ
+  if(state.gameOver) return;
+  if(!hasCattleInHand_P1()){
+    log("キャトル：条件成立（手札にないため不発）", "warn");
+    return;
+  }
+  log("キャトル：発動可能（相手キャラ1体を手札に戻す）");
+
+  const ok = await askYesNo("キャトルミューティレーション", "発動しますか？（相手キャラクター1体を手札に戻す）");
+  if(!ok) return;
+
+  const cattle = takeCattleFromHand_P1();
+  if(!cattle){ log("キャトル：手札にありません（失敗）", "warn"); return; }
+
+  const enemyChars = state.AI.C.filter(Boolean);
+  if(!enemyChars.length){
+    log("キャトル：相手キャラがいません（不発）", "warn");
+    moveToWing("P1", cattle);
+    return;
+  }
+
+  const pick = await askChoice("キャトル", "手札に戻す相手キャラクターを選択してください。", enemyChars.map(c=>({
+    label:`${c.name}`,
+    sub:`ATK ${calcCurrentAtk("AI", c)}`,
+    value:c.uid,
+    card:c
+  })));
+
+  const uid = String(pick);
+  const pos = state.AI.C.findIndex(c=>c && c.uid===uid);
+  if(pos<0){
+    log("キャトル：対象が無効です", "warn");
+    moveToWing("P1", cattle);
+    return;
+  }
+  const target = state.AI.C[pos];
+  await stripEquipIfAny("AI", target);
+  state.AI.C[pos]=null;
+  state.AI.hand.push(target);
+  moveToWing("P1", cattle);
+  log(`キャトル：${target.name} をAI手札へ戻した / キャトル→あなたウイング`);
+  renderAll();
 }
 
 /* ---------------- Opponent turn start effects (No18) ---------------- */
@@ -2236,6 +2294,7 @@ async function aiTakeTurn(){
   renderAll();
   await sleep(140);
 
+  // 「何もしない」を減らすために、優先度付きで複数回試す
   let didSomething = false;
 
   // 1) 除去
@@ -2248,11 +2307,11 @@ async function aiTakeTurn(){
   didSomething = (await aiTryPlayBestItem()) || didSomething;
   await sleep(90);
 
-  // 3) 展開
+  // 3) 展開（強い順）
   didSomething = (await aiTryPlayBestCharacter()) || didSomething;
   await sleep(90);
 
-  // 4) 追加トライ
+  // 4) もう一度：展開→装備→除去（手札が多い時の放置回避）
   if(state.AI.hand.length >= 6){
     didSomething = (await aiTryPlayBestCharacter()) || didSomething;
     await sleep(80);
@@ -2371,29 +2430,13 @@ async function aiTryPlayBestItem(){
     return true;
   }
 
-  // ★v50018: 旧装備がある場合、AIは「有利になる時だけ」入れ替え
   if(host.equipUid){
     const old = findEquipInE("AI", host.equipUid);
-    const oldBonus = old ? itemBonusForHost(old, host) : 0;
-    const newBonus = itemBonusForHost(item, host);
-
-    if(newBonus <= oldBonus){
-      // 入れ替えない：新装備はウイングへ（勝手に旧装備を飛ばさない）
-      p.E[ePos]=null;
-      item.equippedToUid = null;
-      moveToWing("AI", item);
-      log(`AI：装備しない（現状維持） ${item.name} → AIウイング`);
-      renderAll();
-      return true;
-    }
-
-    // 有利なら入替
     if(old){
       const oldPos = p.E.findIndex(x=>x && x.uid===old.uid);
       if(oldPos>=0) p.E[oldPos]=null;
-      old.equippedToUid = null;
       moveToWing("AI", old);
-      log(`AI：装備入替 旧→ウイング ${old.name}`);
+      log(`AI：装備更新 旧→ウイング ${old.name}`);
     }
     host.equipUid=null;
   }
@@ -2476,23 +2519,6 @@ async function aiTryShireiEquip(side, cPos){
     if(a > bestAtk){ best=o; bestAtk=a; }
   }
 
-  // 旧装備がある場合は有利時のみ入替（司令の+500は固定）
-  if(best.c.equipUid){
-    const old = findEquipInE(side, best.c.equipUid);
-    const oldBonus = old ? itemBonusForHost(old, best.c) : 0;
-    if(500 <= oldBonus){
-      // 入替しない（司令は不発扱い：場に残しておくと変なので、AIは通常発動を諦める）
-      return false;
-    }
-    if(old){
-      const oldPos = p.E.findIndex(x=>x && x.uid===old.uid);
-      if(oldPos>=0) p.E[oldPos]=null;
-      old.equippedToUid = null;
-      moveToWing(side, old);
-      best.c.equipUid = null;
-    }
-  }
-
   p.C[cPos] = null;
   p.E[ePos] = card;
   card.type = "item";
@@ -2521,17 +2547,34 @@ async function aiBattleBest(){
       const t = state.P1.C.find(c=>c && c.uid===best.uid);
       if(!t) continue;
 
+      // ★バトル直前：桜蘭の陰陽術 - 闘 -(15) を双方チェック（P1は必ず案内）
+      await tryBattleBuff15BothSides("AI", a, "P1", t);
+
       const atkA = calcCurrentAtk("AI", a);
       const atkD = calcCurrentAtk("P1", t);
       log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
 
       if(atkA > atkD){
-        await sendCharacterToWing("P1", t.uid, "battle");
+        await sendCharacterToWing("P1", t.uid);
         log(`AI：撃破 ${t.name} → あなたウイング`);
+        await tryCattleTrigger_P1();
+      }else if(atkA < atkD){
+        const saved = await tryProducerSave("AI", a);
+        if(!saved){
+          await sendCharacterToWing("AI", a.uid);
+          log(`AI：敗北 ${a.name} → AIウイング`);
+        }else{
+          log(`AI：班目プロデューサー耐え（1回）`);
+        }
       }else{
-        // ★v50018: 原則「勝てない相手には殴らない」なので、ここには来ない想定
-        log("AI：不利バトル回避（内部保険）", "warn");
-        continue;
+        const savedA = await tryProducerSave("AI", a);
+        const savedD = await tryProducerSave("P1", t);
+        if(!savedA) await sendCharacterToWing("AI", a.uid);
+        if(!savedD){
+          await sendCharacterToWing("P1", t.uid);
+          await tryCattleTrigger_P1();
+        }
+        log("AI：相打ち");
       }
 
       a.flags.attackedCountThisTurn += 1;
@@ -2568,31 +2611,38 @@ function pickBestAIAttackFor(attacker){
   const enemyChars = state.P1.C.filter(Boolean);
   let best = null;
 
-  // ★v50018: ATKで勝てない相手にはバトルしない（原則）
   for(const t of enemyChars){
     const atkD = calcCurrentAtk("P1", t);
 
-    // 負ける/相打ちは原則スキップ
-    if(atkA <= atkD) continue;
-
     let score = 0;
-    // 勝てる攻撃だけ評価
-    score += estimateRemoveValue(t) + 520;
-    if(t.no===8) score += 460; // 手形は優先排除
-    score += Math.min(300, (atkA - atkD) * 0.12);
+    if(atkA > atkD){
+      score += estimateRemoveValue(t) + 420;
+      score += 220;
+    }else if(atkA < atkD){
+      const selfLoss = estimateRemoveValue(attacker) + 380;
+      const canSave = (attacker.no===12 && !attacker.flags.producerSavedThisTurn);
+      score -= canSave ? (selfLoss*0.35) : selfLoss;
+      score -= 120;
+    }else{
+      score += estimateRemoveValue(t)*0.35;
+      score -= estimateRemoveValue(attacker)*0.55;
+    }
+
+    if(t.no===8) score += 460;
 
     if(!best || score > best.score){
       best = {type:"C", uid:t.uid, score};
     }
   }
 
-  // 相手キャラがいないならシールド→DIRECT
   if(!enemyChars.length){
     const shields = state.P1.shield.map((c, idx)=>({c, idx})).filter(x=>!!x.c);
     if(shields.length){
       const pick = shields[0];
       const score = 450 + countShields("P1")*60;
-      best = {type:"S", idx:pick.idx, score};
+      if(!best || score > best.score){
+        best = {type:"S", idx:pick.idx, score};
+      }
     }else{
       best = {type:"D", score:999999};
     }
@@ -2705,9 +2755,9 @@ async function init(){
   }
 
   el.boot.textContent="JS: OK（準備完了）";
-  log("v50018：完全版（丸ごと置換）");
-  log("確認：TURN1 AI攻撃禁止 / Viewerボタン常時表示 / 反応UI改善 / シールド破壊→手札 / 攻撃済み可視化");
-  log("確認：キャトル（場→ウイングで必ず案内） / アイテム入替は選択式 / AIは勝てない相手に殴らない");
+  log("v50018：丸ごと置換 完全版");
+  log("確認：TURN1 AI攻撃禁止 / Viewerボタン常時表示 / 反応UI改善 / シールド破壊→手札 / 攻撃済み可視化 / キャトル案内");
+  log("確認：桜蘭の陰陽術(15) バトル時アナウンス＋任意発動（双方）/ 見参コストはキャラのみ");
 }
 
 document.addEventListener("DOMContentLoaded", init);
