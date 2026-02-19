@@ -1,16 +1,10 @@
 /* =========================================================
-  Manpuku World - v50020 (iPhone First / Full Replace JS)
+  Manpuku World - v50018 (iPhone First / Full Replace JS)
   - レイアウトは触らない（JSのみ）
   - + デッキ編集（テキストUI / zoneM流用 / スタート長押しで遷移）
   - 初期所持：20種×3枚（=60枚）
   - 初期デッキ：20種×2枚（=40枚）
   - ルール：デッキ40固定 / 同名最大3枚 / 所持枚数以内
-
-  v50020 追加修正:
-  ① 先攻TURN1のみ攻撃禁止に修正
-     - 後攻側の「最初のターン」がTURN1でも攻撃できるようにする
-  ② マリガン（引き直し）導入
-     - ゲーム開始時に互いに一度だけ「引き直しますか？」を実行
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -212,7 +206,7 @@ const CardRegistry = [
   { no:9,  name:"小太郎・孫悟空Lv17", type:"character",
     tags:["アバター","GAME"], titleTag:"BUGBUG西遊記",
     text: normalizeText(
-      "このカードが自分ステージに存在する時、発動できる。このカードを見参させる。\n" +
+      "このカードが自分ステージに存在する時、発動できる。手札の「小次郎」カードを見参させる。\n" +
       "自分ステージに「小次郎」カードがある時、このカードのATK+500。"
     ),
     rank:3, atk:1600 },
@@ -220,7 +214,7 @@ const CardRegistry = [
   { no:10, name:"小次郎・孫悟空Lv17", type:"character",
     tags:["アバター","GAME"], titleTag:"BUGBUG西遊記",
     text: normalizeText(
-      "このカードが自分ステージに存在する時、発動できる。このカードを見参させる。\n" +
+      "このカードが自分ステージに存在する時、発動できる。手札の「小太郎」カードを見参させる。\n" +
       "自分ステージに「小太郎」カードがある時、このカードのATK+500。"
     ),
     rank:3, atk:1500 },
@@ -331,6 +325,7 @@ function safeJSONParse(s, fallback){
 }
 
 function ensureInitialCollectionAndDeck(){
+  // 初期：20種×3枚（=60）
   let col = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", null);
   if(!col || typeof col!=="object"){
     col = {};
@@ -339,6 +334,7 @@ function ensureInitialCollectionAndDeck(){
     log("デッキ編集：初期所持（各3枚）を作成");
   }
 
+  // 初期デッキ：20種×2（=40）
   let deck = safeJSONParse(localStorage.getItem(LS_DECK) || "", null);
   if(!Array.isArray(deck) || deck.length!==40){
     deck = [];
@@ -347,6 +343,7 @@ function ensureInitialCollectionAndDeck(){
     log("デッキ編集：初期デッキ（各2枚）を作成");
   }
 
+  // AIデッキ（今は同じ初期デッキで固定運用）
   let aideck = safeJSONParse(localStorage.getItem(LS_AI_DECK) || "", null);
   if(!Array.isArray(aideck) || aideck.length!==40){
     aideck = [];
@@ -357,6 +354,7 @@ function ensureInitialCollectionAndDeck(){
 
 function readCollection(){
   const col = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", {});
+  // 欠損補完
   for(let no=1; no<=20; no++){
     const k = pad2(no);
     if(typeof col[k] !== "number") col[k] = 0;
@@ -416,6 +414,10 @@ function canRemoveFromDeck(deck, no){
   const k = pad2(no);
   const inDeck = countDeckByNo(deck)[k] || 0;
   if(inDeck<=0) return {ok:false, reason:"デッキに入っていません"};
+  if(totalDeckCount(deck) <= 40-1) {
+    // 40固定なので、抜くなら別カード追加が必要だが、操作としては許可（保存で弾く）
+    return {ok:true, reason:""};
+  }
   return {ok:true, reason:""};
 }
 
@@ -431,6 +433,7 @@ function buildDeckFromList(list){
 
 function closeDeckEditor(){
   hideModal("zoneM");
+  // タイトル画面のまま（ゲーム開始しない）
   log("デッキ編集：閉じました");
 }
 
@@ -495,7 +498,10 @@ function renderDeckEditor(){
     renderDeckEditor();
   });
 
-  const btnSort = mkBtn("表示：No順", ()=>{ log("デッキ編集：表示はNo順です"); });
+  const btnSort = mkBtn("表示：No順", ()=>{
+    // ここではデッキ自体は順序意味なし。UIだけNo順固定なので実質ダミー。
+    log("デッキ編集：表示はNo順です");
+  });
 
   btnRow.appendChild(btnSave);
   btnRow.appendChild(btnReset);
@@ -556,6 +562,7 @@ function renderDeckEditor(){
         log(`削除不可：${can.reason}`, "warn");
         return;
       }
+      // 末尾から該当noを1枚抜く
       for(let i=deckNow.length-1;i>=0;i--){
         if(deckNow[i]===no){ deckNow.splice(i,1); break; }
       }
@@ -594,6 +601,7 @@ function renderDeckEditor(){
     row.appendChild(meta);
     row.appendChild(ops);
 
+    // 長押しでカード詳細
     bindLongPress(row, ()=>{
       const tmp = makeInstance(def);
       openViewer(tmp, {side:"P1", zone:"DECKEDIT", pos:null});
@@ -605,6 +613,7 @@ function renderDeckEditor(){
   el.zoneBody.appendChild(list);
 }
 
+/* デッキ編集を開く（タイトル画面から） */
 function openDeckEditor(){
   ensureInitialCollectionAndDeck();
   renderDeckEditor();
@@ -645,12 +654,10 @@ const state = {
 
   announce: { lastSelUid:null },
 
-  // 先攻TURN1は攻撃不可（※先攻側のみ）
-  noBattleOnFirstTurnForFirstPlayer: true,
+  // TURN1攻撃禁止（先攻がAIでも）
+  noBattleOnTurn1: true,
 
-  // v50020：マリガン（双方1回）
-  mulligan: { asked:false, P1Done:false, AIDone:false },
-
+  // タイトル長押し判定（長押し直後のクリック誤発火防止）
   titleLongPressed:false,
 };
 
@@ -661,8 +668,15 @@ function isItem(c){ return c && c.type==="item"; }
 function sideName(side){ return side==="P1" ? "あなた" : "AI"; }
 function opponent(side){ return side==="P1" ? "AI" : "P1"; }
 
-function isFirstPlayersFirstTurn(){
-  return state.noBattleOnFirstTurnForFirstPlayer && state.turn===1 && state.activeSide===state.firstSide;
+function getCardByUid(side, uid){
+  const p = state[side];
+  const zones = [p.hand, p.deck, p.shield, p.wing, p.outside, p.C, p.E];
+  for(const z of zones){
+    for(const it of z){
+      if(it && it.uid === uid) return it;
+    }
+  }
+  return null;
 }
 
 /* ---------------- Modals ---------------- */
@@ -908,6 +922,7 @@ function clearEndTurnTemps(side){
     if(!c) continue;
     c.tempAtk = 0;
     c.flags.attackedCountThisTurn = 0;
+    c.flags.producerSavedThisTurn = false;
   }
 }
 function resetPerTurn(side){
@@ -973,6 +988,7 @@ function openViewer(card, ctx){
 
   state.viewer = { side: ctx?.side||null, zone: ctx?.zone||null, pos: ctx?.pos??null, uid: card.uid };
 
+  // 常時表示（押したら判定）
   el.btnCardAct.style.display = "inline-block";
   showModal("viewerM");
 }
@@ -1039,10 +1055,6 @@ function isAttackableNow_P1(card){
   if(state.gameOver) return false;
   if(state.activeSide!=="P1") return false;
   if(state.phase!=="BATTLE") return false;
-
-  // v50020：先攻TURN1のみ攻撃不可（先攻側だけ）
-  if(isFirstPlayersFirstTurn()) return false;
-
   const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
   return (card.flags.attackedCountThisTurn < maxAtk);
 }
@@ -1076,7 +1088,11 @@ function makeSlot(card, side, ctx, opts={}){
       const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
       const usedUp = (card.flags.attackedCountThisTurn >= maxAtk);
 
-      slot.style.opacity = usedUp ? "0.55" : "1";
+      if(usedUp){
+        slot.style.opacity = "0.55";
+      }else{
+        slot.style.opacity = "1";
+      }
 
       if(atkable){
         const m = document.createElement("div");
@@ -1180,7 +1196,7 @@ function announceHandSelection(){
 
   if(isCharacter(c)){
     if(c.summon==="kensan"){
-      log(`案内：見参キャラです。空きCをタップ→コスト選択（キャラクターのみ）→登場`);
+      log(`案内：見参キャラです。空きCをタップ→コスト選択→登場`);
     }else{
       log(`案内：キャラです。空きCをタップ→登場（通常はターン1回）`);
     }
@@ -1329,13 +1345,6 @@ function nextPhase(){
     log(`${sideName(state.activeSide)}：ドロー +1`);
   }
 
-  if(next==="BATTLE"){
-    // v50020：先攻TURN1のみ、BATTLEに入った時点でアナウンス（攻撃はできない）
-    if(isFirstPlayersFirstTurn()){
-      log("TURN1先攻：攻撃禁止（BATTLEは行えません）");
-    }
-  }
-
   if(next==="END"){
     enforceHandLimit(state.activeSide);
     clearEndTurnTemps(state.activeSide);
@@ -1374,67 +1383,8 @@ async function endTurn(){
   }
 }
 
-/* ---------------- v50020：マリガン ---------------- */
-function returnHandToDeckAndShuffle(side){
-  const p = state[side];
-  if(p.hand.length){
-    p.deck.push(...p.hand);
-    p.hand.length = 0;
-  }
-  shuffle(p.deck);
-}
-function countHandTypes(side){
-  const h = state[side].hand;
-  let ch=0, it=0, ef=0;
-  for(const c of h){
-    if(isCharacter(c)) ch++;
-    else if(isItem(c)) it++;
-    else if(isEffect(c)) ef++;
-  }
-  return {ch,it,ef, n:h.length};
-}
-function aiWantsMulligan(){
-  const t = countHandTypes("AI");
-  // 目安：キャラ0は引き直し。キャラ1でエフェ/アイテム過多も引き直し。
-  if(t.ch<=0) return true;
-  if(t.ch===1 && (t.ef + t.it)>=3) return true;
-  return false;
-}
-async function doMulliganOnceAtGameStart(){
-  if(state.mulligan.asked) return;
-  state.mulligan.asked = true;
-
-  // P1
-  log("マリガン：引き直しますか？（あなた/AI それぞれ1回だけ）");
-  renderAll();
-
-  const p1Yes = await askYesNo("マリガン", "ゲーム開始時に一度だけ手札を引き直せます。\nあなたの手札を引き直しますか？");
-  if(p1Yes){
-    returnHandToDeckAndShuffle("P1");
-    draw("P1", 4);
-    log("あなた：マリガン YES（手札引き直し）");
-  }else{
-    log("あなた：マリガン NO");
-  }
-  state.mulligan.P1Done = true;
-  renderAll();
-  await sleep(120);
-
-  // AI
-  const aiYes = aiWantsMulligan();
-  if(aiYes){
-    returnHandToDeckAndShuffle("AI");
-    draw("AI", 4);
-    log("AI：マリガン YES（手札引き直し）");
-  }else{
-    log("AI：マリガン NO");
-  }
-  state.mulligan.AIDone = true;
-  renderAll();
-}
-
 /* ---------------- Start game ---------------- */
-async function startGame(){
+function startGame(){
   ensureInitialCollectionAndDeck();
 
   state.gameOver=false;
@@ -1445,14 +1395,14 @@ async function startGame(){
   state.announce.lastSelUid=null;
   state.battle.attackerUid=null;
 
-  state.mulligan = { asked:false, P1Done:false, AIDone:false };
-
+  // ★あなた：編集デッキ
   const deckList = readDeck();
   if(deckList.length!==40){
     log(`警告：デッキが${deckList.length}枚です。デッキ編集で40枚にして下さい`, "warn");
   }
   state.P1.deck = buildDeckFromList(deckList);
 
+  // ★AI：とりあえず固定（初期40）
   const aiList = readAIDeck();
   state.AI.deck = buildDeckFromList(aiList.length===40 ? aiList : deckList);
 
@@ -1480,19 +1430,17 @@ async function startGame(){
 
   renderAll();
 
-  // v50020：開始時マリガン（双方1回）
-  await doMulliganOnceAtGameStart();
-
-  // 先攻がAIなら、そのままAIターンを実行
   if(state.activeSide==="AI"){
-    applyOppTurnStartEffects("AI");
-    await aiTakeTurn();
-    state.activeSide="P1";
-    state.turn=2;
-    state.phase="START";
-    resetPerTurn("P1");
-    log(`TURN ${state.turn} あなたのターン`);
-    renderAll();
+    (async ()=>{
+      applyOppTurnStartEffects("AI");
+      await aiTakeTurn();
+      state.activeSide="P1";
+      state.turn=2;
+      state.phase="START";
+      resetPerTurn("P1");
+      log(`TURN ${state.turn} あなたのターン`);
+      renderAll();
+    })();
   }
 }
 
@@ -1650,11 +1598,6 @@ async function onClickYourC(pos){
   if(state.activeSide!=="P1" || state.gameOver) return;
 
   if(state.phase==="BATTLE"){
-    // v50020：先攻TURN1は攻撃不可
-    if(isFirstPlayersFirstTurn()){
-      log("TURN1先攻：攻撃できません", "warn");
-      return;
-    }
     const c = state.P1.C[pos];
     if(!c) return;
     await selectAttacker("P1", pos, c);
@@ -1733,29 +1676,6 @@ async function onClickYourE(pos){
   renderAll();
 }
 
-/* =========================================================
-   見参（コストはキャラクターのみ）
-========================================================= */
-function getKensanCostCandidates_CharacterOnly(side, handIdx){
-  const p = state[side];
-  const cands = [];
-
-  for(let i=0;i<p.hand.length;i++){
-    if(i===handIdx) continue;
-    const c = p.hand[i];
-    if(c && isCharacter(c)){
-      cands.push({from:"hand", idx:i, card:c, label:`手札：${c.name}`});
-    }
-  }
-
-  for(let i=0;i<3;i++){
-    if(p.C[i]){
-      cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
-    }
-  }
-  return cands;
-}
-
 async function doKensanSummon(side, cPos, handIdx){
   const p = state[side];
   const card = p.hand[handIdx];
@@ -1763,18 +1683,23 @@ async function doKensanSummon(side, cPos, handIdx){
   if(card.summon!=="kensan") return;
   if(p.C[cPos]) return;
 
-  const cands = getKensanCostCandidates_CharacterOnly(side, handIdx);
-
+  const cands = [];
+  for(let i=0;i<p.hand.length;i++){
+    if(i===handIdx) continue;
+    cands.push({from:"hand", idx:i, card:p.hand[i], label:`手札：${p.hand[i].name}`});
+  }
+  for(let i=0;i<3;i++){
+    if(p.C[i]) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
+    if(p.E[i]) cands.push({from:"E", idx:i, card:p.E[i], label:`E${i+1}：${p.E[i].name}`});
+  }
   if(!cands.length){
-    log("見参：コスト候補（キャラクター）がありません", "warn");
+    log("見参：コスト候補なし", "warn");
     return;
   }
 
-  const pick = await askChoice(
-    "見参（コスト）",
-    "ウイングへ送るキャラクターカードを1枚選んでください。",
-    cands.map(x=>({ label:x.label, value:`${x.from}:${x.idx}`, card:x.card }))
-  );
+  const pick = await askChoice("見参（コスト）", "ウイングへ送るカードを1枚選んでください。", cands.map(x=>({
+    label:x.label, value:`${x.from}:${x.idx}`, card:x.card
+  })));
 
   const [from, idxStr] = String(pick).split(":");
   const idx = Number(idxStr);
@@ -1787,6 +1712,10 @@ async function doKensanSummon(side, cPos, handIdx){
     const moved = p.C[idx];
     await stripEquipIfAny(side, moved);
     p.C[idx]=null;
+    moveToWing(side, moved);
+  }else if(from==="E"){
+    const moved = p.E[idx];
+    p.E[idx]=null;
     moveToWing(side, moved);
   }
 
@@ -2191,17 +2120,7 @@ async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
 
   for(let k=0;k<n;k++){
     if(opt.aiAuto){
-      const scored = pool.map(x=>{
-        const c = x.c;
-        let s = 0;
-        s += (c.baseAtk||0) + (c.rank||0)*120;
-        if(c.no===3) s += 600;
-        if(c.no===1) s += 350;
-        if(c.no===6) s += 300;
-        return {...x, s};
-      }).sort((a,b)=> b.s-a.s);
-
-      const pick = scored[0];
+      const pick = pool[0];
       if(pick.src==="deck"){
         const moved = removeFromZone(p.deck, pick.c.uid);
         if(moved) p.hand.push(moved);
@@ -2209,7 +2128,7 @@ async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
         const moved = removeFromZone(p.wing, pick.c.uid);
         if(moved) p.hand.push(moved);
       }
-      log(`AI：サーチ（${tag}）→ ${pick.c.name}`);
+      log(`AI：サーチ（${tag}）`);
       continue;
     }
 
@@ -2329,12 +2248,6 @@ function onShieldClicked(side, idx){
   if(state.activeSide!=="P1") return;
   if(side!=="AI") return;
 
-  // v50020：先攻TURN1は攻撃不可
-  if(isFirstPlayersFirstTurn()){
-    log("TURN1先攻：攻撃できません", "warn");
-    return;
-  }
-
   if(!state.battle.attackerUid){
     log("先に自分の攻撃者（C）を選択してください", "warn");
     return;
@@ -2350,17 +2263,6 @@ function onShieldClicked(side, idx){
   log("攻撃対象は「攻撃対象選択」から選べます");
 }
 
-/* =========================================================
-   班目プロデューサー耐性（毎ターン1回）
-========================================================= */
-async function tryProducerSave(side, card){
-  if(!card) return false;
-  if(card.no!==12) return false;
-  if(card.flags.producerSavedThisTurn) return false;
-  card.flags.producerSavedThisTurn = true;
-  return true;
-}
-
 async function resolveBattle(attacker, defenderUid){
   const enemySide = "AI";
   const defender = state[enemySide].C.find(c=>c && c.uid===defenderUid);
@@ -2371,21 +2273,16 @@ async function resolveBattle(attacker, defenderUid){
   log(`バトル：${attacker.name}(${atkA}) vs ${defender.name}(${atkD})`);
 
   if(atkA > atkD){
-    const savedD = await tryProducerSave("AI", defender);
-    if(savedD){
-      log(`AI：班目プロデューサー耐性（このターン1回）`);
-    }else{
-      await sendCharacterToWing("AI", defender.uid);
-      log(`撃破：${defender.name} → AIウイング`);
-    }
+    await sendCharacterToWing("AI", defender.uid);
+    log(`撃破：${defender.name} → AIウイング`);
   }else if(atkA < atkD){
-    const savedA = await tryProducerSave("P1", attacker);
-    if(!savedA){
+    const saved = await tryProducerSave("P1", attacker);
+    if(!saved){
       await sendCharacterToWing("P1", attacker.uid);
       log(`敗北：${attacker.name} → あなたウイング`);
       await tryCattleTrigger_P1();
     }else{
-      log(`あなた：班目プロデューサー耐性（このターン1回）`);
+      log(`班目プロデューサー：バトル破壊を無効（このターン1回）`);
     }
   }else{
     const savedA = await tryProducerSave("P1", attacker);
@@ -2393,15 +2290,9 @@ async function resolveBattle(attacker, defenderUid){
     if(!savedA){
       await sendCharacterToWing("P1", attacker.uid);
       await tryCattleTrigger_P1();
-    }else{
-      log(`あなた：班目プロデューサー耐性（このターン1回）`);
     }
-    if(!savedD){
-      await sendCharacterToWing("AI", defender.uid);
-    }else{
-      log(`AI：班目プロデューサー耐性（このターン1回）`);
-    }
-    log("相打ち：双方ウイング（耐性があれば残る）");
+    if(!savedD) await sendCharacterToWing("AI", defender.uid);
+    log("相打ち：双方ウイング");
   }
 
   attacker.flags.attackedCountThisTurn += 1;
@@ -2422,6 +2313,13 @@ async function breakShield(defSide, shieldIdx, attacker){
   state.battle.attackerUid=null;
   state.battle.attackerPos=null;
   renderAll();
+}
+
+async function tryProducerSave(side, card){
+  if(card.no!==12) return false;
+  if(card.flags.producerSavedThisTurn) return false;
+  card.flags.producerSavedThisTurn = true;
+  return true;
 }
 
 /* ---------------- Equip stripping / send to wing ---------------- */
@@ -2558,106 +2456,6 @@ function itemBonusForHost(item, host){
   return b;
 }
 
-function scoreCharacterForAI(c){
-  if(!c) return -99999;
-  let s = (c.baseAtk||0) + (c.rank||0)*120;
-  if(c.no===8) s += 260;
-  if(c.no===4) s += 180;
-  if(c.no===5) s += 240;
-  if(c.no===12) s += 140;
-  if(c.no===7) s += 180;
-  if(c.summon==="kensan") s += 220;
-  return s;
-}
-
-function scoreKensanCandidateForAI(c){
-  let s = scoreCharacterForAI(c);
-  if(c.no===3) s += 240;
-  if(c.no===1) s += 180;
-  if(c.no===6) s += 150;
-  return s;
-}
-
-function scoreCostCharacterForAI(c){
-  if(!c) return 999999;
-  let s = (c.baseAtk||0) + (c.rank||0)*120;
-  if(c.no===8) s += 400;
-  if(c.no===4) s += 260;
-  if(c.no===5) s += 260;
-  if(c.no===12) s += 180;
-  if(c.summon==="kensan") s += 220;
-  return s;
-}
-
-function aiFindKensanInHand(){
-  const p = state.AI;
-  const arr = [];
-  for(let i=0;i<p.hand.length;i++){
-    const c = p.hand[i];
-    if(c && isCharacter(c) && c.summon==="kensan"){
-      arr.push({i, c, s: scoreKensanCandidateForAI(c)});
-    }
-  }
-  arr.sort((a,b)=> b.s-a.s);
-  return arr;
-}
-
-function aiFindKensanCostCandidate(excludeHandIdx){
-  const p = state.AI;
-  const costs = [];
-
-  for(let i=0;i<p.hand.length;i++){
-    if(i===excludeHandIdx) continue;
-    const c = p.hand[i];
-    if(c && isCharacter(c)){
-      costs.push({from:"hand", idx:i, c, s: scoreCostCharacterForAI(c)});
-    }
-  }
-  for(let i=0;i<3;i++){
-    const c = p.C[i];
-    if(c){
-      costs.push({from:"C", idx:i, c, s: scoreCostCharacterForAI(c) + 120});
-    }
-  }
-
-  costs.sort((a,b)=> a.s-b.s);
-  return costs.length ? costs[0] : null;
-}
-
-async function aiTryPlayBestKensanCharacter(){
-  const p = state.AI;
-  const empty = findEmptyIndex(p.C);
-  if(empty<0) return false;
-
-  const kensans = aiFindKensanInHand();
-  if(!kensans.length) return false;
-
-  for(const ks of kensans){
-    const cost = aiFindKensanCostCandidate(ks.i);
-    if(!cost) continue;
-
-    if(cost.from==="hand"){
-      const moved = p.hand.splice(cost.idx,1)[0];
-      moveToWing("AI", moved);
-    }else{
-      const moved = p.C[cost.idx];
-      await stripEquipIfAny("AI", moved);
-      p.C[cost.idx] = null;
-      moveToWing("AI", moved);
-    }
-
-    const placed = p.hand.splice(ks.i,1)[0];
-    p.C[empty] = placed;
-
-    log(`AI：見参 ${placed.name}（コスト：${cost.c.name}）`);
-    renderAll();
-    await onEnterTriggers("AI", {zone:"C", pos:empty, card:placed});
-    return true;
-  }
-
-  return false;
-}
-
 async function aiTakeTurn(){
   state.phase = "DRAW";
   draw("AI", 1);
@@ -2679,15 +2477,10 @@ async function aiTakeTurn(){
   didSomething = (await aiTryPlayBestItem()) || didSomething;
   await sleep(90);
 
-  didSomething = (await aiTryPlayBestKensanCharacter()) || didSomething;
-  await sleep(90);
-
   didSomething = (await aiTryPlayBestCharacter()) || didSomething;
   await sleep(90);
 
   if(state.AI.hand.length >= 6){
-    didSomething = (await aiTryPlayBestKensanCharacter()) || didSomething;
-    await sleep(80);
     didSomething = (await aiTryPlayBestCharacter()) || didSomething;
     await sleep(80);
     didSomething = (await aiTryPlayBestItem()) || didSomething;
@@ -2704,9 +2497,8 @@ async function aiTakeTurn(){
   renderAll();
   await sleep(140);
 
-  // v50020：攻撃禁止は「先攻側のTURN1のみ」
-  if(isFirstPlayersFirstTurn()){
-    log("先攻TURN1は攻撃禁止（AI BATTLEスキップ）");
+  if(state.noBattleOnTurn1 && state.turn===1){
+    log("AI：TURN1は攻撃禁止（BATTLEスキップ）");
   }else{
     await aiBattleBest();
   }
@@ -2729,12 +2521,16 @@ async function aiTryPlayBestCharacter(){
   for(let i=0;i<p.hand.length;i++){
     const c = p.hand[i];
     if(c && isCharacter(c) && c.summon!=="kensan"){
-      candidates.push({i, c, s: scoreCharacterForAI(c)});
+      let s = (c.baseAtk||0) + (c.rank||0)*120;
+      if(c.no===8) s += 260;
+      if(c.no===4) s += 140;
+      if(c.no===5) s += 220;
+      candidates.push({i, c, s});
     }
   }
   if(!candidates.length) return false;
 
-  candidates.sort((a,b)=> b.s-a.s);
+  candidates.sort((a,b)=> b.s - a.s);
   const pick = candidates[0];
 
   const c = p.hand.splice(pick.i,1)[0];
@@ -2922,34 +2718,26 @@ async function aiBattleBest(){
       log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
 
       if(atkA > atkD){
-        const savedD = await tryProducerSave("P1", t);
-        if(savedD){
-          log(`あなた：班目プロデューサー耐性（このターン1回）`);
-        }else{
-          await sendCharacterToWing("P1", t.uid);
-          log(`AI：撃破 ${t.name} → あなたウイング`);
-          await tryCattleTrigger_P1();
-        }
+        await sendCharacterToWing("P1", t.uid);
+        log(`AI：撃破 ${t.name} → あなたウイング`);
+        await tryCattleTrigger_P1();
       }else if(atkA < atkD){
-        const savedA = await tryProducerSave("AI", a);
-        if(!savedA){
+        const saved = await tryProducerSave("AI", a);
+        if(!saved){
           await sendCharacterToWing("AI", a.uid);
           log(`AI：敗北 ${a.name} → AIウイング`);
         }else{
-          log(`AI：班目プロデューサー耐性（このターン1回）`);
+          log(`AI：班目プロデューサー耐え（1回）`);
         }
       }else{
         const savedA = await tryProducerSave("AI", a);
         const savedD = await tryProducerSave("P1", t);
         if(!savedA) await sendCharacterToWing("AI", a.uid);
-        else log(`AI：班目プロデューサー耐性（このターン1回）`);
         if(!savedD){
           await sendCharacterToWing("P1", t.uid);
           await tryCattleTrigger_P1();
-        }else{
-          log(`あなた：班目プロデューサー耐性（このターン1回）`);
         }
-        log("AI：相打ち（耐性があれば残る）");
+        log("AI：相打ち");
       }
 
       a.flags.attackedCountThisTurn += 1;
@@ -2992,7 +2780,6 @@ function pickBestAIAttackFor(attacker){
     if(atkA > atkD){
       score += estimateRemoveValue(t) + 420;
       score += 220;
-      if(t.no===12 && !t.flags.producerSavedThisTurn) score -= 180;
     }else if(atkA < atkD){
       const selfLoss = estimateRemoveValue(attacker) + 380;
       const canSave = (attacker.no===12 && !attacker.flags.producerSavedThisTurn);
@@ -3039,7 +2826,8 @@ async function finishGame(winnerSide){
 function bindStart(){
   el.boot.textContent="JS: OK";
 
-  const onLong = ()=>{
+  // ★長押し：デッキ編集へ（新ボタン追加なし）
+  const onLong = (e)=>{
     state.titleLongPressed = true;
     openDeckEditor();
     setTimeout(()=>{ state.titleLongPressed=false; }, 350);
@@ -3048,7 +2836,7 @@ function bindStart(){
   bindLongPress(el.title, onLong, 620);
 
   const go = ()=>{
-    if(state.titleLongPressed) return;
+    if(state.titleLongPressed) return; // 長押し直後の誤スタート防止
     if(state.started) return;
     state.started=true;
     el.title.classList.remove("active");
@@ -3143,10 +2931,9 @@ async function init(){
   }
 
   el.boot.textContent="JS: OK（準備完了）";
-  log("v50020：完全版（丸ごと置換）");
-  log("FIX：攻撃禁止は『先攻TURN1のみ』へ修正（後攻TURN1は攻撃可）");
-  log("ADD：マリガン（開始時に双方1回、引き直し）");
-  log("スタート長押し→デッキ編集（JSのみ/zoneM流用）");
+  log("v50018：完全版（丸ごと置換）");
+  log("追加：スタート長押し→デッキ編集（JSのみ/zoneM流用）");
+  log("初期：所持=各3枚 / デッキ=各2枚（40固定）");
 }
 
 document.addEventListener("DOMContentLoaded", init);
