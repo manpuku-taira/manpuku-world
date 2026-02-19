@@ -1,16 +1,16 @@
 /* =========================================================
-  Manpuku World - v50019 (iPhone First / Full Replace JS)
+  Manpuku World - v50020 (iPhone First / Full Replace JS)
   - レイアウトは触らない（JSのみ）
   - + デッキ編集（テキストUI / zoneM流用 / スタート長押しで遷移）
   - 初期所持：20種×3枚（=60枚）
   - 初期デッキ：20種×2枚（=40枚）
   - ルール：デッキ40固定 / 同名最大3枚 / 所持枚数以内
 
-  v50019 修正:
-  1) 班目プロデューサー(12)の「バトル破壊耐性」を
-     攻撃側/防御側どちらでも適用（勝利分岐でも耐性判定）
-  2) 見参コストは「キャラクターカードのみ」選択可能に修正
-  3) AIが見参キャラをキャラコストで見参できるよう強化
+  v50020 追加修正:
+  ① 先攻TURN1のみ攻撃禁止に修正
+     - 後攻側の「最初のターン」がTURN1でも攻撃できるようにする
+  ② マリガン（引き直し）導入
+     - ゲーム開始時に互いに一度だけ「引き直しますか？」を実行
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -645,7 +645,11 @@ const state = {
 
   announce: { lastSelUid:null },
 
-  noBattleOnTurn1: true,
+  // 先攻TURN1は攻撃不可（※先攻側のみ）
+  noBattleOnFirstTurnForFirstPlayer: true,
+
+  // v50020：マリガン（双方1回）
+  mulligan: { asked:false, P1Done:false, AIDone:false },
 
   titleLongPressed:false,
 };
@@ -657,15 +661,8 @@ function isItem(c){ return c && c.type==="item"; }
 function sideName(side){ return side==="P1" ? "あなた" : "AI"; }
 function opponent(side){ return side==="P1" ? "AI" : "P1"; }
 
-function getCardByUid(side, uid){
-  const p = state[side];
-  const zones = [p.hand, p.deck, p.shield, p.wing, p.outside, p.C, p.E];
-  for(const z of zones){
-    for(const it of z){
-      if(it && it.uid === uid) return it;
-    }
-  }
-  return null;
+function isFirstPlayersFirstTurn(){
+  return state.noBattleOnFirstTurnForFirstPlayer && state.turn===1 && state.activeSide===state.firstSide;
 }
 
 /* ---------------- Modals ---------------- */
@@ -911,8 +908,6 @@ function clearEndTurnTemps(side){
     if(!c) continue;
     c.tempAtk = 0;
     c.flags.attackedCountThisTurn = 0;
-    // producerSavedThisTurn は「そのターン内で1回」なので、ターン切替でリセットされる
-    // （resetPerTurnでも同様にリセット）
   }
 }
 function resetPerTurn(side){
@@ -925,7 +920,7 @@ function resetPerTurn(side){
     if(!c) continue;
     c.used.perTurn = false;
     c.flags.attackedCountThisTurn = 0;
-    c.flags.producerSavedThisTurn = false; // ★毎ターン復活
+    c.flags.producerSavedThisTurn = false;
   }
 }
 
@@ -1044,6 +1039,10 @@ function isAttackableNow_P1(card){
   if(state.gameOver) return false;
   if(state.activeSide!=="P1") return false;
   if(state.phase!=="BATTLE") return false;
+
+  // v50020：先攻TURN1のみ攻撃不可（先攻側だけ）
+  if(isFirstPlayersFirstTurn()) return false;
+
   const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
   return (card.flags.attackedCountThisTurn < maxAtk);
 }
@@ -1330,6 +1329,13 @@ function nextPhase(){
     log(`${sideName(state.activeSide)}：ドロー +1`);
   }
 
+  if(next==="BATTLE"){
+    // v50020：先攻TURN1のみ、BATTLEに入った時点でアナウンス（攻撃はできない）
+    if(isFirstPlayersFirstTurn()){
+      log("TURN1先攻：攻撃禁止（BATTLEは行えません）");
+    }
+  }
+
   if(next==="END"){
     enforceHandLimit(state.activeSide);
     clearEndTurnTemps(state.activeSide);
@@ -1368,8 +1374,67 @@ async function endTurn(){
   }
 }
 
+/* ---------------- v50020：マリガン ---------------- */
+function returnHandToDeckAndShuffle(side){
+  const p = state[side];
+  if(p.hand.length){
+    p.deck.push(...p.hand);
+    p.hand.length = 0;
+  }
+  shuffle(p.deck);
+}
+function countHandTypes(side){
+  const h = state[side].hand;
+  let ch=0, it=0, ef=0;
+  for(const c of h){
+    if(isCharacter(c)) ch++;
+    else if(isItem(c)) it++;
+    else if(isEffect(c)) ef++;
+  }
+  return {ch,it,ef, n:h.length};
+}
+function aiWantsMulligan(){
+  const t = countHandTypes("AI");
+  // 目安：キャラ0は引き直し。キャラ1でエフェ/アイテム過多も引き直し。
+  if(t.ch<=0) return true;
+  if(t.ch===1 && (t.ef + t.it)>=3) return true;
+  return false;
+}
+async function doMulliganOnceAtGameStart(){
+  if(state.mulligan.asked) return;
+  state.mulligan.asked = true;
+
+  // P1
+  log("マリガン：引き直しますか？（あなた/AI それぞれ1回だけ）");
+  renderAll();
+
+  const p1Yes = await askYesNo("マリガン", "ゲーム開始時に一度だけ手札を引き直せます。\nあなたの手札を引き直しますか？");
+  if(p1Yes){
+    returnHandToDeckAndShuffle("P1");
+    draw("P1", 4);
+    log("あなた：マリガン YES（手札引き直し）");
+  }else{
+    log("あなた：マリガン NO");
+  }
+  state.mulligan.P1Done = true;
+  renderAll();
+  await sleep(120);
+
+  // AI
+  const aiYes = aiWantsMulligan();
+  if(aiYes){
+    returnHandToDeckAndShuffle("AI");
+    draw("AI", 4);
+    log("AI：マリガン YES（手札引き直し）");
+  }else{
+    log("AI：マリガン NO");
+  }
+  state.mulligan.AIDone = true;
+  renderAll();
+}
+
 /* ---------------- Start game ---------------- */
-function startGame(){
+async function startGame(){
   ensureInitialCollectionAndDeck();
 
   state.gameOver=false;
@@ -1379,6 +1444,8 @@ function startGame(){
   state.selectedHandIndex=null;
   state.announce.lastSelUid=null;
   state.battle.attackerUid=null;
+
+  state.mulligan = { asked:false, P1Done:false, AIDone:false };
 
   const deckList = readDeck();
   if(deckList.length!==40){
@@ -1413,17 +1480,19 @@ function startGame(){
 
   renderAll();
 
+  // v50020：開始時マリガン（双方1回）
+  await doMulliganOnceAtGameStart();
+
+  // 先攻がAIなら、そのままAIターンを実行
   if(state.activeSide==="AI"){
-    (async ()=>{
-      applyOppTurnStartEffects("AI");
-      await aiTakeTurn();
-      state.activeSide="P1";
-      state.turn=2;
-      state.phase="START";
-      resetPerTurn("P1");
-      log(`TURN ${state.turn} あなたのターン`);
-      renderAll();
-    })();
+    applyOppTurnStartEffects("AI");
+    await aiTakeTurn();
+    state.activeSide="P1";
+    state.turn=2;
+    state.phase="START";
+    resetPerTurn("P1");
+    log(`TURN ${state.turn} あなたのターン`);
+    renderAll();
   }
 }
 
@@ -1581,6 +1650,11 @@ async function onClickYourC(pos){
   if(state.activeSide!=="P1" || state.gameOver) return;
 
   if(state.phase==="BATTLE"){
+    // v50020：先攻TURN1は攻撃不可
+    if(isFirstPlayersFirstTurn()){
+      log("TURN1先攻：攻撃できません", "warn");
+      return;
+    }
     const c = state.P1.C[pos];
     if(!c) return;
     await selectAttacker("P1", pos, c);
@@ -1660,13 +1734,12 @@ async function onClickYourE(pos){
 }
 
 /* =========================================================
-   見参（コストはキャラクターのみ） v50019 FIX
+   見参（コストはキャラクターのみ）
 ========================================================= */
 function getKensanCostCandidates_CharacterOnly(side, handIdx){
   const p = state[side];
   const cands = [];
 
-  // 手札：キャラクターのみ（見参カード自身は除外）
   for(let i=0;i<p.hand.length;i++){
     if(i===handIdx) continue;
     const c = p.hand[i];
@@ -1675,14 +1748,11 @@ function getKensanCostCandidates_CharacterOnly(side, handIdx){
     }
   }
 
-  // C：キャラクター（当然キャラ）
   for(let i=0;i<3;i++){
     if(p.C[i]){
       cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
     }
   }
-
-  // Eは「キャラクターをコストにできる」要件なので候補から外す
   return cands;
 }
 
@@ -1693,7 +1763,6 @@ async function doKensanSummon(side, cPos, handIdx){
   if(card.summon!=="kensan") return;
   if(p.C[cPos]) return;
 
-  // ★キャラクターのみ候補
   const cands = getKensanCostCandidates_CharacterOnly(side, handIdx);
 
   if(!cands.length){
@@ -2122,14 +2191,13 @@ async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
 
   for(let k=0;k<n;k++){
     if(opt.aiAuto){
-      // AIは「クランプス」など、勝ち筋に寄与しやすいカードを優先
       const scored = pool.map(x=>{
         const c = x.c;
         let s = 0;
         s += (c.baseAtk||0) + (c.rank||0)*120;
-        if(c.no===3) s += 600; // ★ニコラ優先
-        if(c.no===1) s += 350; // クルエラ
-        if(c.no===6) s += 300; // エフィ
+        if(c.no===3) s += 600;
+        if(c.no===1) s += 350;
+        if(c.no===6) s += 300;
         return {...x, s};
       }).sort((a,b)=> b.s-a.s);
 
@@ -2261,6 +2329,12 @@ function onShieldClicked(side, idx){
   if(state.activeSide!=="P1") return;
   if(side!=="AI") return;
 
+  // v50020：先攻TURN1は攻撃不可
+  if(isFirstPlayersFirstTurn()){
+    log("TURN1先攻：攻撃できません", "warn");
+    return;
+  }
+
   if(!state.battle.attackerUid){
     log("先に自分の攻撃者（C）を選択してください", "warn");
     return;
@@ -2277,8 +2351,7 @@ function onShieldClicked(side, idx){
 }
 
 /* =========================================================
-   班目プロデューサー耐性 v50019 FIX
-   - 撃破される側（防御側）でも判定する
+   班目プロデューサー耐性（毎ターン1回）
 ========================================================= */
 async function tryProducerSave(side, card){
   if(!card) return false;
@@ -2298,7 +2371,6 @@ async function resolveBattle(attacker, defenderUid){
   log(`バトル：${attacker.name}(${atkA}) vs ${defender.name}(${atkD})`);
 
   if(atkA > atkD){
-    // ★防御側（相手）の班目耐性を判定
     const savedD = await tryProducerSave("AI", defender);
     if(savedD){
       log(`AI：班目プロデューサー耐性（このターン1回）`);
@@ -2489,38 +2561,34 @@ function itemBonusForHost(item, host){
 function scoreCharacterForAI(c){
   if(!c) return -99999;
   let s = (c.baseAtk||0) + (c.rank||0)*120;
-  if(c.no===8) s += 260;    // 手形
-  if(c.no===4) s += 180;    // ラウス（サーチ）
-  if(c.no===5) s += 240;    // タータ（ドロー&交換）
-  if(c.no===12) s += 140;   // 班目（耐性）
-  if(c.no===7) s += 180;    // まひる（装備で2回攻撃）
-  if(c.summon==="kensan") s += 220; // 見参は強い
+  if(c.no===8) s += 260;
+  if(c.no===4) s += 180;
+  if(c.no===5) s += 240;
+  if(c.no===12) s += 140;
+  if(c.no===7) s += 180;
+  if(c.summon==="kensan") s += 220;
   return s;
 }
 
 function scoreKensanCandidateForAI(c){
   let s = scoreCharacterForAI(c);
-  if(c.no===3) s += 240; // ニコラ優先
-  if(c.no===1) s += 180; // クルエラ
-  if(c.no===6) s += 150; // エフィ
+  if(c.no===3) s += 240;
+  if(c.no===1) s += 180;
+  if(c.no===6) s += 150;
   return s;
 }
 
 function scoreCostCharacterForAI(c){
-  // 見参コストとして捨てても痛くないキャラを低スコアにする
   if(!c) return 999999;
   let s = (c.baseAtk||0) + (c.rank||0)*120;
-  if(c.no===8) s += 400; // 手形は捨てたくない
-  if(c.no===4) s += 260; // ラウスは捨てたくない
-  if(c.no===5) s += 260; // タータは捨てたくない
-  if(c.no===12) s += 180; // 班目も温存したい
-  if(c.summon==="kensan") s += 220; // 見参キャラ同士をコストにするのは避ける
+  if(c.no===8) s += 400;
+  if(c.no===4) s += 260;
+  if(c.no===5) s += 260;
+  if(c.no===12) s += 180;
+  if(c.summon==="kensan") s += 220;
   return s;
 }
 
-/* =========================================================
-   AI 見参（キャラコストのみ） v50019 追加
-========================================================= */
 function aiFindKensanInHand(){
   const p = state.AI;
   const arr = [];
@@ -2538,7 +2606,6 @@ function aiFindKensanCostCandidate(excludeHandIdx){
   const p = state.AI;
   const costs = [];
 
-  // 手札キャラ（exclude除外）
   for(let i=0;i<p.hand.length;i++){
     if(i===excludeHandIdx) continue;
     const c = p.hand[i];
@@ -2546,15 +2613,14 @@ function aiFindKensanCostCandidate(excludeHandIdx){
       costs.push({from:"hand", idx:i, c, s: scoreCostCharacterForAI(c)});
     }
   }
-  // 場キャラ
   for(let i=0;i<3;i++){
     const c = p.C[i];
     if(c){
-      costs.push({from:"C", idx:i, c, s: scoreCostCharacterForAI(c) + 120}); // 場を減らすのは少し重め
+      costs.push({from:"C", idx:i, c, s: scoreCostCharacterForAI(c) + 120});
     }
   }
 
-  costs.sort((a,b)=> a.s-b.s); // 捨てやすい順
+  costs.sort((a,b)=> a.s-b.s);
   return costs.length ? costs[0] : null;
 }
 
@@ -2566,12 +2632,10 @@ async function aiTryPlayBestKensanCharacter(){
   const kensans = aiFindKensanInHand();
   if(!kensans.length) return false;
 
-  // 最も強い見参候補を試す（上から順）
   for(const ks of kensans){
     const cost = aiFindKensanCostCandidate(ks.i);
     if(!cost) continue;
 
-    // コスト支払い
     if(cost.from==="hand"){
       const moved = p.hand.splice(cost.idx,1)[0];
       moveToWing("AI", moved);
@@ -2582,7 +2646,6 @@ async function aiTryPlayBestKensanCharacter(){
       moveToWing("AI", moved);
     }
 
-    // 見参配置
     const placed = p.hand.splice(ks.i,1)[0];
     p.C[empty] = placed;
 
@@ -2616,7 +2679,6 @@ async function aiTakeTurn(){
   didSomething = (await aiTryPlayBestItem()) || didSomething;
   await sleep(90);
 
-  // ★見参を優先して展開できるように
   didSomething = (await aiTryPlayBestKensanCharacter()) || didSomething;
   await sleep(90);
 
@@ -2642,8 +2704,9 @@ async function aiTakeTurn(){
   renderAll();
   await sleep(140);
 
-  if(state.noBattleOnTurn1 && state.turn===1){
-    log("AI：TURN1は攻撃禁止（BATTLEスキップ）");
+  // v50020：攻撃禁止は「先攻側のTURN1のみ」
+  if(isFirstPlayersFirstTurn()){
+    log("先攻TURN1は攻撃禁止（AI BATTLEスキップ）");
   }else{
     await aiBattleBest();
   }
@@ -2859,7 +2922,6 @@ async function aiBattleBest(){
       log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
 
       if(atkA > atkD){
-        // ★防御側（あなた）の班目耐性を判定
         const savedD = await tryProducerSave("P1", t);
         if(savedD){
           log(`あなた：班目プロデューサー耐性（このターン1回）`);
@@ -2930,7 +2992,7 @@ function pickBestAIAttackFor(attacker){
     if(atkA > atkD){
       score += estimateRemoveValue(t) + 420;
       score += 220;
-      if(t.no===12 && !t.flags.producerSavedThisTurn) score -= 180; // 班目は1回耐える
+      if(t.no===12 && !t.flags.producerSavedThisTurn) score -= 180;
     }else if(atkA < atkD){
       const selfLoss = estimateRemoveValue(attacker) + 380;
       const canSave = (attacker.no===12 && !attacker.flags.producerSavedThisTurn);
@@ -3081,11 +3143,10 @@ async function init(){
   }
 
   el.boot.textContent="JS: OK（準備完了）";
-  log("v50019：完全版（丸ごと置換）");
-  log("FIX：班目プロデューサー耐性（攻/防どちらでも）・毎ターン復活");
-  log("FIX：見参コストはキャラクターのみ");
-  log("UP：AIが見参展開（キャラコスト）を実行できるよう強化");
-  log("追加：スタート長押し→デッキ編集（JSのみ/zoneM流用）");
+  log("v50020：完全版（丸ごと置換）");
+  log("FIX：攻撃禁止は『先攻TURN1のみ』へ修正（後攻TURN1は攻撃可）");
+  log("ADD：マリガン（開始時に双方1回、引き直し）");
+  log("スタート長押し→デッキ編集（JSのみ/zoneM流用）");
 }
 
 document.addEventListener("DOMContentLoaded", init);
