@@ -8,7 +8,17 @@
 (() => {
   "use strict";
 
-  /* ================================
+  
+  // ---- Startup cleanup (in case an old "操作" overlay remains in HTML) ----
+  (function cleanupLegacyOverlays(){
+    const selectors = ["#opsModal", ".ops-modal", "#mw_ops", "#mw_help"];
+    selectors.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        try { el.remove(); } catch(e) {}
+      });
+    });
+  })();
+/* ================================
     0) ユーティリティ
   ================================= */
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
