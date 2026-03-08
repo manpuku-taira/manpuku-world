@@ -2,18 +2,24 @@
   Manpuku World - v50019 (iPhone First / Full Replace JS)
   - レイアウトは触らない（JSのみ）
   - デッキ編集（テキストUI / zoneM流用 / スタート長押しで遷移）
-  - 初期所持：20種×3枚（=60枚）
-  - 初期デッキ：20種×2枚（=40枚）
+  - 初期所持：既存カード各3枚
+  - 初期デッキ：No.01〜20 を各2枚（=40枚）
   - ルール：デッキ40固定 / 同名最大3枚 / 所持枚数以内
 
-  ▼修正（ご要望）
-  1) スタートが押せず起動しない問題を対策
-     - 要素nullガード（ID不一致でも致命傷にならない）
-     - iOSのタップ/クリック競合を避けるため、pointer/touch/clickを冗長にバインド
-     - 長押し直後の誤タップ抑制を堅牢化
-  2) 先攻1ターン目（先攻側の最初のターン）攻撃禁止
-  3) 後攻側も「自分の1ターン目」は攻撃禁止
-     - “ゲーム全体のTURN1”ではなく「各サイドの最初の自ターン」をBANする実装
+  ▼今回追加
+  A) 記憶抹消
+     - 効果を無効にした相手カードは自動でウイングへ送る
+     - 手札発動カードだけでなく、場のカード効果を止めた場合も対応
+  B) 追加カード
+     - No.23 退魔師レイチェル
+     - No.24 銀弾の双銃
+  C) レイチェル装備中ロック
+     - 相手ステージのタグ「怨霊」「霊魂」持ちキャラクターは効果発動不可
+  D) レイチェル撃破時
+     - バトルで相手キャラクターをウイングに送った時、相手シールドを1枚破壊
+  E) 銀弾の双銃
+     - 装備ATK+500
+     - タグ「除霊」ならさらにATK+500、このターン攻撃回数+2
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -126,13 +132,11 @@ function bindLongPress(node, fn, ms=620){
   const start = (e)=> { clearTimeout(t); t = setTimeout(()=>fn(e), ms); };
   const end = ()=> clearTimeout(t);
 
-  // pointer (iOS/modern)
   node.addEventListener("pointerdown", start, {passive:true});
   node.addEventListener("pointerup", end, {passive:true});
   node.addEventListener("pointercancel", end, {passive:true});
   node.addEventListener("pointerleave", end, {passive:true});
 
-  // fallback
   node.addEventListener("mousedown", start, {passive:true});
   node.addEventListener("mouseup", end, {passive:true});
   node.addEventListener("mouseleave", end, {passive:true});
@@ -160,7 +164,7 @@ function validateImage(url){
   });
 }
 
-/* ---------------- Cards (No.01〜20) ---------------- */
+/* ---------------- Cards ---------------- */
 const CardRegistry = [
   { no:1,  name:"黒の魔法使いクルエラ", type:"character",
     tags:["魔法使い","冒険者"], titleTag:"MAGIAGIA-マギアギア-",
@@ -307,10 +311,39 @@ const CardRegistry = [
       "タグ「勇者」を持つキャラクターがこのカードを装備した場合、さらにATK+500。"
     ),
     rank:0, atk:0 },
+
+  { no:23, name:"退魔師レイチェル", type:"character",
+    tags:["除霊","令嬢","射手"], titleTag:"怨霊撲滅屋GB",
+    text: normalizeText(
+      "登場できない。\n" +
+      "手札または自分ステージのキャラクター1体をウイングに送り、手札から見参できる。\n" +
+      "このカードがアイテムを装備している時、相手ステージのタグ「怨霊」「霊魂」を持つキャラクターは効果を発動できない。\n" +
+      "バトルで相手キャラクターをウイングに送った時、相手シールドを1枚破壊する。"
+    ),
+    rank:5, atk:2200, summon:"kensan" },
+
+  { no:24, name:"銀弾の双銃", type:"item",
+    tags:["除霊","拳銃"], titleTag:"怨霊撲滅屋GB",
+    text: normalizeText(
+      "自分ターンに発動できる。\n" +
+      "自分ステージのキャラクター1体に装備する。ATK+500。\n" +
+      "タグ「除霊」を持つキャラクターが装備した場合、さらにATK+500し、このターンの攻撃回数を2回追加する。"
+    ),
+    rank:4, atk:0 },
 ];
 
 function getCardDef(no){
   return CardRegistry.find(c=>c.no===no) || null;
+}
+function getAllCardNos(){
+  return CardRegistry.map(c=>c.no).sort((a,b)=>a-b);
+}
+function getStarterDeckNos(){
+  const base = [];
+  for(let no=1; no<=20; no++){
+    if(getCardDef(no)) base.push(no);
+  }
+  return base;
 }
 
 let _uid = 1;
@@ -340,45 +373,55 @@ function makeInstance(cardDef){
 /* =========================================================
    デッキ編集（JSのみ / zoneM流用）
 ========================================================= */
-const LS_COLLECTION = "mw_collection_v1"; // { "01":3, ... }
-const LS_DECK = "mw_deck_v1";             // [1,1,2,2,...] length 40
-const LS_AI_DECK = "mw_ai_deck_v1";       // いまは固定（保存だけ準備）
+const LS_COLLECTION = "mw_collection_v1";
+const LS_DECK = "mw_deck_v1";
+const LS_AI_DECK = "mw_ai_deck_v1";
 
 function safeJSONParse(s, fallback){
   try{ return JSON.parse(s); }catch{ return fallback; }
 }
 
 function ensureInitialCollectionAndDeck(){
-  // 初期：20種×3枚（=60）
+  const allNos = getAllCardNos();
+  const starterNos = getStarterDeckNos();
+
   let col = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", null);
+  let colChanged = false;
   if(!col || typeof col!=="object"){
     col = {};
-    for(let no=1; no<=20; no++) col[pad2(no)] = 3;
+    colChanged = true;
+  }
+  for(const no of allNos){
+    const k = pad2(no);
+    if(typeof col[k] !== "number"){
+      col[k] = 3;
+      colChanged = true;
+    }
+  }
+  if(colChanged){
     localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
-    log("デッキ編集：初期所持（各3枚）を作成");
+    log("デッキ編集：所持カードを初期化/補完");
   }
 
-  // 初期デッキ：20種×2（=40）
   let deck = safeJSONParse(localStorage.getItem(LS_DECK) || "", null);
   if(!Array.isArray(deck) || deck.length!==40){
     deck = [];
-    for(let no=1; no<=20; no++){ deck.push(no); deck.push(no); }
+    for(const no of starterNos){ deck.push(no); deck.push(no); }
     localStorage.setItem(LS_DECK, JSON.stringify(deck));
-    log("デッキ編集：初期デッキ（各2枚）を作成");
+    log("デッキ編集：初期デッキ（No.01〜20 各2枚）を作成");
   }
 
-  // AIデッキ（今は同じ初期デッキで固定運用）
   let aideck = safeJSONParse(localStorage.getItem(LS_AI_DECK) || "", null);
   if(!Array.isArray(aideck) || aideck.length!==40){
     aideck = [];
-    for(let no=1; no<=20; no++){ aideck.push(no); aideck.push(no); }
+    for(const no of starterNos){ aideck.push(no); aideck.push(no); }
     localStorage.setItem(LS_AI_DECK, JSON.stringify(aideck));
   }
 }
 
 function readCollection(){
   const col = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", {});
-  for(let no=1; no<=20; no++){
+  for(const no of getAllCardNos()){
     const k = pad2(no);
     if(typeof col[k] !== "number") col[k] = 0;
   }
@@ -405,7 +448,7 @@ function countDeckByNo(deck){
     const k = pad2(no);
     m[k] = (m[k]||0) + 1;
   }
-  for(let no=1; no<=20; no++){
+  for(const no of getAllCardNos()){
     const k = pad2(no);
     if(!m[k]) m[k]=0;
   }
@@ -416,7 +459,7 @@ function totalDeckCount(deck){ return deck.length; }
 function deckEditorSummaryLine(deck){
   const c = countDeckByNo(deck);
   let kinds = 0;
-  for(let no=1; no<=20; no++){
+  for(const no of getAllCardNos()){
     if(c[pad2(no)]>0) kinds++;
   }
   return `40枚固定 / 採用${kinds}種 / 同名最大3枚`;
@@ -510,7 +553,7 @@ function renderDeckEditor(){
 
   const btnReset = mkBtn("初期デッキへ戻す", ()=>{
     const d = [];
-    for(let no=1; no<=20; no++){ d.push(no); d.push(no); }
+    for(const no of getStarterDeckNos()){ d.push(no); d.push(no); }
     writeDeck(d);
     log("デッキ編集：初期デッキへ戻しました");
     renderDeckEditor();
@@ -523,7 +566,7 @@ function renderDeckEditor(){
   const list = document.createElement("div");
   list.className = "choiceList";
 
-  for(let no=1; no<=20; no++){
+  for(const no of getAllCardNos()){
     const def = getCardDef(no);
     if(!def) continue;
     const k = pad2(no);
@@ -609,7 +652,6 @@ function renderDeckEditor(){
     row.appendChild(meta);
     row.appendChild(ops);
 
-    // 長押しでカード詳細
     bindLongPress(row, ()=>{
       const tmp = makeInstance(def);
       openViewer(tmp, {side:"P1", zone:"DECKEDIT", pos:null});
@@ -633,14 +675,12 @@ const state = {
   started:false,
   gameOver:false,
 
-  // 表示用の全体TURN（従来通り）
   turn:1,
   phase:"START",
   activeSide:"P1",
   firstSide:"P1",
 
-  // ★各サイドの「自ターン回数」：1回目の自ターンは攻撃禁止
-  turnsTaken: { P1:0, AI:0 },  // beginTurnでインクリメント
+  turnsTaken: { P1:0, AI:0 },
 
   normalSummonUsed:false,
   selectedHandIndex:null,
@@ -665,9 +705,7 @@ const state = {
 
   announce: { lastSelUid:null },
 
-  // タイトル長押し判定（長押し直後のクリック誤発火防止）
   titleLongPressed:false,
-  // 連打/二重発火対策
   startLock:false,
 };
 
@@ -682,7 +720,6 @@ function opponent(side){ return side==="P1" ? "AI" : "P1"; }
    ★攻撃可否：各サイドの「自分の1ターン目」は禁止
 ========================================================= */
 function canBattleThisTurn(side){
-  // turnsTaken が 1 のターンは「そのサイドの1ターン目」
   return (state.turnsTaken[side] >= 2);
 }
 function battleBanReason(side){
@@ -690,7 +727,6 @@ function battleBanReason(side){
 }
 function beginTurn(side){
   state.turnsTaken[side] = (state.turnsTaken[side]||0) + 1;
-  // STARTのたびに perTurn reset / 反応制限 reset 等
   state.normalSummonUsed=false;
   state.selectedHandIndex=null;
   state.announce.lastSelUid=null;
@@ -711,6 +747,42 @@ function getCardByUid(side, uid){
     }
   }
   return null;
+}
+
+/* ---------------- Rachel / Attack helpers ---------------- */
+function getEquippedItemOfCharacter(side, characterCard){
+  if(!characterCard || !characterCard.equipUid) return null;
+  return findEquipInE(side, characterCard.equipUid);
+}
+function isRachelEquippedOnSide(side){
+  return state[side].C.some(c => c && c.no===23 && !!c.equipUid);
+}
+function isCharacterEffectLockedByRachel(ownerSide, card){
+  if(!card || !isCharacter(card)) return false;
+  if(!isRachelEquippedOnSide(opponent(ownerSide))) return false;
+  return card.tags.includes("怨霊") || card.tags.includes("霊魂");
+}
+function getAttackLimit(side, card){
+  if(!card || !isCharacter(card)) return 0;
+  let limit = 1;
+  if(card.no===7 && card.equipUid) limit = Math.max(limit, 2);
+
+  const eq = getEquippedItemOfCharacter(side, card);
+  if(eq && eq.no===24){
+    limit += (eq._extraAttackThisTurn || 0);
+  }
+  return limit;
+}
+async function breakOneShieldByEffect(defSide, sourceName){
+  const idx = state[defSide].shield.findIndex(Boolean);
+  if(idx<0){
+    log(`${sourceName}：相手シールドがないため不発`);
+    return;
+  }
+  const sh = state[defSide].shield[idx];
+  state[defSide].shield[idx] = null;
+  state[defSide].hand.push(sh);
+  log(`${sourceName}：${sideName(defSide)}シールド${idx+1}を破壊 → 手札へ`);
 }
 
 /* ---------------- Modals ---------------- */
@@ -849,7 +921,7 @@ function scoreCardFilename(name, no){
 }
 function buildCardMapFromFileList(cardFiles){
   const map = {};
-  for(let no=1; no<=20; no++){
+  for(const no of getAllCardNos()){
     let best = {name:"", score:-1};
     for(const f of cardFiles){
       const sc = scoreCardFilename(f, no);
@@ -968,6 +1040,10 @@ function clearEndTurnTemps(side){
     c.flags.attackedCountThisTurn = 0;
     c.flags.producerSavedThisTurn = false;
   }
+  for(const e of p.E){
+    if(!e) continue;
+    if(e.no===24) e._extraAttackThisTurn = 0;
+  }
 }
 function resetPerTurn(side){
   state.limits[side].handgataUsed = false;
@@ -1046,6 +1122,9 @@ function canActivateFromViewer(card, ctx){
   if(zone!=="C" && zone!=="E") return {ok:false, reason:"フィールド上のカードではありません"};
 
   if(side==="P1"){
+    if(zone==="C" && isCharacterEffectLockedByRachel("P1", card)){
+      return {ok:false, reason:"退魔師レイチェルの効果で発動できません"};
+    }
     if(state.activeSide!=="P1"){
       if(card.no===13) return {ok:true, reason:""};
       return {ok:false, reason:"あなたのターンではありません"};
@@ -1054,7 +1133,7 @@ function canActivateFromViewer(card, ctx){
       if(card.no===13) return {ok:true, reason:""};
       return {ok:false, reason:"メインフェイズではありません"};
     }
-    if([1,3,5,6,9,10,11,13].includes(card.no)) return {ok:true, reason:""};
+    if([1,3,5,6,9,10,11,13,23].includes(card.no)) return {ok:true, reason:""};
     return {ok:false, reason:"このカードは任意発動の対象外です"};
   }
 
@@ -1102,11 +1181,8 @@ function isAttackableNow_P1(card){
   if(state.gameOver) return false;
   if(state.activeSide!=="P1") return false;
   if(state.phase!=="BATTLE") return false;
-
-  // ★あなたの1ターン目は攻撃不可
   if(!canBattleThisTurn("P1")) return false;
-
-  const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
+  const maxAtk = getAttackLimit("P1", card);
   return (card.flags.attackedCountThisTurn < maxAtk);
 }
 
@@ -1136,7 +1212,7 @@ function makeSlot(card, side, ctx, opts={}){
 
     if(ctx?.side==="P1" && ctx?.zone==="C" && isCharacter(card)){
       const atkable = isAttackableNow_P1(card);
-      const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
+      const maxAtk = getAttackLimit("P1", card);
       const usedUp = (card.flags.attackedCountThisTurn >= maxAtk);
 
       slot.style.opacity = usedUp ? "0.55" : "1";
@@ -1419,7 +1495,6 @@ async function endTurn(){
   clearEndTurnTemps(state.activeSide);
 
   if(state.activeSide==="P1"){
-    // AIへ
     state.activeSide="AI";
     state.phase="START";
     beginTurn("AI");
@@ -1427,7 +1502,6 @@ async function endTurn(){
 
     await aiTakeTurn();
 
-    // あなたへ戻す
     state.activeSide="P1";
     state.turn++;
     state.phase="START";
@@ -1449,17 +1523,14 @@ function startGame(){
   state.announce.lastSelUid=null;
   state.battle.attackerUid=null;
 
-  // ★各サイドの自ターン回数をリセット
   state.turnsTaken = { P1:0, AI:0 };
 
-  // ★あなた：編集デッキ
   const deckList = readDeck();
   if(deckList.length!==40){
     log(`警告：デッキが${deckList.length}枚です。デッキ編集で40枚にして下さい`, "warn");
   }
   state.P1.deck = buildDeckFromList(deckList);
 
-  // ★AI：とりあえず固定（初期40）
   const aiList = readAIDeck();
   state.AI.deck = buildDeckFromList(aiList.length===40 ? aiList : deckList);
 
@@ -1485,7 +1556,6 @@ function startGame(){
   log(`ゲーム開始：初手4 / シールド3 / 先攻=${el.firstInfo?el.firstInfo.textContent:(state.firstSide==="P1"?"先攻：あなた":"先攻：相手")}`);
   log(`あなたのデッキ：${readDeck().length}枚（編集反映）`);
 
-  // ★先攻側のSTARTを「そのサイドの1ターン目」としてカウント
   beginTurn(state.activeSide);
 
   renderAll();
@@ -1578,6 +1648,23 @@ function forceRemoveFromEIfPresent(side, card, ctx){
     if(i>=0) p.E[i] = null;
   }
 }
+async function sendActivatedFieldCardToWing(side, zone, pos, card){
+  if(zone==="C"){
+    const live = state[side].C[pos];
+    if(live && live.uid===card.uid){
+      await sendCharacterToWing(side, card.uid);
+    }
+    return;
+  }
+  if(zone==="E"){
+    const live = state[side].E[pos];
+    if(live && live.uid===card.uid){
+      state[side].E[pos] = null;
+      moveToWing(side, live);
+      log(`記憶抹消：${live.name} → ${sideName(side)}ウイング`);
+    }
+  }
+}
 async function checkReactiveNegation(activatorSide, activatedCard, ctx){
   const defenderSide = opponent(activatorSide);
   const isOppTurnForDefender = (state.activeSide === activatorSide);
@@ -1592,13 +1679,13 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     hasMemoryEraseInHand(defenderSide);
 
   if(!canHandgata && !canMemoryErase){
-    return {negated:false, counter:null};
+    return {negated:false, counter:null, sendActivatedToWing:false};
   }
 
   if(defenderSide==="P1"){
     const items = [];
     if(canHandgata) items.push({label:"手形で無効（相手ターンに1度）", value:"HANDGATA"});
-    if(canMemoryErase) items.push({label:"記憶抹消で無効（記憶抹消→ウイング）", value:"MEMORY"});
+    if(canMemoryErase) items.push({label:"記憶抹消で無効（相手カード→ウイング）", value:"MEMORY"});
     items.push({label:"何もしない", value:"NO"});
 
     const v = await askChoice(
@@ -1610,19 +1697,19 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
     if(v==="HANDGATA"){
       state.limits.P1.handgataUsed = true;
       log("手形：相手の効果を無効");
-      return {negated:true, counter:"HANDGATA"};
+      return {negated:true, counter:"HANDGATA", sendActivatedToWing:false};
     }
     if(v==="MEMORY"){
       const me = takeMemoryEraseFromHand("P1");
       if(me){
         moveToWing("P1", me);
         log("記憶抹消：相手の効果を無効（記憶抹消→ウイング）");
-        return {negated:true, counter:"MEMORY"};
+        return {negated:true, counter:"MEMORY", sendActivatedToWing:true};
       }
       log("記憶抹消：手札にありません（失敗）", "warn");
-      return {negated:false, counter:null};
+      return {negated:false, counter:null, sendActivatedToWing:false};
     }
-    return {negated:false, counter:null};
+    return {negated:false, counter:null, sendActivatedToWing:false};
   }
 
   if(defenderSide==="AI"){
@@ -1631,17 +1718,17 @@ async function checkReactiveNegation(activatorSide, activatedCard, ctx){
       if(me){
         moveToWing("AI", me);
         log("AI：記憶抹消で無効");
-        return {negated:true, counter:"MEMORY"};
+        return {negated:true, counter:"MEMORY", sendActivatedToWing:true};
       }
     }
     if(canHandgata){
       state.limits.AI.handgataUsed = true;
       log("AI：手形で無効");
-      return {negated:true, counter:"HANDGATA"};
+      return {negated:true, counter:"HANDGATA", sendActivatedToWing:false};
     }
   }
 
-  return {negated:false, counter:null};
+  return {negated:false, counter:null, sendActivatedToWing:false};
 }
 
 /* ---------------- Interactions (Your side) ---------------- */
@@ -1649,7 +1736,6 @@ async function onClickYourC(pos){
   if(state.activeSide!=="P1" || state.gameOver) return;
 
   if(state.phase==="BATTLE"){
-    // ★あなたの1ターン目は攻撃不可
     if(!canBattleThisTurn("P1")){
       log(battleBanReason("P1"), "warn");
       return;
@@ -1742,18 +1828,17 @@ async function doKensanSummon(side, cPos, handIdx){
   const cands = [];
   for(let i=0;i<p.hand.length;i++){
     if(i===handIdx) continue;
-    cands.push({from:"hand", idx:i, card:p.hand[i], label:`手札：${p.hand[i].name}`});
+    if(isCharacter(p.hand[i])) cands.push({from:"hand", idx:i, card:p.hand[i], label:`手札：${p.hand[i].name}`});
   }
   for(let i=0;i<3;i++){
-    if(p.C[i]) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
-    if(p.E[i]) cands.push({from:"E", idx:i, card:p.E[i], label:`E${i+1}：${p.E[i].name}`});
+    if(isCharacter(p.C[i])) cands.push({from:"C", idx:i, card:p.C[i], label:`C${i+1}：${p.C[i].name}`});
   }
   if(!cands.length){
     log("見参：コスト候補なし", "warn");
     return;
   }
 
-  const pick = await askChoice("見参（コスト）", "ウイングへ送るカードを1枚選んでください。", cands.map(x=>({
+  const pick = await askChoice("見参（コスト）", "ウイングへ送るキャラクターを1体選んでください。", cands.map(x=>({
     label:x.label, value:`${x.from}:${x.idx}`, card:x.card
   })));
 
@@ -1768,10 +1853,6 @@ async function doKensanSummon(side, cPos, handIdx){
     const moved = p.C[idx];
     await stripEquipIfAny(side, moved);
     p.C[idx]=null;
-    moveToWing(side, moved);
-  }else if(from==="E"){
-    const moved = p.E[idx];
-    p.E[idx]=null;
     moveToWing(side, moved);
   }
 
@@ -1823,6 +1904,7 @@ async function equipItemFromE(side, ePos, itemCard){
 
   itemCard._equipBonus = 0;
   itemCard._equipBonus2 = 0;
+  itemCard._extraAttackThisTurn = 0;
 
   if(itemCard.no===18){
     itemCard._equipBonus = 500;
@@ -1833,6 +1915,12 @@ async function equipItemFromE(side, ePos, itemCard){
   }else if(itemCard.no===20){
     itemCard._equipBonus = 300;
     if(host.tags.includes("勇者")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===24){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("除霊")){
+      itemCard._equipBonus2 = 500;
+      itemCard._extraAttackThisTurn = 2;
+    }
   }
 
   itemCard.equippedToUid = host.uid;
@@ -1861,6 +1949,11 @@ async function resolveEffectFromE(side, ePos, eff){
 /* ---------------- Triggers / Abilities ---------------- */
 async function onEnterTriggers(side, ctx){
   const {card} = ctx;
+
+  if(isCharacterEffectLockedByRachel(side, card)){
+    log(`${card.name}：退魔師レイチェルの効果で発動できません`, "warn");
+    return;
+  }
 
   if(card.no===4){
     if(side==="AI"){
@@ -1900,6 +1993,21 @@ async function onEnterTriggers(side, ctx){
 async function activateFieldCardAbility(side, zone, pos, card){
   if(side!=="P1") return;
 
+  if(zone==="C" && isCharacterEffectLockedByRachel(side, card)){
+    log(`${card.name}：退魔師レイチェルの効果で発動できません`, "warn");
+    return;
+  }
+
+  const react = await checkReactiveNegation(side, card, {zone, pos});
+  if(react.negated){
+    log(`無効化：${card.name}`);
+    if(react.sendActivatedToWing){
+      await sendActivatedFieldCardToWing(side, zone, pos, card);
+    }
+    renderAll();
+    return;
+  }
+
   if(card.no===13){
     await activateStamax(side, pos, card);
     renderAll();
@@ -1916,6 +2024,7 @@ async function activateFieldCardAbility(side, zone, pos, card){
   if(card.no===5){ await activateTataExchange(side, card); return; }
   if(card.no===6){ await activateEfiDebuff(side, card); return; }
   if(card.no===11){ await activateShireiEquip(side, pos, card); return; }
+  if(card.no===23){ log("退魔師レイチェル：任意発動効果はありません", "warn"); return; }
 
   log("このカードは任意発動の対象外です", "warn");
 }
@@ -2039,6 +2148,7 @@ async function activateShireiEquip(side, cPos, card){
   card.equippedToUid = host.uid;
   card._equipBonus = 500;
   card._equipBonus2 = 0;
+  card._extraAttackThisTurn = 0;
   host.equipUid = card.uid;
 
   log(`司令：装備化 → ${host.name} ATK+500`);
@@ -2065,6 +2175,7 @@ function estimateRemoveValue(card){
   v += (card.rank||0) * 120;
   if(card.no===8) v += 300;
   if(card.no===12) v += 200;
+  if(card.no===23) v += 260;
   return v;
 }
 
@@ -2239,13 +2350,12 @@ async function searchFromDeckOrWingByNameIncludes(side, word, n){
 async function selectAttacker(side, pos, card){
   if(side!=="P1") return;
 
-  // ★あなたの1ターン目は禁止（ここでも二重ガード）
   if(!canBattleThisTurn("P1")){
     log(battleBanReason("P1"), "warn");
     return;
   }
 
-  const maxAtk = (card.no===7 && card.equipUid) ? 2 : 1;
+  const maxAtk = getAttackLimit("P1", card);
   if(card.flags.attackedCountThisTurn >= maxAtk){
     log("このキャラクターはこのターン攻撃済みです", "warn");
     return;
@@ -2263,7 +2373,6 @@ async function selectAttacker(side, pos, card){
 async function chooseAttackTarget(){
   if(state.phase!=="BATTLE") return;
 
-  // ★あなたの1ターン目は禁止
   if(!canBattleThisTurn("P1")){
     log(battleBanReason("P1"), "warn");
     state.battle.attackerUid=null;
@@ -2320,7 +2429,6 @@ function onShieldClicked(side, idx){
   if(state.activeSide!=="P1") return;
   if(side!=="AI") return;
 
-  // ★あなたの1ターン目は禁止
   if(!canBattleThisTurn("P1")){
     log(battleBanReason("P1"), "warn");
     return;
@@ -2353,6 +2461,9 @@ async function resolveBattle(attacker, defenderUid){
   if(atkA > atkD){
     await sendCharacterToWing("AI", defender.uid);
     log(`撃破：${defender.name} → AIウイング`);
+    if(attacker.no===23){
+      await breakOneShieldByEffect("AI", "退魔師レイチェル");
+    }
   }else if(atkA < atkD){
     const saved = await tryProducerSave("P1", attacker);
     if(!saved){
@@ -2530,6 +2641,8 @@ function itemBonusForHost(item, host){
     b = 500 + ((host.tags.includes("勇者") || host.tags.includes("剣士")) ? 500 : 0);
   }else if(item.no===20){
     b = 300 + (host.tags.includes("勇者") ? 500 : 0);
+  }else if(item.no===24){
+    b = 500 + (host.tags.includes("除霊") ? 500 : 0) + (host.tags.includes("除霊") ? 220 : 0);
   }
   return b;
 }
@@ -2575,7 +2688,6 @@ async function aiTakeTurn(){
   renderAll();
   await sleep(140);
 
-  // ★AIの1ターン目は攻撃禁止（後攻であっても同様）
   if(!canBattleThisTurn("AI")){
     log(`AI：${battleBanReason("AI")}（BATTLEスキップ）`);
   }else{
@@ -2688,6 +2800,7 @@ async function aiTryPlayBestItem(){
 
   item._equipBonus = 0;
   item._equipBonus2 = 0;
+  item._extraAttackThisTurn = 0;
   if(item.no===18){
     item._equipBonus = 500;
     if(host.tags.includes("射手")) item._equipBonus2 = 500;
@@ -2697,6 +2810,12 @@ async function aiTryPlayBestItem(){
   }else if(item.no===20){
     item._equipBonus = 300;
     if(host.tags.includes("勇者")) item._equipBonus2 = 500;
+  }else if(item.no===24){
+    item._equipBonus = 500;
+    if(host.tags.includes("除霊")){
+      item._equipBonus2 = 500;
+      item._extraAttackThisTurn = 2;
+    }
   }
 
   item.equippedToUid = host.uid;
@@ -2770,6 +2889,7 @@ async function aiTryShireiEquip(side, cPos){
   card.equippedToUid = best.c.uid;
   card._equipBonus = 500;
   card._equipBonus2 = 0;
+  card._extraAttackThisTurn = 0;
   best.c.equipUid = card.uid;
 
   log(`AI：司令 装備化 → ${best.c.name} ATK+500`);
@@ -2783,7 +2903,7 @@ async function aiBattleBest(){
   for(let i=0;i<3;i++){
     const a = p.C[i];
     if(!a) continue;
-    if(a.flags.attackedCountThisTurn>=1) continue;
+    if(a.flags.attackedCountThisTurn >= getAttackLimit("AI", a)) continue;
 
     const best = pickBestAIAttackFor(a);
     if(!best) continue;
@@ -2799,6 +2919,9 @@ async function aiBattleBest(){
       if(atkA > atkD){
         await sendCharacterToWing("P1", t.uid);
         log(`AI：撃破 ${t.name} → あなたウイング`);
+        if(a.no===23){
+          await breakOneShieldByEffect("P1", "退魔師レイチェル");
+        }
         await tryCattleTrigger_P1();
       }else if(atkA < atkD){
         const saved = await tryProducerSave("AI", a);
@@ -2859,6 +2982,7 @@ function pickBestAIAttackFor(attacker){
     if(atkA > atkD){
       score += estimateRemoveValue(t) + 420;
       score += 220;
+      if(attacker.no===23 && countShields("P1")>0) score += 260;
     }else if(atkA < atkD){
       const selfLoss = estimateRemoveValue(attacker) + 380;
       const canSave = (attacker.no===12 && !attacker.flags.producerSavedThisTurn);
@@ -2911,13 +3035,12 @@ function bindStart(){
     setTimeout(()=>{ state.titleLongPressed=false; }, 420);
   };
 
-  // ★長押し：デッキ編集へ（新ボタン追加なし）
   bindLongPress(el.btnStart, openDeck, 620);
   bindLongPress(el.title, openDeck, 620);
 
   const go = ()=>{
     if(state.startLock) return;
-    if(state.titleLongPressed) return; // 長押し直後の誤スタート防止
+    if(state.titleLongPressed) return;
     if(state.started) return;
 
     state.startLock = true;
@@ -2929,7 +3052,6 @@ function bindStart(){
     startGame();
   };
 
-  // iOSで click が死ぬケース対策：pointerup / touchend でも起動
   const bindTap = (node)=>{
     if(!node) return;
     node.addEventListener("click", (e)=>{
@@ -2937,13 +3059,12 @@ function bindStart(){
       go();
     }, {passive:false});
 
-    node.addEventListener("pointerup", (e)=>{
-      // 長押し後のpointerupは抑制
+    node.addEventListener("pointerup", ()=>{
       if(state.titleLongPressed) return;
       go();
     }, {passive:true});
 
-    node.addEventListener("touchend", (e)=>{
+    node.addEventListener("touchend", ()=>{
       if(state.titleLongPressed) return;
       go();
     }, {passive:true});
@@ -3037,10 +3158,10 @@ async function init(){
 
   if(el.boot) el.boot.textContent="JS: OK（準備完了）";
   log("v50019：完全版（丸ごと置換）");
-  log("修正：スタート起動の堅牢化（iOSタップ/要素nullガード/二重発火抑止）");
-  log("修正：各サイドの1ターン目は攻撃禁止（先攻1T/後攻1Tともに禁止）");
-  log("追加：スタート長押し→デッキ編集（JSのみ/zoneM流用）");
-  log("初期：所持=各3枚 / デッキ=各2枚（40固定）");
+  log("修正：記憶抹消で止めた相手カードは自動でウイングへ");
+  log("追加：No.23 退魔師レイチェル / No.24 銀弾の双銃");
+  log("追加：レイチェル装備時、相手の怨霊/霊魂キャラは効果発動不可");
+  log("追加：銀弾の双銃（除霊装備時 ATK+500 追加 / このターン攻撃回数+2）");
 }
 
 document.addEventListener("DOMContentLoaded", init);
