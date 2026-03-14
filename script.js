@@ -1,5 +1,5 @@
 /* =========================================================
-  Manpuku World - v50019a (iPhone First / Full Replace JS)
+  Manpuku World - v50019b (iPhone First / Full Replace JS)
   - レイアウトは触らない（JSのみ）
   - デッキ編集（テキストUI / zoneM流用 / スタート長押しで遷移）
   - 初期デッキ：20種×2枚（=40枚）を維持
@@ -16,6 +16,10 @@
      - 装備先が「除霊」ならさらにATK+500
      - さらにこのターンの攻撃回数を2回追加（合計3回攻撃）
   3) 先攻1ターン目のみ攻撃不可 / 後攻1ターン目は攻撃可能 に修正
+  4) 画像名
+     - 23_退魔師レイチェル.png.PNG
+     - 24_銀弾の双銃.png.PNG
+     を確実に拾う前提で画像走査を維持
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -868,11 +872,15 @@ function scoreCardFilename(name, no){
   const s = name.toLowerCase();
   const p2 = pad2(no).toLowerCase();
   let score = 0;
-  if(s.startsWith(`${p2}_`)) score += 100;
-  if(s.includes(`${p2}_`)) score += 30;
+
+  if(s.startsWith(`${p2}_`)) score += 120;
+  if(s.includes(`${p2}_`)) score += 40;
+  if(s.startsWith(`${p2}-`)) score += 20;
+  if(s.includes(".png.png")) score += 6;
   if(s.includes(".png")) score += 5;
   if(s.includes(".jpg")) score += 5;
   if(s.includes(".jpeg")) score += 4;
+
   return score;
 }
 function buildCardMapFromFileList(cardFiles){
@@ -3134,10 +3142,11 @@ async function init(){
   }
 
   if(el.boot) el.boot.textContent="JS: OK（準備完了）";
-  log("v50019a：完全版（丸ごと置換）");
+  log("v50019b：完全版（丸ごと置換）");
   log("追加：No.23 退魔師レイチェル");
   log("追加：No.24 銀弾の双銃");
   log("修正：先攻1ターン目のみ攻撃不可 / 後攻1ターン目は攻撃可能");
+  log("修正：画像名 23_退魔師レイチェル.png.PNG / 24_銀弾の双銃.png.PNG 対応");
   log("修正：デッキ編集に新規カードを反映");
 }
 
