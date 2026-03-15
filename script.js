@@ -1,8 +1,10 @@
 /* =========================================================
-  Manpuku World - v50020 (iPhone First / Full Replace JS)
+  Manpuku World - v50021 (iPhone First / Full Replace JS)
   - レイアウトは触らない（JSのみ）
   - 既存の有効部分を壊さず最小変更
-  - カウンターの再カウンターに対応
+  - カウンターの再カウンター対応維持
+  - No.21 ミーコ 追加
+  - No.28 セシア＆アリサ 追加
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -295,6 +297,15 @@ const CardRegistry = [
     ),
     rank:0, atk:0 },
 
+  { no:21, name:"ミーコ", type:"character",
+    tags:["アバター","霊魂","ミジンコ"], titleTag:"怨霊撲滅屋GB",
+    text: normalizeText(
+      "このカードは1ターンに1度、バトルで破壊されない。\n" +
+      "自分シールドが0枚で相手の直接攻撃を受ける時、手札から見参できる。\n" +
+      "その攻撃を無効にし、このターンのバトルを終了する。"
+    ),
+    rank:3, atk:500 },
+
   { no:23, name:"退魔師レイチェル", type:"character",
     tags:["除霊","令嬢","射手"], titleTag:"怨霊撲滅屋GB",
     text: normalizeText(
@@ -331,6 +342,14 @@ const CardRegistry = [
       "このカードが自分ステージに存在する間、タグ「美少女戦士」のATK+500。"
     ),
     rank:4, atk:1700 },
+
+  { no:28, name:"セシア＆アリサ", type:"character",
+    tags:["除霊","支援","侍女"], titleTag:"怨霊撲滅屋GB",
+    text: normalizeText(
+      "登場した時、デッキからタイトルタグ「怨霊撲滅屋GB」アイテムカード1枚を手札に加える。\n" +
+      "自分ターンに発動できる。このカードが自分ステージに存在する時、手札のrank5以下の「レイチェル」キャラクター1体を条件無視で見参させる。"
+    ),
+    rank:4, atk:1500 },
 ];
 
 const CARD_NOS = [...new Set(CardRegistry.map(c=>c.no))].sort((a,b)=>a-b);
@@ -741,6 +760,9 @@ function removeFromZone(zoneArr, uid){
   if(idx>=0){ return zoneArr.splice(idx,1)[0]; }
   return null;
 }
+function removeFromHandByUid(side, uid){
+  return removeFromZone(state[side].hand, uid);
+}
 function resetPerTurn(side){
   state.limits[side].handgataUsed = false;
   state.limits[side].cruellaUsed = false;
@@ -873,8 +895,10 @@ function chooseAIDiscardIndex(side){
     let s = (c.baseAtk||0) + (c.rank||0)*120;
     if(c.no===14) s += 500;
     if(c.no===17) s += 380;
+    if(c.no===21) s += 260;
     if(c.no===23) s += 260;
     if(c.no===26 || c.no===27) s += 220;
+    if(c.no===28) s += 200;
     if(isItem(c)) s += 50;
     if(isEffect(c)) s += 80;
     if(s < bestScore){
@@ -1129,7 +1153,7 @@ async function applyImagesFromCache(){
 }
 
 /* =========================================================
-   チェーンエンジン（新規）
+   チェーンエンジン
 ========================================================= */
 function hasHandgataOnField(side){
   return state[side].C.some(c=>c && c.no===8);
@@ -1170,12 +1194,8 @@ async function chooseCounterForSide(side, prevLink){
     );
   }
 
-  if(canUseMemoryErase(side, prevLink.activatorSide)){
-    return "MEMORY";
-  }
-  if(canUseHandgata(side, prevLink.activatorSide)){
-    return "HANDGATA";
-  }
+  if(canUseMemoryErase(side, prevLink.activatorSide)) return "MEMORY";
+  if(canUseHandgata(side, prevLink.activatorSide)) return "HANDGATA";
   return "PASS";
 }
 async function runCounterChain(initialLink){
@@ -1226,11 +1246,8 @@ async function runCounterChain(initialLink){
   }
 
   for(let i=1;i<chain.length;i++){
-    if(active[i]){
-      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：直前の効果を無効`);
-    }else{
-      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効にされた`);
-    }
+    if(active[i]) log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：直前の効果を無効`);
+    else log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効にされた`);
   }
 
   const negated = !active[0];
@@ -1298,7 +1315,7 @@ function canActivateFromViewer(card, ctx){
       if(card.no===13) return {ok:true, reason:""};
       return {ok:false, reason:"メインフェイズではありません"};
     }
-    if([1,3,5,6,9,10,11,13].includes(card.no)) return {ok:true, reason:""};
+    if([1,3,5,6,9,10,11,13,28].includes(card.no)) return {ok:true, reason:""};
     return {ok:false, reason:"このカードは任意発動の対象外です"};
   }
 
@@ -1735,6 +1752,107 @@ function openZoneList(side, zoneName){
   showModal("zoneM");
 }
 
+/* ---------------- Search ---------------- */
+async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
+  const p = state[side];
+  const pool = [
+    ...p.deck.map(c=>({src:"deck", c})),
+    ...p.wing.map(c=>({src:"wing", c}))
+  ].filter(x=>x.c && x.c.tags.includes(tag));
+  if(!pool.length){ log(`サーチ失敗：タグ「${tag}」が見つかりません`, "warn"); return; }
+
+  for(let k=0;k<n;k++){
+    if(opt.aiAuto){
+      const pick = pool[0];
+      if(pick.src==="deck"){
+        const moved = removeFromZone(p.deck, pick.c.uid);
+        if(moved) p.hand.push(moved);
+      }else{
+        const moved = removeFromZone(p.wing, pick.c.uid);
+        if(moved) p.hand.push(moved);
+      }
+      log(`AI：サーチ（${tag}）`);
+      continue;
+    }
+
+    const items = pool.map(x=>({
+      label:`${x.c.name}`,
+      sub:`${x.src.toUpperCase()} / TAG:${tag}`,
+      value:`${x.src}:${x.c.uid}`,
+      card:x.c
+    }));
+    const pick = await askChoice("サーチ", `タグ「${tag}」を手札に加える（${k+1}/${n}）`, items);
+    const [src, uid] = String(pick).split(":");
+    if(src==="deck"){
+      const moved = removeFromZone(p.deck, uid);
+      if(moved) p.hand.push(moved);
+    }else{
+      const moved = removeFromZone(p.wing, uid);
+      if(moved) p.hand.push(moved);
+    }
+  }
+  log(`サーチ：タグ「${tag}」を手札へ`);
+}
+async function searchFromDeckOrWingByNameIncludes(side, word, n){
+  const p = state[side];
+  const pool = [
+    ...p.deck.map(c=>({src:"deck", c})),
+    ...p.wing.map(c=>({src:"wing", c}))
+  ].filter(x=>x.c && x.c.name.includes(word));
+  if(!pool.length){ log(`サーチ失敗：名称「${word}」が見つかりません`, "warn"); return; }
+
+  for(let k=0;k<n;k++){
+    const items = pool.map(x=>({
+      label:`${x.c.name}`,
+      sub:`${x.src.toUpperCase()} / NAME:${word}`,
+      value:`${x.src}:${x.c.uid}`,
+      card:x.c
+    }));
+    const pick = await askChoice("サーチ", `名称「${word}」を手札に加える（${k+1}/${n}）`, items);
+    const [src, uid] = String(pick).split(":");
+    if(src==="deck"){
+      const moved = removeFromZone(p.deck, uid);
+      if(moved) p.hand.push(moved);
+    }else{
+      const moved = removeFromZone(p.wing, uid);
+      if(moved) p.hand.push(moved);
+    }
+  }
+  log(`サーチ：名称「${word}」を手札へ`);
+}
+async function searchDeckByTitleTagItem(side, titleTag, n, opt={}){
+  const p = state[side];
+  const pool = p.deck.filter(c=>c && c.titleTag===titleTag && c.type==="item");
+  if(!pool.length){
+    log(`サーチ失敗：タイトルタグ「${titleTag}」のアイテムが見つかりません`, "warn");
+    return;
+  }
+
+  for(let k=0;k<n;k++){
+    const current = p.deck.filter(c=>c && c.titleTag===titleTag && c.type==="item");
+    if(!current.length) break;
+
+    if(opt.aiAuto){
+      const picked = current[0];
+      const moved = removeFromZone(p.deck, picked.uid);
+      if(moved) p.hand.push(moved);
+      log(`AI：サーチ（${titleTag} アイテム）`);
+      continue;
+    }
+
+    const items = current.map(c=>({
+      label: c.name,
+      sub: `DECK / ITEM / ${titleTag}`,
+      value: c.uid,
+      card: c
+    }));
+    const pick = await askChoice("サーチ", `タイトルタグ「${titleTag}」のアイテムを手札に加える（${k+1}/${n}）`, items);
+    const moved = removeFromZone(p.deck, String(pick));
+    if(moved) p.hand.push(moved);
+  }
+  log(`サーチ：タイトルタグ「${titleTag}」のアイテムを手札へ`);
+}
+
 /* ---------------- E装備 / 効果解決 ---------------- */
 async function equipItemFromE(side, ePos, itemCard){
   const p = state[side];
@@ -1827,8 +1945,10 @@ function estimateRemoveValue(card){
   v += (card.rank||0) * 120;
   if(card.no===8) v += 300;
   if(card.no===12) v += 200;
+  if(card.no===21) v += 260;
   if(card.no===23) v += 260;
   if(card.no===26 || card.no===27) v += 220;
+  if(card.no===28) v += 210;
   return v;
 }
 async function resolveEffect(side, eff){
@@ -1922,75 +2042,6 @@ async function resolveEffect(side, eff){
   log(`（未実装効果）${eff.name}`, "warn");
 }
 
-/* ---------------- Search ---------------- */
-async function searchFromDeckOrWingByTag(side, tag, n, opt={}){
-  const p = state[side];
-  const pool = [
-    ...p.deck.map(c=>({src:"deck", c})),
-    ...p.wing.map(c=>({src:"wing", c}))
-  ].filter(x=>x.c && x.c.tags.includes(tag));
-  if(!pool.length){ log(`サーチ失敗：タグ「${tag}」が見つかりません`, "warn"); return; }
-
-  for(let k=0;k<n;k++){
-    if(opt.aiAuto){
-      const pick = pool[0];
-      if(pick.src==="deck"){
-        const moved = removeFromZone(p.deck, pick.c.uid);
-        if(moved) p.hand.push(moved);
-      }else{
-        const moved = removeFromZone(p.wing, pick.c.uid);
-        if(moved) p.hand.push(moved);
-      }
-      log(`AI：サーチ（${tag}）`);
-      continue;
-    }
-
-    const items = pool.map(x=>({
-      label:`${x.c.name}`,
-      sub:`${x.src.toUpperCase()} / TAG:${tag}`,
-      value:`${x.src}:${x.c.uid}`,
-      card:x.c
-    }));
-    const pick = await askChoice("サーチ", `タグ「${tag}」を手札に加える（${k+1}/${n}）`, items);
-    const [src, uid] = String(pick).split(":");
-    if(src==="deck"){
-      const moved = removeFromZone(p.deck, uid);
-      if(moved) p.hand.push(moved);
-    }else{
-      const moved = removeFromZone(p.wing, uid);
-      if(moved) p.hand.push(moved);
-    }
-  }
-  log(`サーチ：タグ「${tag}」を手札へ`);
-}
-async function searchFromDeckOrWingByNameIncludes(side, word, n){
-  const p = state[side];
-  const pool = [
-    ...p.deck.map(c=>({src:"deck", c})),
-    ...p.wing.map(c=>({src:"wing", c}))
-  ].filter(x=>x.c && x.c.name.includes(word));
-  if(!pool.length){ log(`サーチ失敗：名称「${word}」が見つかりません`, "warn"); return; }
-
-  for(let k=0;k<n;k++){
-    const items = pool.map(x=>({
-      label:`${x.c.name}`,
-      sub:`${x.src.toUpperCase()} / NAME:${word}`,
-      value:`${x.src}:${x.c.uid}`,
-      card:x.c
-    }));
-    const pick = await askChoice("サーチ", `名称「${word}」を手札に加える（${k+1}/${n}）`, items);
-    const [src, uid] = String(pick).split(":");
-    if(src==="deck"){
-      const moved = removeFromZone(p.deck, uid);
-      if(moved) p.hand.push(moved);
-    }else{
-      const moved = removeFromZone(p.wing, uid);
-      if(moved) p.hand.push(moved);
-    }
-  }
-  log(`サーチ：名称「${word}」を手札へ`);
-}
-
 /* ---------------- Enter / Field abilities ---------------- */
 async function resolveRubySapphireEnter(side, card, ctx){
   const p = state[side];
@@ -2031,6 +2082,41 @@ async function resolveRubySapphireEnter(side, card, ctx){
   log(`${card.name}：手札1枚をウイング (${moved.name})`);
   await searchFromDeckOrWingByTag(side, "アニメ", 1);
   renderAll();
+}
+async function activateSeshiaArisaSummon(side, pos, card){
+  const p = state[side];
+  const empty = findEmptyIndex(p.C);
+  if(empty < 0){
+    log("セシア＆アリサ：空きCがありません", "warn");
+    return;
+  }
+
+  const candidates = p.hand.filter(c=>c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル"));
+  if(!candidates.length){
+    log("セシア＆アリサ：手札に条件を満たすレイチェルがいません", "warn");
+    return;
+  }
+
+  let chosen = null;
+  if(side==="AI"){
+    chosen = candidates.sort((a,b)=> calcCurrentAtk(side,b)-calcCurrentAtk(side,a))[0];
+  }else{
+    const pick = await askChoice("セシア＆アリサ", "条件無視で見参させるレイチェルを選んでください。", candidates.map(c=>({
+      label: c.name,
+      sub: `RANK ${c.rank} / ATK ${c.baseAtk}`,
+      value: c.uid,
+      card: c
+    })));
+    chosen = p.hand.find(c=>c && c.uid===String(pick)) || null;
+  }
+  if(!chosen) return;
+
+  const moved = removeFromHandByUid(side, chosen.uid);
+  if(!moved) return;
+  p.C[empty] = moved;
+  log(`セシア＆アリサ：条件無視で見参 ${moved.name}`);
+  renderAll();
+  await onEnterTriggers(side, {zone:"C", pos:empty, card:moved});
 }
 async function onEnterTriggers(side, ctx){
   const {card, pos} = ctx;
@@ -2111,6 +2197,23 @@ async function onEnterTriggers(side, ctx){
       label:card.name,
       activatorSide: side,
       resolve: async ()=> await resolveRubySapphireEnter(side, card, ctx),
+      onNegated: async (r)=>{
+        if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+        log(`${card.name} の登場時効果は無効`);
+      }
+    };
+    await processActivatedEffect(act);
+    return;
+  }
+
+  if(card.no===28){
+    const act = {
+      kind:"ACT",
+      label:card.name,
+      activatorSide: side,
+      resolve: async ()=>{
+        await searchDeckByTitleTagItem(side, "怨霊撲滅屋GB", 1, {aiAuto: side==="AI"});
+      },
       onNegated: async (r)=>{
         if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
         log(`${card.name} の登場時効果は無効`);
@@ -2296,6 +2399,7 @@ async function activateFieldCardAbility(side, zone, pos, card){
       if(card.no===5) return await activateTataExchange(side, card);
       if(card.no===6) return await activateEfiDebuff(side, card);
       if(card.no===11) return await activateShireiEquip(side, pos, card);
+      if(card.no===28) return await activateSeshiaArisaSummon(side, pos, card);
       log("このカードは任意発動の対象外です", "warn");
     },
     onNegated: async (r)=>{
@@ -2478,6 +2582,62 @@ async function onClickYourE(pos){
   await processActivatedEffect(act);
 }
 
+/* ---------------- Battle support ---------------- */
+async function tryBattleSurvive(side, card){
+  if(!card) return false;
+  if(card.flags.producerSavedThisTurn) return false;
+  if(card.no===12 || card.no===21){
+    card.flags.producerSavedThisTurn = true;
+    log(`${card.name}：このターン1度だけバトル破壊を無効`);
+    return true;
+  }
+  return false;
+}
+async function tryMiikoDirectGuard(defSide){
+  const p = state[defSide];
+  if(countShields(defSide) > 0) return false;
+  const empty = findEmptyIndex(p.C);
+  if(empty < 0) return false;
+
+  const miiko = p.hand.find(c=>c && c.no===21);
+  if(!miiko) return false;
+
+  if(defSide==="P1"){
+    const use = await askYesNo("ミーコ", "ミーコを見参させて直接攻撃を無効にし、このターンのバトルを終了しますか？");
+    if(!use) return false;
+  }
+
+  const act = {
+    kind:"ACT",
+    label:"ミーコ",
+    activatorSide:defSide,
+    resolve: async ()=>{
+      const moved = removeFromHandByUid(defSide, miiko.uid);
+      if(!moved) return;
+      p.C[empty] = moved;
+      log(`${sideName(defSide)}：ミーコを見参`);
+      log(`ミーコ：直接攻撃を無効にし、このターンのバトルを終了`);
+      state.battle.attackerUid = null;
+      state.battle.attackerPos = null;
+      state.phase = "END";
+      renderAll();
+    },
+    onNegated: async (r)=>{
+      if(r.negatorKind==="MEMORY"){
+        const moved = removeFromHandByUid(defSide, miiko.uid);
+        if(moved) moveToWing(defSide, moved);
+        log(`ミーコ：記憶抹消で無効 → ウイング`);
+      }else{
+        log(`ミーコ：効果は無効`);
+      }
+      renderAll();
+    }
+  };
+
+  const result = await processActivatedEffect(act);
+  return result.ok;
+}
+
 /* ---------------- Battle ---------------- */
 async function pickEnemyCharacter(enemySide, title, message){
   const cands = state[enemySide].C.filter(Boolean);
@@ -2490,12 +2650,6 @@ async function pickEnemyCharacter(enemySide, title, message){
     card:c
   })));
   return state[enemySide].C.find(c=>c && c.uid===pick) || null;
-}
-async function tryProducerSave(side, card){
-  if(card.no!==12) return false;
-  if(card.flags.producerSavedThisTurn) return false;
-  card.flags.producerSavedThisTurn = true;
-  return true;
 }
 function hasCattleInHand_P1(){
   return state.P1.hand.some(c=>c && c.no===17);
@@ -2560,17 +2714,15 @@ async function resolveBattle(attacker, defenderUid){
     log(`撃破：${defender.name} → AIウイング`);
     if(attacker.no===23) await breakOneShieldByEffect("AI", attacker.name);
   }else if(atkA < atkD){
-    const saved = await tryProducerSave("P1", attacker);
+    const saved = await tryBattleSurvive("P1", attacker);
     if(!saved){
       await sendCharacterToWing("P1", attacker.uid);
       log(`敗北：${attacker.name} → あなたウイング`);
       await tryCattleTrigger_P1();
-    }else{
-      log(`班目プロデューサー：バトル破壊を無効（このターン1回）`);
     }
   }else{
-    const savedA = await tryProducerSave("P1", attacker);
-    const savedD = await tryProducerSave("AI", defender);
+    const savedA = await tryBattleSurvive("P1", attacker);
+    const savedD = await tryBattleSurvive("AI", defender);
     if(!savedA){
       await sendCharacterToWing("P1", attacker.uid);
       await tryCattleTrigger_P1();
@@ -2645,6 +2797,14 @@ async function chooseAttackTarget(){
 
   const ok = await askYesNo("DIRECT", "ダイレクトアタックをしますか？");
   if(!ok) return;
+
+  const guarded = await tryMiikoDirectGuard("AI");
+  attacker.flags.attackedCountThisTurn += 1;
+  state.battle.attackerUid = null;
+  state.battle.attackerPos = null;
+  renderAll();
+  if(guarded) return;
+
   await finishGame("P1");
 }
 async function selectAttacker(side, pos, card){
@@ -2846,8 +3006,10 @@ async function aiTryPlayBestCharacter(){
     if(c.no===8) s += 260;
     if(c.no===4) s += 140;
     if(c.no===5) s += 220;
+    if(c.no===21) s += 230;
     if(c.no===23) s += 240;
     if(c.no===26 || c.no===27) s += 220;
+    if(c.no===28) s += 230;
     candidates.push({i, c, s});
   }
   if(!candidates.length) return false;
@@ -2897,6 +3059,31 @@ async function aiTryShireiEquip(side, cPos){
   renderAll();
   return true;
 }
+async function aiTryActivateSeshiaArisa(){
+  const p = state.AI;
+  const cPos = p.C.findIndex(c=>c && c.no===28);
+  if(cPos < 0) return false;
+  if(state.phase!=="MAIN") return false;
+
+  const hasTarget = p.hand.some(c=>c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル"));
+  if(!hasTarget) return false;
+  if(findEmptyIndex(p.C) < 0) return false;
+
+  const card = p.C[cPos];
+  const act = {
+    kind:"ACT",
+    label:card.name,
+    activatorSide:"AI",
+    resolve: async ()=>{ await activateSeshiaArisaSummon("AI", cPos, card); },
+    onNegated: async (r)=>{
+      if(r.negatorKind==="MEMORY") await sendCharacterToWing("AI", card.uid);
+      log(`${card.name} の効果は無効`);
+      renderAll();
+    }
+  };
+  await processActivatedEffect(act);
+  return true;
+}
 function pickBestAIAttackFor(attacker){
   const atkA = calcCurrentAtk("AI", attacker);
   const enemyChars = state.P1.C.filter(Boolean);
@@ -2912,7 +3099,7 @@ function pickBestAIAttackFor(attacker){
       if(attacker.no===23 && countShields("P1")>0) score += 240;
     }else if(atkA < atkD){
       const selfLoss = estimateRemoveValue(attacker) + 380;
-      const canSave = (attacker.no===12 && !attacker.flags.producerSavedThisTurn);
+      const canSave = ((attacker.no===12 || attacker.no===21) && !attacker.flags.producerSavedThisTurn);
       score -= canSave ? (selfLoss*0.35) : selfLoss;
       score -= 120;
     }else{
@@ -2961,16 +3148,14 @@ async function aiBattleBest(){
         await tryCattleTrigger_P1();
         if(a.no===23) await breakOneShieldByEffect("P1", a.name);
       }else if(atkA < atkD){
-        const saved = await tryProducerSave("AI", a);
+        const saved = await tryBattleSurvive("AI", a);
         if(!saved){
           await sendCharacterToWing("AI", a.uid);
           log(`AI：敗北 ${a.name} → AIウイング`);
-        }else{
-          log(`AI：班目プロデューサー耐え（1回）`);
         }
       }else{
-        const savedA = await tryProducerSave("AI", a);
-        const savedD = await tryProducerSave("P1", t);
+        const savedA = await tryBattleSurvive("AI", a);
+        const savedD = await tryBattleSurvive("P1", t);
         if(!savedA) await sendCharacterToWing("AI", a.uid);
         if(!savedD){
           await sendCharacterToWing("P1", t.uid);
@@ -2999,6 +3184,10 @@ async function aiBattleBest(){
     }
 
     if(best.type==="D"){
+      const guarded = await tryMiikoDirectGuard("P1");
+      a.flags.attackedCountThisTurn += 1;
+      renderAll();
+      if(guarded) break;
       await finishGame("AI");
       break;
     }
@@ -3024,9 +3213,13 @@ async function aiTakeTurn(){
   await sleep(90);
   didSomething = (await aiTryPlayBestCharacter()) || didSomething;
   await sleep(90);
+  didSomething = (await aiTryActivateSeshiaArisa()) || didSomething;
+  await sleep(90);
 
   if(state.AI.hand.length >= 6){
     didSomething = (await aiTryPlayBestCharacter()) || didSomething;
+    await sleep(80);
+    didSomething = (await aiTryActivateSeshiaArisa()) || didSomething;
     await sleep(80);
     didSomething = (await aiTryPlayBestItem()) || didSomething;
     await sleep(80);
@@ -3195,9 +3388,11 @@ async function init(){
   }
 
   if(el.boot) el.boot.textContent="JS: OK（準備完了）";
-  log("v50020：完全版（丸ごと置換）");
-  log("追加：チェーンエンジン（手形/記憶抹消の再カウンター対応）");
-  log("維持：No.23 / 24 / 26 / 27");
+  log("v50021：完全版（丸ごと置換）");
+  log("追加：No.21 ミーコ");
+  log("追加：No.28 セシア＆アリサ");
+  log("画像対応：21_ミーコ.png.PNG");
+  log("画像対応：28_セシア&アリサ.png.PNG");
 }
 
 document.addEventListener("DOMContentLoaded", init);
