@@ -1,5 +1,5 @@
 /* =========================================================
-  Manpuku World - v50019b (iPhone First / Full Replace JS)
+  Manpuku World - v50019c (iPhone First / Full Replace JS)
   - レイアウトは触らない（JSのみ）
   - デッキ編集（テキストUI / zoneM流用 / スタート長押しで遷移）
   - 初期デッキ：20種×2枚（=40枚）を維持
@@ -7,19 +7,12 @@
   - ルール：デッキ40固定 / 同名最大3枚 / 所持枚数以内
 
   ▼今回の追加
-  1) No.23 退魔師レイチェル 実装
-     - 見参
-     - 装備中、相手ステージのタグ「怨霊」「霊魂」持ちキャラは効果発動不可
-     - バトルで相手キャラをウイングへ送った時、相手シールド1枚破壊
-  2) No.24 銀弾の双銃 実装
-     - 装備ATK+500
-     - 装備先が「除霊」ならさらにATK+500
-     - さらにこのターンの攻撃回数を2回追加（合計3回攻撃）
-  3) 先攻1ターン目のみ攻撃不可 / 後攻1ターン目は攻撃可能 に修正
-  4) 画像名
-     - 23_退魔師レイチェル.png.PNG
-     - 24_銀弾の双銃.png.PNG
-     を確実に拾う前提で画像走査を維持
+  1) No.26 ジュエリー・ルビー 実装
+  2) No.27 ジュエリー・サファイア 実装
+  3) 画像名
+     - 26_ジュエリー・ルビー.png.PNG
+     - 27ジュエリー・サファイア-png.PNG
+     を拾えるよう画像探索を微修正
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -129,7 +122,7 @@ function renderLogModal(){
 function bindLongPress(node, fn, ms=620){
   if(!node) return;
   let t = null;
-  const start = (e)=> { clearTimeout(t); t = setTimeout(()=>fn(e), ms); };
+  const start = ()=> { clearTimeout(t); t = setTimeout(()=>fn(), ms); };
   const end = ()=> clearTimeout(t);
 
   node.addEventListener("pointerdown", start, {passive:true});
@@ -330,6 +323,24 @@ const CardRegistry = [
       "タグ「除霊」を持つキャラクターが装備した場合、さらにATK+500し、このターンの攻撃回数を2回追加する。"
     ),
     rank:4, atk:0 },
+
+  { no:26, name:"ジュエリー・ルビー", type:"character",
+    tags:["美少女戦士","アニメ","格闘"], titleTag:"Ve ヴォイスエレメント",
+    text: normalizeText(
+      "自分ステージに「サファイア」が存在する時、手札から見参できる。\n" +
+      "登場した時、手札を1枚ウイングに送り、デッキ・ウイングからタグ「アニメ」カード1枚を手札に加える。\n" +
+      "このカードが自分ステージに存在する間、タグ「美少女戦士」のATK+500。"
+    ),
+    rank:4, atk:1700 },
+
+  { no:27, name:"ジュエリー・サファイア", type:"character",
+    tags:["美少女戦士","アニメ","格闘"], titleTag:"Ve ヴォイスエレメント",
+    text: normalizeText(
+      "自分ステージに「ルビー」が存在する時、手札から見参できる。\n" +
+      "登場した時、手札を1枚ウイングに送り、デッキ・ウイングからタグ「アニメ」カード1枚を手札に加える。\n" +
+      "このカードが自分ステージに存在する間、タグ「美少女戦士」のATK+500。"
+    ),
+    rank:4, atk:1700 },
 ];
 
 const CARD_NOS = [...new Set(CardRegistry.map(c=>c.no))].sort((a,b)=>a-b);
@@ -875,7 +886,9 @@ function scoreCardFilename(name, no){
 
   if(s.startsWith(`${p2}_`)) score += 120;
   if(s.includes(`${p2}_`)) score += 40;
-  if(s.startsWith(`${p2}-`)) score += 20;
+  if(s.startsWith(`${p2}-`)) score += 30;
+  if(s.startsWith(p2)) score += 20;
+  if(s.includes(`/${p2}`)) score += 10;
   if(s.includes(".png.png")) score += 6;
   if(s.includes(".png")) score += 5;
   if(s.includes(".jpg")) score += 5;
@@ -891,7 +904,7 @@ function buildCardMapFromFileList(cardFiles){
       const sc = scoreCardFilename(f, no);
       if(sc > best.score) best = {name:f, score:sc};
     }
-    if(best.score >= 60) map[pad2(no)] = best.name;
+    if(best.score >= 30) map[pad2(no)] = best.name;
   }
   return map;
 }
@@ -1066,6 +1079,56 @@ async function breakOneShieldByEffect(defSide, sourceName){
   return true;
 }
 
+function canRubySapphireKensan(side, card){
+  if(!card || !isCharacter(card)) return false;
+  if(card.no===26){
+    return state[side].C.some(c=>c && c.no===27);
+  }
+  if(card.no===27){
+    return state[side].C.some(c=>c && c.no===26);
+  }
+  return false;
+}
+
+function isRubySapphire(card){
+  return !!card && (card.no===26 || card.no===27);
+}
+
+function getRubySapphirePartnerName(card){
+  if(!card) return "";
+  return card.no===26 ? "サファイア" : card.no===27 ? "ルビー" : "";
+}
+
+function getRubySapphireStageBuffCount(side){
+  let n = 0;
+  for(const c of state[side].C){
+    if(c && (c.no===26 || c.no===27)) n++;
+  }
+  return n;
+}
+
+function chooseAIDiscardIndex(side){
+  const hand = state[side].hand;
+  if(!hand.length) return -1;
+  let bestIdx = 0;
+  let bestScore = Infinity;
+  for(let i=0;i<hand.length;i++){
+    const c = hand[i];
+    let s = (c.baseAtk||0) + (c.rank||0)*120;
+    if(c.no===14) s += 500;
+    if(c.no===17) s += 380;
+    if(c.no===23) s += 260;
+    if(c.no===26 || c.no===27) s += 220;
+    if(isItem(c)) s += 50;
+    if(isEffect(c)) s += 80;
+    if(s < bestScore){
+      bestScore = s;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
 /* ---------------- Viewer / ATK ---------------- */
 function findEquipInE(side, equipUid){
   const E = state[side].E;
@@ -1086,6 +1149,10 @@ function calcCurrentAtk(side, card){
 
   if(card.no===9 && hasOnStage(side, (c)=>c && c.no===10)) atk += 500;
   if(card.no===10 && hasOnStage(side, (c)=>c && c.no===9)) atk += 500;
+
+  if(card.tags.includes("美少女戦士")){
+    atk += getRubySapphireStageBuffCount(side) * 500;
+  }
 
   return atk;
 }
@@ -1342,6 +1409,8 @@ function announceHandSelection(){
   if(isCharacter(c)){
     if(c.summon==="kensan"){
       log(`案内：見参キャラです。空きCをタップ→コスト選択→登場`);
+    }else if(isRubySapphire(c) && canRubySapphireKensan("P1", c)){
+      log(`案内：通常登場または見参できます。空きCをタップしてください`);
     }else{
       log(`案内：キャラです。空きCをタップ→登場（通常はターン1回）`);
     }
@@ -1753,6 +1822,14 @@ async function onClickYourC(pos){
     return;
   }
 
+  if(isRubySapphire(card) && canRubySapphireKensan("P1", card)){
+    const useKensan = await askYesNo("登場方法", `${card.name}を見参で登場しますか？\n（いいえで通常登場）`);
+    if(useKensan){
+      await doRubySapphireKensan("P1", pos, state.selectedHandIndex);
+      return;
+    }
+  }
+
   if(state.normalSummonUsed){
     log("登場（通常）はターン1回です", "warn");
     return;
@@ -1851,9 +1928,32 @@ async function doKensanSummon(side, cPos, handIdx){
   const placed = p.hand.splice(handIdx,1)[0];
   p.C[cPos]=placed;
 
+  state.selectedHandIndex=null;
+  state.announce.lastSelUid=null;
+
   log(`見参：${placed.name}`);
   renderAll();
 
+  await onEnterTriggers(side, {zone:"C", pos:cPos, card:placed});
+}
+
+async function doRubySapphireKensan(side, cPos, handIdx){
+  const p = state[side];
+  const card = p.hand[handIdx];
+  if(!card || !isRubySapphire(card)) return;
+  if(p.C[cPos]) return;
+  if(!canRubySapphireKensan(side, card)){
+    log(`${card.name}：見参条件を満たしていません`, "warn");
+    return;
+  }
+
+  const placed = p.hand.splice(handIdx,1)[0];
+  p.C[cPos] = placed;
+  state.selectedHandIndex = null;
+  state.announce.lastSelUid = null;
+
+  log(`見参：${placed.name}`);
+  renderAll();
   await onEnterTriggers(side, {zone:"C", pos:cPos, card:placed});
 }
 
@@ -1980,6 +2080,56 @@ async function onEnterTriggers(side, ctx){
     }
     return;
   }
+
+  if(card.no===26 || card.no===27){
+    await resolveRubySapphireEnter(side, card);
+    return;
+  }
+}
+
+/* ---------------- Enter effects for 26 / 27 ---------------- */
+async function resolveRubySapphireEnter(side, card){
+  const p = state[side];
+  if(p.hand.length <= 0){
+    log(`${card.name}：手札がないため、登場時効果は不発`, "warn");
+    return;
+  }
+
+  if(side==="AI"){
+    const idx = chooseAIDiscardIndex(side);
+    if(idx >= 0){
+      const moved = p.hand.splice(idx,1)[0];
+      moveToWing(side, moved);
+      log(`AI：${card.name} 登場時 → 手札1枚をウイング (${moved.name})`);
+    }else{
+      log(`AI：${card.name} 登場時 → 送る手札なし`, "warn");
+      return;
+    }
+
+    await searchFromDeckOrWingByTag(side, "アニメ", 1, {aiAuto:true});
+    renderAll();
+    return;
+  }
+
+  const items = p.hand.map((c, i)=>({
+    label:`手札：${c.name}`,
+    sub:`No.${pad2(c.no)} / ${c.type.toUpperCase()}`,
+    value:String(i),
+    card:c
+  }));
+  const pick = await askChoice(card.name, "手札を1枚ウイングに送ってください。", items);
+  const idx = Number(pick);
+  if(Number.isNaN(idx) || !p.hand[idx]){
+    log(`${card.name}：手札選択が無効です`, "warn");
+    return;
+  }
+
+  const moved = p.hand.splice(idx,1)[0];
+  moveToWing(side, moved);
+  log(`${card.name}：手札1枚をウイング (${moved.name})`);
+
+  await searchFromDeckOrWingByTag(side, "アニメ", 1);
+  renderAll();
 }
 
 async function activateFieldCardAbility(side, zone, pos, card){
@@ -2157,6 +2307,7 @@ function estimateRemoveValue(card){
   if(card.no===8) v += 300;
   if(card.no===12) v += 200;
   if(card.no===23) v += 260;
+  if(card.no===26 || card.no===27) v += 220;
   return v;
 }
 
@@ -2693,14 +2844,21 @@ async function aiTryPlayBestCharacter(){
   const candidates = [];
   for(let i=0;i<p.hand.length;i++){
     const c = p.hand[i];
-    if(c && isCharacter(c) && c.summon!=="kensan"){
-      let s = (c.baseAtk||0) + (c.rank||0)*120;
-      if(c.no===8) s += 260;
-      if(c.no===4) s += 140;
-      if(c.no===5) s += 220;
-      if(c.no===23) s += 240;
-      candidates.push({i, c, s});
+    if(!c || !isCharacter(c)) continue;
+
+    let s = (c.baseAtk||0) + (c.rank||0)*120;
+    if(c.no===8) s += 260;
+    if(c.no===4) s += 140;
+    if(c.no===5) s += 220;
+    if(c.no===23) s += 240;
+    if(c.no===26 || c.no===27){
+      s += 200;
+      if(canRubySapphireKensan("AI", c)) s += 140;
     }
+
+    if(c.summon==="kensan") continue;
+
+    candidates.push({i, c, s});
   }
   if(!candidates.length) return false;
 
@@ -3142,12 +3300,11 @@ async function init(){
   }
 
   if(el.boot) el.boot.textContent="JS: OK（準備完了）";
-  log("v50019b：完全版（丸ごと置換）");
-  log("追加：No.23 退魔師レイチェル");
-  log("追加：No.24 銀弾の双銃");
-  log("修正：先攻1ターン目のみ攻撃不可 / 後攻1ターン目は攻撃可能");
-  log("修正：画像名 23_退魔師レイチェル.png.PNG / 24_銀弾の双銃.png.PNG 対応");
-  log("修正：デッキ編集に新規カードを反映");
+  log("v50019c：完全版（丸ごと置換）");
+  log("追加：No.26 ジュエリー・ルビー");
+  log("追加：No.27 ジュエリー・サファイア");
+  log("画像対応：26_ジュエリー・ルビー.png.PNG");
+  log("画像対応：27ジュエリー・サファイア-png.PNG");
 }
 
 document.addEventListener("DOMContentLoaded", init);
