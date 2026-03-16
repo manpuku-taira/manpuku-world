@@ -4205,3 +4205,125 @@ function nextPhase(){
     return;
   }
 }
+/* =========================================================
+  PATCH 02
+  カウンター選択停止バグ修正
+  - 反応札が無い時は確認UIを出さず自動PASS
+  - 選択後に対象札が無い場合も自動PASS
+  - 停止せず相手処理を続行
+========================================================= */
+
+function getAvailableCounters(side, prevLink){
+  const out = [];
+
+  if(canUseHandgata(side, prevLink.activatorSide)){
+    out.push("HANDGATA");
+  }
+  if(canUseMemoryErase(side, prevLink.activatorSide)){
+    out.push("MEMORY");
+  }
+
+  return out;
+}
+
+async function chooseCounterForSide(side, prevLink){
+  const available = getAvailableCounters(side, prevLink);
+
+  // 反応手段が無いなら確認UIを出さず自動PASS
+  if(available.length === 0){
+    return "PASS";
+  }
+
+  const items = [];
+  if(available.includes("HANDGATA")){
+    items.push({label:"手形で無効", value:"HANDGATA"});
+  }
+  if(available.includes("MEMORY")){
+    items.push({label:"記憶抹消で無効", value:"MEMORY"});
+  }
+  items.push({label:"しない", value:"PASS"});
+
+  if(side === "P1"){
+    return await askChoice(
+      "チェーン確認",
+      `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。\n反応しますか？`,
+      items
+    );
+  }
+
+  // AIは使えるものだけ選ぶ
+  if(available.includes("MEMORY")) return "MEMORY";
+  if(available.includes("HANDGATA")) return "HANDGATA";
+  return "PASS";
+}
+
+async function runCounterChain(initialLink){
+  const chain = [initialLink];
+  let priority = opponent(initialLink.activatorSide);
+  let passCount = 0;
+
+  while(passCount < 2){
+    const prevLink = chain[chain.length - 1];
+    let choice = await chooseCounterForSide(priority, prevLink);
+
+    // 念のため、選択後に状態が変わっていても再検証する
+    const availableNow = getAvailableCounters(priority, prevLink);
+
+    if(choice === "HANDGATA" && !availableNow.includes("HANDGATA")){
+      choice = "PASS";
+    }
+    if(choice === "MEMORY" && !availableNow.includes("MEMORY")){
+      choice = "PASS";
+    }
+
+    if(choice === "HANDGATA"){
+      state.limits[priority].handgataUsed = true;
+      chain.push({
+        kind:"HANDGATA",
+        label:"手形",
+        activatorSide: priority,
+      });
+      log(`${sideName(priority)}：手形を発動`);
+      priority = opponent(priority);
+      passCount = 0;
+      continue;
+    }
+
+    if(choice === "MEMORY"){
+      const me = takeMemoryEraseFromHand(priority);
+
+      // 選択時点では使える判定でも、実体が無ければ自動PASS
+      if(me){
+        moveToWing(priority, me);
+        chain.push({
+          kind:"MEMORY",
+          label:"記憶抹消",
+          activatorSide: priority,
+        });
+        log(`${sideName(priority)}：記憶抹消を発動`);
+        priority = opponent(priority);
+        passCount = 0;
+        continue;
+      }else{
+        choice = "PASS";
+      }
+    }
+
+    passCount += 1;
+    priority = opponent(priority);
+  }
+
+  const active = Array(chain.length).fill(true);
+  for(let i=chain.length-1; i>=1; i--){
+    if(active[i]) active[i-1] = false;
+  }
+
+  for(let i=1;i<chain.length;i++){
+    if(active[i]) log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：直前の効果を無効`);
+    else log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効にされた`);
+  }
+
+  const negated = !active[0];
+  const negatorKind = negated && chain[1] ? chain[1].kind : null;
+  return { negated, negatorKind, chain, active };
+}
