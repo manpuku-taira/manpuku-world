@@ -4166,3 +4166,42 @@ function startGame(){
 }
 
 log(`${MW_AI_PATCH_VERSION} 読み込み完了`);
+/* =========================================================
+  PATCH 01
+  ターン進行を一方向化
+  START → DRAW → MAIN → BATTLE → END → 相手ターン
+========================================================= */
+
+function nextPhase(){
+  if(state.gameOver) return;
+  if(state.activeSide!=="P1") return;
+
+  if(state.phase==="START"){
+    state.phase = "DRAW";
+    draw("P1", 1);
+    log("あなた：ドロー +1");
+    renderAll();
+    return;
+  }
+
+  if(state.phase==="DRAW"){
+    state.phase = "MAIN";
+    renderAll();
+    return;
+  }
+
+  if(state.phase==="MAIN"){
+    state.phase = "BATTLE";
+    renderAll();
+    return;
+  }
+
+  if(state.phase==="BATTLE"){
+    endTurn();
+    return;
+  }
+
+  if(state.phase==="END"){
+    return;
+  }
+}
