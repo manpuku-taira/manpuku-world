@@ -4553,3 +4553,674 @@ async function chooseCounterForSide(side, prevLink){
   if(available.includes("HANDGATA")) return "HANDGATA";
   return "PASS";
 }
+/* =========================================================
+  PATCH 04
+  No.25 / No.29 / No.30 追加
+  - 25 小次郎＆小太郎
+  - 29 狼猫 - 孫悟空Lv75 -
+  - 30 七星剣
+========================================================= */
+
+/* ---------------- カード定義追加 ---------------- */
+(function addNewCards_v50022_patch04(){
+  const addIfMissing = (def)=>{
+    if(!CardRegistry.find(c=>c.no===def.no)){
+      CardRegistry.push(def);
+    }
+    if(!CARD_NOS.includes(def.no)){
+      CARD_NOS.push(def.no);
+      CARD_NOS.sort((a,b)=>a-b);
+    }
+  };
+
+  addIfMissing({
+    no:25,
+    name:"小次郎＆小太郎",
+    type:"character",
+    tags:["アバター","GAME","兄弟"],
+    titleTag:"BUGBUG西遊記",
+    text: normalizeText(
+      "登場できない。\n" +
+      "手札または自分ステージのキャラクター1体をウイングに送り、手札から見参できる。\n" +
+      "このカードが相手の効果、またはバトルでウイングに送られた時、\n" +
+      "手札・デッキ・ウイングからrank4以下の「小太郎」「小次郎」キャラクターを2体まで見参させる。"
+    ),
+    rank:5,
+    atk:2500,
+    summon:"kensan"
+  });
+
+  addIfMissing({
+    no:29,
+    name:"狼猫 - 孫悟空Lv75 -",
+    type:"character",
+    tags:["アバター","GAME","剣士"],
+    titleTag:"BUGBUG西遊記",
+    text: normalizeText(
+      "登場できない。\n" +
+      "手札または自分ステージのキャラクター1体をウイングに送り、手札から見参できる。\n" +
+      "1ターンに1度、デッキ・ウイングからタイトルタグ「BUGBUG西遊記」アイテムカード1枚を手札に加える。"
+    ),
+    rank:5,
+    atk:2400,
+    summon:"kensan"
+  });
+
+  addIfMissing({
+    no:30,
+    name:"七星剣",
+    type:"item",
+    tags:["課金アイテム","刀剣"],
+    titleTag:"BUGBUG西遊記",
+    text: normalizeText(
+      "自分ターンに発動できる。\n" +
+      "自分ステージのキャラクター1体に装備する。ATK+500。\n" +
+      "タグ「剣士」を持つキャラクターが装備した場合、さらにATK+500し、自分ターンに相手ステージの全てのキャラクターに1度ずつ攻撃できる。"
+    ),
+    rank:4,
+    atk:0
+  });
+
+  ensureInitialCollectionAndDeck();
+  log("PATCH04：No.25 / 29 / 30 を登録");
+})();
+
+/* ---------------- 補助 ---------------- */
+function isKotaroKojiroName(card){
+  if(!card || !isCharacter(card)) return false;
+  return card.name.includes("小太郎") || card.name.includes("小次郎");
+}
+function getEmptyCPositions(side){
+  const out = [];
+  for(let i=0;i<3;i++) if(!state[side].C[i]) out.push(i);
+  return out;
+}
+function getKotaroKojiroPool(side){
+  const p = state[side];
+  return [
+    ...p.hand.map(c=>({src:"hand", c})),
+    ...p.deck.map(c=>({src:"deck", c})),
+    ...p.wing.map(c=>({src:"wing", c}))
+  ].filter(x=>x.c && isCharacter(x.c) && (x.c.rank||0) <= 4 && isKotaroKojiroName(x.c));
+}
+function removeCardFromAnySource(side, src, uid){
+  const p = state[side];
+  if(src==="hand") return removeFromZone(p.hand, uid);
+  if(src==="deck") return removeFromZone(p.deck, uid);
+  if(src==="wing") return removeFromZone(p.wing, uid);
+  return null;
+}
+async function specialSummonKotaroKojiroFrom25(side){
+  const p = state[side];
+  let empties = getEmptyCPositions(side);
+  if(!empties.length){
+    log("小次郎＆小太郎：空きCがないため不発", "warn");
+    return;
+  }
+
+  let maxCount = Math.min(2, empties.length);
+  for(let n=0; n<maxCount; n++){
+    const pool = getKotaroKojiroPool(side);
+    if(!pool.length) break;
+
+    let picked = null;
+
+    if(side==="AI"){
+      const preferNos = [9,10];
+      picked =
+        pool.find(x=>preferNos.includes(x.c.no) && x.src==="deck") ||
+        pool.find(x=>preferNos.includes(x.c.no)) ||
+        pool.find(x=>x.src==="deck") ||
+        pool[0];
+    }else{
+      const v = await askChoice(
+        "小次郎＆小太郎",
+        `見参させる「小太郎」「小次郎」を選択してください（${n+1}/${maxCount}）`,
+        pool.map(x=>({
+          label: x.c.name,
+          sub: `${x.src.toUpperCase()} / RANK ${x.c.rank} / ATK ${x.c.baseAtk}`,
+          value: `${x.src}:${x.c.uid}`,
+          card: x.c
+        })).concat([{label:"終了", value:"STOP"}])
+      );
+      if(v==="STOP" || !v) break;
+      const [src, uid] = String(v).split(":");
+      picked = pool.find(x=>x.src===src && x.c.uid===uid) || null;
+    }
+
+    if(!picked) break;
+
+    const moved = removeCardFromAnySource(side, picked.src, picked.c.uid);
+    if(!moved) continue;
+
+    empties = getEmptyCPositions(side);
+    if(!empties.length){
+      if(picked.src!=="wing") moveToWing(side, moved);
+      break;
+    }
+
+    const pos = empties[0];
+    p.C[pos] = moved;
+    log(`${sideName(side)}：${moved.name} を見参`);
+    renderAll();
+    await onEnterTriggers(side, {zone:"C", pos, card:moved});
+  }
+}
+function hasSevenStarSwordBonus(side, card){
+  if(!card || !isCharacter(card) || !card.equipUid) return false;
+  const eq = findEquipInE(side, card.equipUid);
+  if(!eq || eq.no!==30) return false;
+  return card.tags.includes("剣士");
+}
+function getRemainingSevenStarTargets(side, card){
+  if(!hasSevenStarSwordBonus(side, card)) return [];
+  const enemy = opponent(side);
+  const hit = Array.isArray(card.flags?.sevenStarHitUidsThisTurn) ? card.flags.sevenStarHitUidsThisTurn : [];
+  return state[enemy].C.filter(c=>c && !hit.includes(c.uid));
+}
+function markSevenStarHit(card, targetUid){
+  if(!card) return;
+  if(!card.flags) card.flags = {};
+  if(!Array.isArray(card.flags.sevenStarHitUidsThisTurn)){
+    card.flags.sevenStarHitUidsThisTurn = [];
+  }
+  if(targetUid && !card.flags.sevenStarHitUidsThisTurn.includes(targetUid)){
+    card.flags.sevenStarHitUidsThisTurn.push(targetUid);
+  }
+}
+
+/* ---------------- makeInstance 補強 ---------------- */
+const __mw_makeInstance_patch04 = makeInstance;
+makeInstance = function(cardDef){
+  const c = __mw_makeInstance_patch04(cardDef);
+  if(!c.flags) c.flags = {};
+  if(!Array.isArray(c.flags.sevenStarHitUidsThisTurn)){
+    c.flags.sevenStarHitUidsThisTurn = [];
+  }
+  return c;
+};
+
+/* ---------------- ターン初期化 補強 ---------------- */
+const __mw_resetPerTurn_patch04 = resetPerTurn;
+resetPerTurn = function(side){
+  __mw_resetPerTurn_patch04(side);
+  const p = state[side];
+  for(const c of p.C){
+    if(!c) continue;
+    if(!c.flags) c.flags = {};
+    c.flags.sevenStarHitUidsThisTurn = [];
+  }
+};
+
+const __mw_clearEndTurnTemps_patch04 = clearEndTurnTemps;
+clearEndTurnTemps = function(side){
+  __mw_clearEndTurnTemps_patch04(side);
+  const p = state[side];
+  for(const c of p.C){
+    if(!c) continue;
+    if(!c.flags) c.flags = {};
+    c.flags.sevenStarHitUidsThisTurn = [];
+  }
+};
+
+/* ---------------- BUGBUG西遊記アイテムサーチ ---------------- */
+async function searchDeckOrWingByTitleTagItem(side, titleTag, n, opt={}){
+  const p = state[side];
+  const poolBase = ()=>[
+    ...p.deck.map(c=>({src:"deck", c})),
+    ...p.wing.map(c=>({src:"wing", c}))
+  ].filter(x=>x.c && x.c.type==="item" && x.c.titleTag===titleTag);
+
+  let pool = poolBase();
+  if(!pool.length){
+    log(`サーチ失敗：タイトルタグ「${titleTag}」アイテムが見つかりません`, "warn");
+    return;
+  }
+
+  for(let k=0;k<n;k++){
+    pool = poolBase();
+    if(!pool.length) break;
+
+    let picked = null;
+    if(opt.aiAuto){
+      picked = pool.find(x=>x.src==="deck") || pool[0];
+    }else{
+      const v = await askChoice(
+        "サーチ",
+        `タイトルタグ「${titleTag}」アイテムを手札に加える（${k+1}/${n}）`,
+        pool.map(x=>({
+          label: x.c.name,
+          sub: `${x.src.toUpperCase()} / ITEM / ${titleTag}`,
+          value: `${x.src}:${x.c.uid}`,
+          card: x.c
+        }))
+      );
+      if(!v) return;
+      const [src, uid] = String(v).split(":");
+      picked = pool.find(x=>x.src===src && x.c.uid===uid) || null;
+    }
+
+    if(!picked) continue;
+
+    if(picked.src==="deck"){
+      const moved = removeFromZone(p.deck, picked.c.uid);
+      if(moved) p.hand.push(moved);
+    }else{
+      const moved = removeFromZone(p.wing, picked.c.uid);
+      if(moved) p.hand.push(moved);
+    }
+    log(`${sideName(side)}：BUGBUG西遊記アイテムをサーチ`);
+  }
+}
+
+/* ---------------- getMaxAttacks 拡張 ---------------- */
+const __mw_getMaxAttacks_patch04 = getMaxAttacks;
+getMaxAttacks = function(side, card){
+  let max = __mw_getMaxAttacks_patch04(side, card);
+  if(!card || !isCharacter(card)) return max;
+
+  if(hasSevenStarSwordBonus(side, card)){
+    const enemy = opponent(side);
+    const enemyCount = state[enemy].C.filter(Boolean).length;
+    if(enemyCount > 0){
+      max = Math.max(max, enemyCount);
+    }
+  }
+  return max;
+};
+
+/* ---------------- アイテム装備 拡張 ---------------- */
+const __mw_equipItemFromE_patch04 = equipItemFromE;
+equipItemFromE = async function(side, ePos, itemCard){
+  const isTarget = itemCard && itemCard.no===30;
+  await __mw_equipItemFromE_patch04(side, ePos, itemCard);
+
+  if(isTarget){
+    const p = state[side];
+    const hosts = p.C.filter(c=>c && c.equipUid===itemCard.uid);
+    const host = hosts[0] || null;
+    if(host){
+      itemCard._equipBonus = 500;
+      itemCard._equipBonus2 = host.tags.includes("剣士") ? 500 : 0;
+      itemCard._extraAttacks = 0;
+      itemCard._allEnemyOnce = host.tags.includes("剣士");
+      log(`装備補正：七星剣 → ${host.name}${host.tags.includes("剣士") ? "（全体連撃有効）" : ""}`);
+      renderAll();
+    }
+  }
+};
+
+/* ---------------- アイテム価値評価 拡張 ---------------- */
+const __mw_itemBonusForHost_patch04 = itemBonusForHost;
+itemBonusForHost = function(item, host){
+  let b = __mw_itemBonusForHost_patch04(item, host);
+  if(item && item.no===30){
+    b = 500 + (host.tags.includes("剣士") ? 900 : 0);
+  }
+  return b;
+};
+
+/* ---------------- ビューア任意発動 拡張 ---------------- */
+const __mw_canActivateFromViewer_patch04 = canActivateFromViewer;
+canActivateFromViewer = function(card, ctx){
+  const res = __mw_canActivateFromViewer_patch04(card, ctx);
+  if(res.ok) return res;
+
+  const side = ctx?.side;
+  const zone = ctx?.zone;
+  if(!card || side!=="P1" || zone!=="C") return res;
+  if(state.gameOver) return {ok:false, reason:"ゲームが終了しています"};
+  if(state.activeSide!=="P1") return {ok:false, reason:"あなたのターンではありません"};
+  if(state.phase!=="MAIN") return {ok:false, reason:"メインフェイズではありません"};
+  if(isRachelSealActiveAgainst(side, card)) return {ok:false, reason:"退魔師レイチェルの効果により発動できません"};
+
+  if(card.no===29) return {ok:true, reason:""};
+  return res;
+};
+
+/* ---------------- 場の効果発動 拡張 ---------------- */
+const __mw_activateFieldCardAbility_patch04 = activateFieldCardAbility;
+activateFieldCardAbility = async function(side, zone, pos, card){
+  if(card && card.no===29 && side==="P1"){
+    const act = {
+      kind:"ACT",
+      label:card.name,
+      activatorSide: side,
+      resolve: async ()=>{
+        if(state.activeSide!=="P1" || state.phase!=="MAIN"){
+          log("このタイミングでは発動できません", "warn");
+          return;
+        }
+        if(card.used.perTurn){
+          log("狼猫 - 孫悟空Lv75 -：このターンは既に使用しています", "warn");
+          return;
+        }
+        card.used.perTurn = true;
+        await searchDeckOrWingByTitleTagItem(side, "BUGBUG西遊記", 1);
+        renderAll();
+      },
+      onNegated: async (r)=>{
+        if(r.negatorKind==="MEMORY"){
+          await sendCharacterToWing(side, card.uid);
+        }
+        log(`${card.name} の効果は無効`);
+        renderAll();
+      }
+    };
+    await processActivatedEffect(act);
+    return;
+  }
+
+  await __mw_activateFieldCardAbility_patch04(side, zone, pos, card);
+};
+
+/* ---------------- AIの29使用 ---------------- */
+const __mw_aiTakeTurn_patch04 = aiTakeTurn;
+async function aiTryActivateRoumao29(){
+  const pos = state.AI.C.findIndex(c=>c && c.no===29);
+  if(pos < 0) return false;
+  if(state.phase!=="MAIN") return false;
+
+  const card = state.AI.C[pos];
+  if(card.used.perTurn) return false;
+
+  const hasItem = [
+    ...state.AI.deck,
+    ...state.AI.wing
+  ].some(c=>c && c.type==="item" && c.titleTag==="BUGBUG西遊記");
+  if(!hasItem) return false;
+
+  const act = {
+    kind:"ACT",
+    label:card.name,
+    activatorSide:"AI",
+    resolve: async ()=>{
+      card.used.perTurn = true;
+      await searchDeckOrWingByTitleTagItem("AI", "BUGBUG西遊記", 1, {aiAuto:true});
+      renderAll();
+    },
+    onNegated: async (r)=>{
+      if(r.negatorKind==="MEMORY"){
+        await sendCharacterToWing("AI", card.uid);
+      }
+      log(`${card.name} の効果は無効`);
+      renderAll();
+    }
+  };
+  await processActivatedEffect(act);
+  return true;
+}
+
+aiTakeTurn = async function(){
+  state.phase = "DRAW";
+  draw("AI", 1);
+  enforceHandLimit("AI");
+  renderAll();
+  await sleep(160);
+
+  state.phase = "MAIN";
+  renderAll();
+  await sleep(140);
+
+  let didSomething = false;
+  didSomething = (await aiTryPlayEffect(2)) || didSomething;
+  await sleep(90);
+  didSomething = (await aiTryPlayEffect(16)) || didSomething;
+  await sleep(90);
+  didSomething = (await aiTryPlayBestItem()) || didSomething;
+  await sleep(90);
+  didSomething = (await aiTryPlayBestCharacter()) || didSomething;
+  await sleep(90);
+  didSomething = (await aiTryActivateSeshiaArisa()) || didSomething;
+  await sleep(90);
+  didSomething = (await aiTryActivateRoumao29()) || didSomething;
+  await sleep(90);
+
+  if(state.AI.hand.length >= 6){
+    didSomething = (await aiTryPlayBestCharacter()) || didSomething;
+    await sleep(80);
+    didSomething = (await aiTryActivateSeshiaArisa()) || didSomething;
+    await sleep(80);
+    didSomething = (await aiTryActivateRoumao29()) || didSomething;
+    await sleep(80);
+    didSomething = (await aiTryPlayBestItem()) || didSomething;
+    await sleep(80);
+    didSomething = (await aiTryPlayEffect(16)) || didSomething;
+    await sleep(80);
+  }
+
+  if(!didSomething){
+    log("AI：有効なプレイが見つからず（このターンは展開なし）", "warn");
+  }
+
+  state.phase = "BATTLE";
+  renderAll();
+  await sleep(140);
+
+  if(!canBattleThisTurn("AI")){
+    log(`AI：${battleBanReason("AI")}（BATTLEスキップ）`);
+  }else{
+    await aiBattleBest();
+  }
+
+  state.phase = "END";
+  enforceHandLimit("AI");
+  clearEndTurnTemps("AI");
+  renderAll();
+  await sleep(120);
+
+  log("AI：ターン終了");
+};
+
+/* ---------------- 25 の離脱時効果 ---------------- */
+const __mw_sendCharacterToWing_patch04 = sendCharacterToWing;
+sendCharacterToWing = async function(side, uid){
+  const p = state[side];
+  const pos = p.C.findIndex(c=>c && c.uid===uid);
+  if(pos<0) return;
+
+  const card = p.C[pos];
+  const enemy = opponent(side);
+
+  await stripEquipIfAny(side, card);
+  p.C[pos] = null;
+  moveToWing(side, card);
+  renderAll();
+
+  if(card.no===25){
+    const act = {
+      kind:"ACT",
+      label:card.name,
+      activatorSide: side,
+      resolve: async ()=>{
+        await specialSummonKotaroKojiroFrom25(side);
+      },
+      onNegated: async ()=>{
+        log(`${card.name} の離脱時効果は無効`);
+      }
+    };
+
+    /* 相手の効果・バトルで送られた時を想定。
+       既存構造では sendCharacterToWing 経由でこの条件をまとめて扱う */
+    log(`${card.name}：離脱時効果を確認`);
+    await processActivatedEffect(act);
+  }
+};
+
+/* ---------------- プレイヤー攻撃対象選択 拡張（七星剣） ---------------- */
+const __mw_chooseAttackTarget_patch04 = chooseAttackTarget;
+chooseAttackTarget = async function(){
+  if(state.phase!=="BATTLE") return;
+  if(!canBattleThisTurn("P1")){
+    log(battleBanReason("P1"), "warn");
+    state.battle.attackerUid=null;
+    state.battle.attackerPos=null;
+    renderAll();
+    return;
+  }
+
+  const attacker = state.P1.C[state.battle.attackerPos];
+  if(!attacker || attacker.uid!==state.battle.attackerUid) return;
+
+  const enemySide = "AI";
+  const sevenTargets = getRemainingSevenStarTargets("P1", attacker);
+
+  if(sevenTargets.length){
+    const pick = await askChoice(
+      "攻撃対象",
+      "七星剣：まだ攻撃していない相手キャラクターを選択してください。",
+      sevenTargets.map(c=>({
+        label:`${c.name}`,
+        sub:`ATK ${calcCurrentAtk(enemySide, c)}`,
+        value:`C:${c.uid}`,
+        card:c
+      }))
+    );
+    const [, uid] = String(pick).split(":");
+    await resolveBattle(attacker, uid);
+    return;
+  }
+
+  await __mw_chooseAttackTarget_patch04();
+};
+
+/* ---------------- バトル解決 拡張（七星剣） ---------------- */
+const __mw_resolveBattle_patch04 = resolveBattle;
+resolveBattle = async function(attacker, defenderUid){
+  if(attacker && defenderUid){
+    markSevenStarHit(attacker, defenderUid);
+  }
+  await __mw_resolveBattle_patch04(attacker, defenderUid);
+};
+
+/* ---------------- AI攻撃評価 拡張（七星剣） ---------------- */
+const __mw_pickBestAIAttackFor_patch04 = pickBestAIAttackFor;
+pickBestAIAttackFor = function(attacker){
+  const base = __mw_pickBestAIAttackFor_patch04(attacker);
+  if(!hasSevenStarSwordBonus("AI", attacker)) return base;
+
+  const available = getRemainingSevenStarTargets("AI", attacker);
+  if(!available.length) return base;
+
+  let best = null;
+  const atkA = calcCurrentAtk("AI", attacker);
+
+  for(const t of available){
+    const atkD = calcCurrentAtk("P1", t);
+    let score = 0;
+
+    if(atkA > atkD){
+      score += estimateRemoveValue(t) + 500;
+      if(t.no===8) score += 240;
+    }else if(atkA === atkD){
+      score += estimateRemoveValue(t) * 0.25;
+      score -= estimateRemoveValue(attacker) * 0.45;
+    }else{
+      score -= estimateRemoveValue(attacker) * 0.9;
+      score -= 160;
+    }
+
+    if(!best || score > best.score){
+      best = {type:"C", uid:t.uid, score};
+    }
+  }
+
+  return best || base;
+};
+
+const __mw_aiBattleBest_patch04 = aiBattleBest;
+aiBattleBest = async function(){
+  const p = state.AI;
+
+  for(let i=0;i<3;i++){
+    const a = p.C[i];
+    if(!a) continue;
+    if(a.flags.attackedCountThisTurn >= getMaxAttacks("AI", a)) continue;
+
+    while(a && a.flags.attackedCountThisTurn < getMaxAttacks("AI", a)){
+      const best = pickBestAIAttackFor(a);
+      if(!best) break;
+
+      if(best.type==="C"){
+        const t = state.P1.C.find(c=>c && c.uid===best.uid);
+        if(!t) break;
+
+        markSevenStarHit(a, t.uid);
+
+        const atkA = calcCurrentAtk("AI", a);
+        const atkD = calcCurrentAtk("P1", t);
+        log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
+
+        if(atkA > atkD){
+          await sendCharacterToWing("P1", t.uid);
+          log(`AI：撃破 ${t.name} → あなたウイング`);
+          await tryCattleTrigger_P1();
+          if(a.no===23) await breakOneShieldByEffect("P1", a.name);
+        }else if(atkA < atkD){
+          const saved = await tryBattleSurvive("AI", a);
+          if(!saved){
+            await sendCharacterToWing("AI", a.uid);
+            log(`AI：敗北 ${a.name} → AIウイング`);
+          }
+        }else{
+          const savedA = await tryBattleSurvive("AI", a);
+          const savedD = await tryBattleSurvive("P1", t);
+          if(!savedA) await sendCharacterToWing("AI", a.uid);
+          if(!savedD){
+            await sendCharacterToWing("P1", t.uid);
+            await tryCattleTrigger_P1();
+          }
+          log("AI：相打ち");
+        }
+
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        await sleep(180);
+
+        if(!state.AI.C[i] || state.AI.C[i].uid!==a.uid) break;
+        continue;
+      }
+
+      if(best.type==="S"){
+        const sh = state.P1.shield[best.idx];
+        if(!sh) break;
+        state.P1.shield[best.idx]=null;
+        state.P1.hand.push(sh);
+        log(`AI：シールド破壊（あなた）${best.idx+1} → あなた手札へ`);
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        await sleep(150);
+        break;
+      }
+
+      if(best.type==="D"){
+        const guarded = await tryMiikoDirectGuard("P1");
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        if(guarded) break;
+        await finishGame("AI");
+        return;
+      }
+
+      break;
+    }
+  }
+};
+
+/* ---------------- 画像反映補助 ---------------- */
+(async function patch04_refreshImageCache(){
+  try{
+    ensureInitialCollectionAndDeck();
+    const cache = getCache();
+    if(cache && cache.cardFiles){
+      const addMap = buildCardMapFromFileList(cache.cardFiles);
+      for(const k of Object.keys(addMap||{})){
+        state.img.cardUrlByNo[k] = vercelPathCards(addMap[k]);
+      }
+      renderAll();
+    }
+    log("PATCH04：画像反映補助完了（必要なら画像再スキャンを実行してください）");
+  }catch(err){
+    log(`PATCH04：画像反映補助失敗 ${String(err.message||err)}`, "warn");
+  }
+})();
