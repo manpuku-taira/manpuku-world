@@ -5627,3 +5627,234 @@ aiBattleBest = async function(){
 };
 
 log("PATCH 05_06_07_08 FIX 読み込み完了");
+
+/* =========================================================
+  PATCH 11
+  - 見参コストと見参先を分離
+  - 場に空きがあっても場キャラをコストに選択可能
+  - 見参先を自由に選べるように修正
+========================================================= */
+
+function getOpenCPositions(side){
+  const out = [];
+  for(let i=0;i<3;i++){
+    if(!state[side].C[i]) out.push(i);
+  }
+  return out;
+}
+
+async function chooseKensanDestination(side, availablePositions, summonCard){
+  if(!availablePositions.length) return null;
+
+  if(side==="AI"){
+    return availablePositions[0];
+  }
+
+  if(availablePositions.length===1){
+    return availablePositions[0];
+  }
+
+  const pick = await askChoice(
+    "見参先を選択",
+    `「${summonCard.name}」を出す場所を選んでください。`,
+    availablePositions.map(pos=>({
+      label:`C${pos+1}`,
+      sub:`見参先`,
+      value:String(pos)
+    }))
+  );
+
+  if(pick==null) return null;
+  return Number(pick);
+}
+
+async function doKensanSummonFlexible(side, summonPos, handIdx){
+  const p = state[side];
+  const card = p.hand[handIdx];
+  if(!card || card.summon!=="kensan") return false;
+
+  const cands = [];
+
+  /* 手札コスト */
+  for(let i=0;i<p.hand.length;i++){
+    if(i===handIdx) continue;
+    if(isCharacter(p.hand[i])){
+      cands.push({
+        from:"hand",
+        idx:i,
+        card:p.hand[i],
+        label:`手札：${p.hand[i].name}`
+      });
+    }
+  }
+
+  /* 場コスト */
+  for(let i=0;i<3;i++){
+    if(p.C[i]){
+      cands.push({
+        from:"C",
+        idx:i,
+        card:p.C[i],
+        label:`C${i+1}：${p.C[i].name}`
+      });
+    }
+  }
+
+  if(!cands.length){
+    log("見参：コスト候補なし", "warn");
+    return false;
+  }
+
+  let chosen = null;
+
+  if(side==="AI"){
+    /* AIは基本的に最も価値の低いキャラをコストにする */
+    const sorted = cands.slice().sort((a,b)=>{
+      const av = aiCardValue ? aiCardValue(side, a.card) : estimateRemoveValue(a.card);
+      const bv = aiCardValue ? aiCardValue(side, b.card) : estimateRemoveValue(b.card);
+      return av - bv;
+    });
+    chosen = sorted[0] || null;
+  }else{
+    const pick = await askChoice(
+      "見参（コスト）",
+      "ウイングへ送るキャラクターを選んでください。",
+      cands.map(x=>({
+        label:x.label,
+        value:`${x.from}:${x.idx}`,
+        card:x.card
+      }))
+    );
+    if(!pick) return false;
+
+    const [from, idxStr] = String(pick).split(":");
+    const idx = Number(idxStr);
+    chosen = cands.find(x=>x.from===from && x.idx===idx) || null;
+  }
+
+  if(!chosen) return false;
+
+  let freedPos = null;
+
+  /* 先にコスト処理 */
+  if(chosen.from==="hand"){
+    const moved = p.hand.splice(chosen.idx,1)[0];
+    moveToWing(side, moved);
+    log(`見参コスト：${moved.name} → ${sideName(side)}ウイング`);
+    if(chosen.idx < handIdx) handIdx -= 1;
+  }else if(chosen.from==="C"){
+    const moved = p.C[chosen.idx];
+    await stripEquipIfAny(side, moved);
+    p.C[chosen.idx] = null;
+    moveToWing(side, moved);
+    freedPos = chosen.idx;
+    log(`見参コスト：${moved.name} → ${sideName(side)}ウイング`);
+  }
+
+  /* 見参先候補を確定 */
+  const availablePositions = getOpenCPositions(side);
+
+  /* summonPos が空いていれば優先候補として先頭に */
+  let finalCandidates = availablePositions.slice();
+  if(Number.isInteger(summonPos) && finalCandidates.includes(summonPos)){
+    finalCandidates = [summonPos].concat(finalCandidates.filter(x=>x!==summonPos));
+  }
+
+  /* 場コストで空いた場所も当然候補に含まれる */
+  const dest = await chooseKensanDestination(side, finalCandidates, card);
+  if(dest==null || !finalCandidates.includes(dest)){
+    log("見参：見参先が無効です", "warn");
+    return false;
+  }
+
+  const placed = p.hand.splice(handIdx,1)[0];
+  if(!placed) return false;
+
+  p.C[dest] = placed;
+  state.selectedHandIndex = null;
+  state.announce.lastSelUid = null;
+
+  log(`見参：${placed.name} → C${dest+1}`);
+  renderAll();
+  await onEnterTriggers(side, {zone:"C", pos:dest, card:placed});
+  return true;
+}
+
+/* 場キャラを直接タップした時の専用処理 */
+async function doKensanSummonByTappingOccupiedC(side, occupiedPos, handIdx){
+  const p = state[side];
+  const summonCard = p.hand[handIdx];
+  const costCard = p.C[occupiedPos];
+
+  if(!summonCard || summonCard.summon!=="kensan" || !costCard) return false;
+
+  if(side==="P1"){
+    const ok = await askYesNo(
+      "見参",
+      `C${occupiedPos+1}の「${costCard.name}」を見参コストにしますか？`
+    );
+    if(!ok) return false;
+  }
+
+  await stripEquipIfAny(side, costCard);
+  p.C[occupiedPos] = null;
+  moveToWing(side, costCard);
+  log(`見参コスト：${costCard.name} → ${sideName(side)}ウイング`);
+
+  const availablePositions = getOpenCPositions(side);
+  const dest = await chooseKensanDestination(side, availablePositions, summonCard);
+  if(dest==null || !availablePositions.includes(dest)){
+    log("見参：見参先が無効です", "warn");
+    return false;
+  }
+
+  const placed = p.hand.splice(handIdx,1)[0];
+  if(!placed) return false;
+
+  p.C[dest] = placed;
+  state.selectedHandIndex = null;
+  state.announce.lastSelUid = null;
+
+  log(`見参：${placed.name} → C${dest+1}`);
+  renderAll();
+  await onEnterTriggers(side, {zone:"C", pos:dest, card:placed});
+  return true;
+}
+
+/* 既存の onClickYourC を上書き */
+const __mw_onClickYourC_patch11 = onClickYourC;
+onClickYourC = async function(pos){
+  if(state.activeSide!=="P1" || state.gameOver) return;
+
+  if(state.phase==="BATTLE"){
+    if(!canBattleThisTurn("P1")){
+      log(battleBanReason("P1"), "warn");
+      return;
+    }
+    const c = state.P1.C[pos];
+    if(!c) return;
+    await selectAttacker("P1", pos, c);
+    return;
+  }
+
+  if(state.phase!=="MAIN") return;
+  if(state.selectedHandIndex==null) return;
+
+  const card = state.P1.hand[state.selectedHandIndex];
+  if(!card || !isCharacter(card)) return;
+
+  /* 見参キャラなら、空き/埋まりに関係なくCタップで処理 */
+  if(card.summon==="kensan"){
+    if(state.P1.C[pos]){
+      await doKensanSummonByTappingOccupiedC("P1", pos, state.selectedHandIndex);
+      return;
+    }else{
+      await doKensanSummonFlexible("P1", pos, state.selectedHandIndex);
+      return;
+    }
+  }
+
+  return await __mw_onClickYourC_patch11(pos);
+};
+
+log("PATCH 11 読み込み完了");
