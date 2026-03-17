@@ -4327,3 +4327,229 @@ async function runCounterChain(initialLink){
   const negatorKind = negated && chain[1] ? chain[1].kind : null;
   return { negated, negatorKind, chain, active };
 }
+/* =========================================================
+  PATCH 03
+  選択ウィンドウ閉じで停止する不具合修正
+  + AIのクルエラサーチをAI内完結化
+========================================================= */
+
+/* -----------------------------------------
+  choice modal を閉じても停止しないようにする
+----------------------------------------- */
+let __mwChoiceFallbackValue = null;
+
+function __mwResolveChoiceByClose(){
+  if(choiceResolver){
+    const r = choiceResolver;
+    choiceResolver = null;
+    hideModal("choiceM");
+    r(__mwChoiceFallbackValue);
+  }
+}
+
+function askChoice(title, message, items){
+  if(!el.choiceTitle || !el.choiceBody){
+    return Promise.resolve(items?.[0]?.value ?? null);
+  }
+
+  el.choiceTitle.textContent = title;
+  el.choiceBody.innerHTML = "";
+
+  const msg = document.createElement("div");
+  msg.className = "choiceMsg";
+  msg.textContent = message;
+  el.choiceBody.appendChild(msg);
+
+  const list = document.createElement("div");
+  list.className = "choiceList";
+
+  for(const it of items){
+    const row = document.createElement("div");
+    row.className = "choiceItem";
+
+    const th = document.createElement("div");
+    th.className = "choiceThumb";
+    if(it.card){
+      const url = state.img.cardUrlByNo[pad2(it.card.no)];
+      if(url) th.style.backgroundImage = `url("${url}")`;
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "choiceMeta";
+    const tt = document.createElement("div");
+    tt.className = "t";
+    tt.textContent = it.label;
+    const ss = document.createElement("div");
+    ss.className = "s";
+    ss.textContent = it.sub || "";
+    meta.appendChild(tt);
+    if(ss.textContent) meta.appendChild(ss);
+
+    row.appendChild(th);
+    row.appendChild(meta);
+
+    row.addEventListener("click", ()=>{
+      hideModal("choiceM");
+      if(choiceResolver){
+        const r = choiceResolver;
+        choiceResolver = null;
+        r(it.value);
+      }
+    }, {passive:true});
+
+    if(it.card){
+      bindLongPress(row, ()=> openViewer(it.card, it.viewerCtx||null), 620);
+    }
+    list.appendChild(row);
+  }
+
+  el.choiceBody.appendChild(list);
+
+  /* 閉じる時の既定値を決める
+     PASS > X > N > null の順で安全に倒す */
+  __mwChoiceFallbackValue = null;
+  if(Array.isArray(items)){
+    const vals = items.map(x=>x?.value);
+    if(vals.includes("PASS")) __mwChoiceFallbackValue = "PASS";
+    else if(vals.includes("X")) __mwChoiceFallbackValue = "X";
+    else if(vals.includes("N")) __mwChoiceFallbackValue = "N";
+    else __mwChoiceFallbackValue = null;
+  }
+
+  showModal("choiceM");
+  return new Promise((resolve)=>{
+    choiceResolver = resolve;
+  });
+}
+
+/* choiceモーダルを閉じた時に未解決のまま残さない */
+document.addEventListener("click", (e)=>{
+  const t = e.target;
+  if(!(t instanceof HTMLElement)) return;
+  const close = t.getAttribute("data-close");
+  if(close === "choice"){
+    __mwResolveChoiceByClose();
+  }
+}, {passive:true});
+
+/* -----------------------------------------
+  クルエラの名称サーチにAI自動選択を追加
+----------------------------------------- */
+async function searchFromDeckOrWingByNameIncludes(side, word, n, opt={}){
+  const p = state[side];
+  const poolBase = ()=>[
+    ...p.deck.map(c=>({src:"deck", c})),
+    ...p.wing.map(c=>({src:"wing", c}))
+  ].filter(x=>x.c && x.c.name.includes(word));
+
+  const firstPool = poolBase();
+  if(!firstPool.length){
+    log(`サーチ失敗：名称「${word}」が見つかりません`, "warn");
+    return;
+  }
+
+  for(let k=0;k<n;k++){
+    const pool = poolBase();
+    if(!pool.length) break;
+
+    if(opt.aiAuto){
+      /* AIは内部で完結。基本は deck 優先、なければ wing */
+      let pick = pool.find(x=>x.src==="deck") || pool[0];
+      if(pick.src==="deck"){
+        const moved = removeFromZone(p.deck, pick.c.uid);
+        if(moved) p.hand.push(moved);
+      }else{
+        const moved = removeFromZone(p.wing, pick.c.uid);
+        if(moved) p.hand.push(moved);
+      }
+      log(`AI：サーチ（名称「${word}」）`);
+      continue;
+    }
+
+    const items = pool.map(x=>({
+      label:`${x.c.name}`,
+      sub:`${x.src.toUpperCase()} / NAME:${word}`,
+      value:`${x.src}:${x.c.uid}`,
+      card:x.c
+    }));
+
+    const pick = await askChoice("サーチ", `名称「${word}」を手札に加える（${k+1}/${n}）`, items);
+    if(!pick){
+      log(`サーチ中断：名称「${word}」`, "warn");
+      return;
+    }
+
+    const [src, uid] = String(pick).split(":");
+    if(src==="deck"){
+      const moved = removeFromZone(p.deck, uid);
+      if(moved) p.hand.push(moved);
+    }else if(src==="wing"){
+      const moved = removeFromZone(p.wing, uid);
+      if(moved) p.hand.push(moved);
+    }
+  }
+  log(`サーチ：名称「${word}」を手札へ`);
+}
+
+/* -----------------------------------------
+  クルエラ発動時、AIはAI内でサーチ完結
+----------------------------------------- */
+async function activateCruellaSearch(side, card){
+  if(state.activeSide!==side || state.phase!=="MAIN"){
+    log("今は発動できません", "warn");
+    return;
+  }
+  if(state.limits[side].cruellaUsed){
+    log("クルエラ：このターンは既に使用しています", "warn");
+    return;
+  }
+
+  if(side==="AI"){
+    state.limits[side].cruellaUsed = true;
+    await searchFromDeckOrWingByNameIncludes(side, "黒魔法", 1, {aiAuto:true});
+    renderAll();
+    return;
+  }
+
+  if(side==="P1"){
+    if(!(await askYesNo("クルエラ", "効果を発動しますか？（カード名に「黒魔法」を含むカードをサーチ）"))){
+      return;
+    }
+    state.limits[side].cruellaUsed = true;
+    await searchFromDeckOrWingByNameIncludes(side, "黒魔法", 1);
+    renderAll();
+  }
+}
+
+/* -----------------------------------------
+  カウンター確認を閉じても停止しないよう補強
+----------------------------------------- */
+async function chooseCounterForSide(side, prevLink){
+  const available = getAvailableCounters(side, prevLink);
+
+  if(available.length === 0){
+    return "PASS";
+  }
+
+  const items = [];
+  if(available.includes("HANDGATA")){
+    items.push({label:"手形で無効", value:"HANDGATA"});
+  }
+  if(available.includes("MEMORY")){
+    items.push({label:"記憶抹消で無効", value:"MEMORY"});
+  }
+  items.push({label:"しない", value:"PASS"});
+
+  if(side === "P1"){
+    const v = await askChoice(
+      "チェーン確認",
+      `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。\n反応しますか？`,
+      items
+    );
+    return v || "PASS";
+  }
+
+  if(available.includes("MEMORY")) return "MEMORY";
+  if(available.includes("HANDGATA")) return "HANDGATA";
+  return "PASS";
+}
