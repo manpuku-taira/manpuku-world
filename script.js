@@ -5401,3 +5401,224 @@ tryKensanSummon = async function(side, card){
   renderAll();
   return true;
 };
+/* =========================================================
+  PATCH 08
+  - タータ：BUGBUG西遊記サーチを選択式に修正
+  - 見参：場が埋まっていても、場のキャラをコストにして入れ替え見参可能化
+========================================================= */
+
+/* ---------------- タータ：選択式サーチ ---------------- */
+async function searchDeckByTitleTagSelectable(side, titleTag, n, opt={}){
+  const p = state[side];
+
+  for(let k=0;k<n;k++){
+    const pool = p.deck.filter(c=>c && c.titleTag===titleTag);
+    if(!pool.length){
+      if(k===0) log(`サーチ失敗：タイトルタグ「${titleTag}」がデッキにありません`, "warn");
+      break;
+    }
+
+    if(opt.aiAuto){
+      const picked = pool[0];
+      const moved = removeFromZone(p.deck, picked.uid);
+      if(moved) p.hand.push(moved);
+      log(`AI：サーチ（${titleTag}）`);
+      continue;
+    }
+
+    const pick = await askChoice(
+      "タータ",
+      `デッキからタイトルタグ「${titleTag}」のカードを選択してください（${k+1}/${n}）`,
+      pool.map(c=>({
+        label: c.name,
+        sub: `DECK / ${c.type.toUpperCase()} / ${c.titleTag}`,
+        value: c.uid,
+        card: c
+      })).concat([{label:"終了", value:"STOP"}])
+    );
+
+    if(!pick || pick==="STOP") break;
+
+    const moved = removeFromZone(p.deck, String(pick));
+    if(moved) p.hand.push(moved);
+  }
+
+  renderAll();
+}
+
+activateTataExchange = async function(side, card){
+  if(state.limits[side].tataUsed){
+    log("タータ：このターンは既に使用しています", "warn");
+    return;
+  }
+  state.limits[side].tataUsed = true;
+
+  const p = state[side];
+  const max = Math.min(2, p.hand.length);
+  if(max===0){
+    log("タータ：手札がありません", "warn");
+    return;
+  }
+
+  const sent = [];
+
+  if(side==="AI"){
+    const n = Math.min(2, p.hand.length);
+    for(let k=0;k<n;k++){
+      const idx = chooseAIDiscardIndex(side);
+      if(idx < 0) break;
+      const moved = p.hand.splice(idx,1)[0];
+      moveToWing(side, moved);
+      sent.push(moved);
+    }
+    if(sent.length > 0){
+      await searchDeckByTitleTagSelectable(side, "BUGBUG西遊記", sent.length, {aiAuto:true});
+      log(`AI：タータ ${sent.length}枚交換`);
+    }else{
+      log("AI：タータ 不発");
+    }
+    renderAll();
+    return;
+  }
+
+  if(!(await askYesNo("タータ", "手札を1〜2枚ウイングに送り、同じ枚数だけデッキからタイトルタグ「BUGBUG西遊記」のカードを選んで手札に加えますか？"))){
+    state.limits[side].tataUsed = false;
+    return;
+  }
+
+  for(let k=0;k<max;k++){
+    const items = p.hand.map((c, i)=>({
+      label:`手札：${c.name}`,
+      sub:`No.${pad2(c.no)} / ${c.type.toUpperCase()}`,
+      value:String(i),
+      card:c
+    })).concat([{label:"終了", value:"STOP"}]);
+
+    const v = await askChoice("タータ（コスト）", `ウイングへ送るカードを選択してください（${k+1}/${max}）`, items);
+    if(!v || v==="STOP") break;
+
+    const idx = Number(v);
+    if(Number.isNaN(idx) || !p.hand[idx]) break;
+
+    const moved = p.hand.splice(idx,1)[0];
+    moveToWing(side, moved);
+    sent.push(moved);
+    renderAll();
+  }
+
+  if(sent.length <= 0){
+    log("タータ：送ったカードがないため終了");
+    state.limits[side].tataUsed = false;
+    renderAll();
+    return;
+  }
+
+  await searchDeckByTitleTagSelectable(side, "BUGBUG西遊記", sent.length);
+  log(`タータ：${sent.length}枚交換（選択サーチ）`);
+  renderAll();
+};
+
+/* ---------------- 見参：場のキャラをコストにして入れ替え可能化 ---------------- */
+async function doKensanSummonUsingOccupiedC(side, cPos, handIdx){
+  const p = state[side];
+  const card = p.hand[handIdx];
+  if(!card || card.summon!=="kensan") return false;
+
+  const current = p.C[cPos];
+  if(!current){
+    return false;
+  }
+
+  if(side==="P1"){
+    const ok = await askYesNo("見参", `C${cPos+1}の「${current.name}」をコストにして、同じ場所へ「${card.name}」を見参しますか？`);
+    if(!ok) return false;
+  }
+
+  await stripEquipIfAny(side, current);
+  p.C[cPos] = null;
+  moveToWing(side, current);
+  log(`見参コスト：${current.name} → ${sideName(side)}ウイング`);
+
+  const placed = p.hand.splice(handIdx,1)[0];
+  p.C[cPos] = placed;
+  state.selectedHandIndex = null;
+  state.announce.lastSelUid = null;
+
+  log(`見参：${placed.name}`);
+  renderAll();
+  await onEnterTriggers(side, {zone:"C", pos:cPos, card:placed});
+  return true;
+}
+
+const __mw_onClickYourC_patch08 = onClickYourC;
+onClickYourC = async function(pos){
+  if(state.activeSide!=="P1" || state.gameOver) return;
+
+  if(state.phase==="BATTLE"){
+    if(!canBattleThisTurn("P1")){
+      log(battleBanReason("P1"), "warn");
+      return;
+    }
+    const c = state.P1.C[pos];
+    if(!c) return;
+    await selectAttacker("P1", pos, c);
+    return;
+  }
+
+  if(state.phase!=="MAIN") return;
+  if(state.selectedHandIndex==null) return;
+
+  const card = state.P1.hand[state.selectedHandIndex];
+  if(!card || !isCharacter(card)) return;
+
+  /* 見参キャラを選択中で、そのCが埋まっているなら、先にその場のキャラをコストにして入れ替え見参 */
+  if(card.summon==="kensan" && state.P1.C[pos]){
+    await doKensanSummonUsingOccupiedC("P1", pos, state.selectedHandIndex);
+    return;
+  }
+
+  /* それ以外は元の処理 */
+  return await __mw_onClickYourC_patch08(pos);
+};
+
+/* ---------------- AI側の見参入れ替え補助（必要時に利用できるよう追加） ---------------- */
+async function aiDoKensanSummonToBestSlot(handIdx){
+  const p = state.AI;
+  const card = p.hand[handIdx];
+  if(!card || card.summon!=="kensan") return false;
+
+  let pos = findEmptyIndex(p.C);
+
+  /* 空きが無ければ最も価値の低い自分キャラをコストにして入れ替える */
+  if(pos < 0){
+    let bestPos = -1;
+    let bestScore = Infinity;
+    for(let i=0;i<3;i++){
+      const c = p.C[i];
+      if(!c) continue;
+      let s = estimateRemoveValue(c);
+      if(c.no===8) s += 300;
+      if(c.no===23) s += 260;
+      if(c.no===29) s += 220;
+      if(s < bestScore){
+        bestScore = s;
+        bestPos = i;
+      }
+    }
+    if(bestPos < 0) return false;
+
+    const cost = p.C[bestPos];
+    await stripEquipIfAny("AI", cost);
+    p.C[bestPos] = null;
+    moveToWing("AI", cost);
+    log(`AI：見参コスト ${cost.name} → AIウイング`);
+    pos = bestPos;
+  }
+
+  const placed = p.hand.splice(handIdx,1)[0];
+  p.C[pos] = placed;
+  log(`AI：見参 ${placed.name}`);
+  renderAll();
+  await onEnterTriggers("AI", {zone:"C", pos, card:placed});
+  return true;
+};
