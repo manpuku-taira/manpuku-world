@@ -5224,3 +5224,180 @@ aiBattleBest = async function(){
     log(`PATCH04：画像反映補助失敗 ${String(err.message||err)}`, "warn");
   }
 })();
+/* =========================================================
+  PATCH 05+06+07 統合
+  ・桜蘭の陰陽術（バトル時発動）
+  ・レイチェル装備条件修正
+  ・タータ選択式サーチ
+  ・顕山「入れ替え召喚」対応
+========================================================= */
+
+/* =========================
+  ① 桜蘭の陰陽術（No.15）
+========================= */
+function hasOuranInHand(side){
+  return state[side].hand.some(c=>c && c.no===15);
+}
+function takeOuranFromHand(side){
+  const i = state[side].hand.findIndex(c=>c && c.no===15);
+  if(i<0) return null;
+  return state[side].hand.splice(i,1)[0];
+}
+async function tryOuran(side, own, enemy){
+  if(!hasOuranInHand(side)) return;
+
+  if(side==="P1"){
+    const ok = await askYesNo("桜蘭の陰陽術","発動しますか？");
+    if(!ok) return;
+  }
+
+  const card = takeOuranFromHand(side);
+  if(!card) return;
+
+  moveToWing(side, card);
+  own.tempAtk += 1000;
+  log(`${sideName(side)}：桜蘭の陰陽術 → ATK+1000`);
+}
+
+/* resolveBattle 差し替え */
+const __rb = resolveBattle;
+resolveBattle = async function(attacker, defenderUid){
+  const enemy = opponent("P1");
+  const defender = state[enemy].C.find(c=>c && c.uid===defenderUid);
+  if(!defender) return;
+
+  await tryOuran("P1", attacker, defender);
+  await tryOuran("AI", defender, attacker);
+
+  const atkA = calcCurrentAtk("P1", attacker);
+  const atkD = calcCurrentAtk("AI", defender);
+
+  if(atkA > atkD){
+    await sendCharacterToWing("AI", defender.uid);
+    if(attacker.no===23 && attacker.equipUid){
+      await breakOneShieldByEffect("AI", attacker.name);
+    }
+  }else if(atkA < atkD){
+    await sendCharacterToWing("P1", attacker.uid);
+  }else{
+    await sendCharacterToWing("AI", defender.uid);
+    await sendCharacterToWing("P1", attacker.uid);
+  }
+
+  attacker.flags.attackedCountThisTurn++;
+  renderAll();
+};
+
+/* =========================
+  ② レイチェル修正
+========================= */
+const __orig_break = breakOneShieldByEffect;
+breakOneShieldByEffect = async function(side, name){
+  const attacker = state[side].C.find(c=>c && c.name===name);
+  if(!attacker || !attacker.equipUid){
+    return; // 装備していないなら発動しない
+  }
+  await __orig_break(side, name);
+};
+
+/* =========================
+  ③ タータ修正（選択式）
+========================= */
+async function searchBUGBUGSelectable(side, max){
+  const p = state[side];
+  const pool = p.deck.filter(c=>c && c.titleTag==="BUGBUG西遊記");
+
+  if(!pool.length) return;
+
+  for(let i=0;i<max;i++){
+    if(!pool.length) break;
+
+    const pick = await askChoice(
+      "タータ",
+      `カードを選択 (${i+1}/${max})`,
+      pool.map(c=>({
+        label:c.name,
+        value:c.uid,
+        card:c
+      })).concat([{label:"終了", value:"STOP"}])
+    );
+
+    if(!pick || pick==="STOP") break;
+
+    const card = removeFromZone(p.deck, pick);
+    if(card) p.hand.push(card);
+  }
+
+  log("タータ：選択サーチ");
+}
+
+/* =========================
+  ④ 顕山 入れ替え対応（最重要）
+========================= */
+
+function getEmptyC(side){
+  for(let i=0;i<3;i++){
+    if(!state[side].C[i]) return i;
+  }
+  return -1;
+}
+
+async function chooseKensanCostOrEmpty(side){
+  const empty = getEmptyC(side);
+
+  // 空きがあるならそのまま使う
+  if(empty >= 0) return {pos:empty, cost:null};
+
+  // 空きが無い場合 → 入れ替え選択
+  if(side==="P1"){
+    const chars = state[side].C.filter(Boolean);
+
+    const pick = await askChoice(
+      "顕山",
+      "コストにするキャラクターを選択してください",
+      chars.map(c=>({
+        label:c.name,
+        value:c.uid,
+        card:c
+      }))
+    );
+
+    if(!pick) return null;
+
+    const pos = state[side].C.findIndex(c=>c && c.uid===pick);
+    return {pos, cost:pick};
+  }
+
+  // AIは一番弱いキャラをコストにする
+  const idx = state[side].C
+    .map((c,i)=>({c,i}))
+    .filter(x=>x.c)
+    .sort((a,b)=>calcCurrentAtk(side,a.c)-calcCurrentAtk(side,b.c))[0];
+
+  return {pos:idx.i, cost:idx.c.uid};
+}
+
+/* 見参処理差し替え */
+const __kensan = tryKensanSummon;
+tryKensanSummon = async function(side, card){
+  const info = await chooseKensanCostOrEmpty(side);
+  if(!info) return false;
+
+  const p = state[side];
+
+  // コスト処理（先にウイングへ送る）
+  if(info.cost){
+    await sendCharacterToWing(side, info.cost);
+  }
+
+  // 手札から出す
+  const idx = p.hand.findIndex(c=>c && c.uid===card.uid);
+  if(idx < 0) return false;
+
+  const c = p.hand.splice(idx,1)[0];
+  p.C[info.pos] = c;
+
+  log(`${sideName(side)}：見参 ${c.name}`);
+  renderAll();
+  return true;
+};
