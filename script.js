@@ -7100,3 +7100,128 @@ runCounterChain = async function(initialLink){
 };
 
 log("PATCH 18R 読み込み完了");
+/* =========================================================
+  PATCH 20
+  - 七星剣装備時、P1側でも未攻撃の相手が残っていれば再攻撃可能にする
+  - 1回攻撃後に半透明になって選べなくなる不具合を修正
+========================================================= */
+
+function mw20HasSevenStarMultiAttack(side, card){
+  if(!card || !isCharacter(card)) return false;
+  if(typeof hasSevenStarSwordBonus === "function"){
+    return hasSevenStarSwordBonus(side, card);
+  }
+
+  if(!card.equipUid) return false;
+  const eq = getEquippedItem(side, card);
+  if(!eq || eq.no !== 30) return false;
+  return card.tags && card.tags.includes("剣士");
+}
+
+function mw20RemainingSevenStarTargets(side, card){
+  if(!mw20HasSevenStarMultiAttack(side, card)) return [];
+  if(typeof getRemainingSevenStarTargets === "function"){
+    return getRemainingSevenStarTargets(side, card) || [];
+  }
+
+  const enemy = opponent(side);
+  const hit = Array.isArray(card.flags?.sevenStarHitUidsThisTurn)
+    ? card.flags.sevenStarHitUidsThisTurn
+    : [];
+
+  return state[enemy].C.filter(c=>c && !hit.includes(c.uid));
+}
+
+/* ---------------- P1の攻撃可能判定を上書き ---------------- */
+isAttackableNow_P1 = function(card){
+  if(!card || !isCharacter(card)) return false;
+  if(state.gameOver) return false;
+  if(state.activeSide!=="P1") return false;
+  if(state.phase!=="BATTLE") return false;
+  if(!canBattleThisTurn("P1")) return false;
+
+  /* 七星剣の全体攻撃中は、未攻撃対象が残っている限り攻撃可能 */
+  if(mw20HasSevenStarMultiAttack("P1", card)){
+    const remain = mw20RemainingSevenStarTargets("P1", card);
+    if(remain.length > 0) return true;
+  }
+
+  return (card.flags.attackedCountThisTurn < getMaxAttacks("P1", card));
+};
+
+/* ---------------- プレイヤー攻撃者選択を補強 ---------------- */
+const __mw_selectAttacker_patch20 = selectAttacker;
+selectAttacker = async function(side, pos, card){
+  if(side!=="P1") return;
+  if(!canBattleThisTurn("P1")){
+    log(battleBanReason("P1"), "warn");
+    return;
+  }
+
+  if(mw20HasSevenStarMultiAttack("P1", card)){
+    const remain = mw20RemainingSevenStarTargets("P1", card);
+
+    /* 未攻撃対象が残っているなら attackedCountThisTurn に関係なく選択可 */
+    if(remain.length > 0){
+      state.battle.attackerUid = card.uid;
+      state.battle.attackerPos = pos;
+      state.battle.attackerSide = side;
+      log(`攻撃者選択：${card.name}（七星剣連撃）`);
+      renderAll();
+      await chooseAttackTarget();
+      return;
+    }
+  }
+
+  return await __mw_selectAttacker_patch20(side, pos, card);
+};
+
+/* ---------------- 描画上の半透明化も補正 ---------------- */
+const __mw_makeSlot_patch20 = makeSlot;
+makeSlot = function(card, side, ctx, opts={}){
+  const slot = __mw_makeSlot_patch20(card, side, ctx, opts);
+
+  if(
+    card &&
+    ctx?.side==="P1" &&
+    ctx?.zone==="C" &&
+    isCharacter(card) &&
+    state.activeSide==="P1" &&
+    state.phase==="BATTLE"
+  ){
+    if(mw20HasSevenStarMultiAttack("P1", card)){
+      const remain = mw20RemainingSevenStarTargets("P1", card);
+      if(remain.length > 0){
+        slot.style.opacity = "1";
+
+        const hasAtkBadge = Array.from(slot.children).some(n =>
+          n instanceof HTMLElement &&
+          n.textContent === "⚔"
+        );
+
+        if(!hasAtkBadge){
+          const m = document.createElement("div");
+          m.style.position = "absolute";
+          m.style.left = "6px";
+          m.style.bottom = "6px";
+          m.style.width = "18px";
+          m.style.height = "18px";
+          m.style.borderRadius = "9px";
+          m.style.display = "flex";
+          m.style.alignItems = "center";
+          m.style.justifyContent = "center";
+          m.style.fontSize = "12px";
+          m.style.fontWeight = "1000";
+          m.style.background = "rgba(0,0,0,.55)";
+          m.style.border = "1px solid rgba(89,242,255,.28)";
+          m.textContent = "⚔";
+          slot.appendChild(m);
+        }
+      }
+    }
+  }
+
+  return slot;
+};
+
+log("PATCH 20 読み込み完了");
