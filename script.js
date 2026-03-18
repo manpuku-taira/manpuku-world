@@ -6405,3 +6405,344 @@ aiTakeTurn = async function(){
 };
 
 log("PATCH 13+14 読み込み完了");
+/* =========================================================
+  PATCH 15
+  - No.22 インフルエンサーまりも 追加
+  - サーチ/デッキ見参に反応して、そのカードをターン中無効
+  - 将来の無効基盤の下準備
+========================================================= */
+
+/* ---------------- カード追加 ---------------- */
+(function addCard22_Marimo(){
+  const def = {
+    no:22,
+    name:"インフルエンサーまりも",
+    type:"character",
+    tags:["人間","配信","人気"],
+    titleTag:"BUGBUG西遊記",
+    text: normalizeText(
+      "相手の以下のいずれかの効果が発動した時、手札からウイングに送り発動できる。\n" +
+      "そのターンの終わりまで、その効果を発動したカードの効果を全て無効にする。\n" +
+      "対象：\n" +
+      "・デッキからカードを手札に加える効果\n" +
+      "・デッキからキャラクターを見参する効果"
+    ),
+    rank:3,
+    atk:400
+  };
+
+  const idx = CardRegistry.findIndex(c=>c.no===22);
+  if(idx >= 0) CardRegistry[idx] = def;
+  else CardRegistry.push(def);
+
+  if(!CARD_NOS.includes(22)){
+    CARD_NOS.push(22);
+    CARD_NOS.sort((a,b)=>a-b);
+  }
+
+  ensureInitialCollectionAndDeck();
+  log("PATCH15：No.22 インフルエンサーまりも を登録");
+})();
+
+/* ---------------- まりも無効基盤 ---------------- */
+if(!state.effectLocks){
+  state.effectLocks = [];
+}
+if(!state.effectContext){
+  state.effectContext = null;
+}
+
+function mwCurrentTurnLockToken(){
+  return `${state.turn}:${state.activeSide}`;
+}
+function mwCleanupEffectLocks(){
+  const token = mwCurrentTurnLockToken();
+  state.effectLocks = state.effectLocks.filter(x => x && x.token === token);
+}
+function mwRegisterTurnMute(sourceCard, sourceSide, reason="MARIMO"){
+  if(!sourceCard) return;
+  mwCleanupEffectLocks();
+
+  const exists = state.effectLocks.some(x =>
+    x &&
+    x.uid === sourceCard.uid &&
+    x.token === mwCurrentTurnLockToken() &&
+    x.reason === reason
+  );
+  if(exists) return;
+
+  state.effectLocks.push({
+    uid: sourceCard.uid,
+    side: sourceSide,
+    token: mwCurrentTurnLockToken(),
+    reason
+  });
+}
+function mwIsCardMutedThisTurn(card){
+  if(!card) return false;
+  mwCleanupEffectLocks();
+  return state.effectLocks.some(x => x && x.uid === card.uid && x.token === mwCurrentTurnLockToken());
+}
+function mwFindCardByUidEverywhere(side, uid){
+  if(!uid) return null;
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.hand || []),
+    ...(p.wing || []),
+    ...(p.deck || []),
+    ...(p.outside || [])
+  ];
+  return zones.find(c=>c && c.uid===uid) || null;
+}
+function mwFindLikelySourceCard(link){
+  if(!link) return null;
+  if(link.sourceCard && link.sourceCard.uid){
+    const live = mwFindCardByUidEverywhere(link.activatorSide, link.sourceCard.uid);
+    return live || link.sourceCard;
+  }
+
+  const side = link.activatorSide;
+  const label = link.label;
+  if(!side || !label) return null;
+
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.wing || []),
+    ...(p.hand || [])
+  ];
+  return zones.find(c=>c && c.name===label) || null;
+}
+function mwFindMarimoInHand(side){
+  return state[side].hand.find(c=>c && c.no===22) || null;
+}
+function mwTakeMarimoFromHand(side){
+  const idx = state[side].hand.findIndex(c=>c && c.no===22);
+  if(idx < 0) return null;
+  return state[side].hand.splice(idx,1)[0];
+}
+
+/* ---------------- まりも発動 ---------------- */
+async function mwTryActivateMarimoAgainst(sourceSide, sourceCard, triggerType){
+  if(!sourceCard) return false;
+
+  const marimoSide = opponent(sourceSide);
+  const marimo = mwFindMarimoInHand(marimoSide);
+  if(!marimo) return false;
+
+  if(mwIsCardMutedThisTurn(sourceCard)){
+    return true; // すでに封印済みなら現効果も不成立扱い
+  }
+
+  if(marimoSide==="P1"){
+    const ok = await askYesNo(
+      "インフルエンサーまりも",
+      `${sideName(sourceSide)}の「${sourceCard.name}」が対象効果（${triggerType}）を発動しました。\n` +
+      "インフルエンサーまりもを手札からウイングに送り、\n" +
+      "そのターンの終わりまでこのカードの効果を全て無効にしますか？"
+    );
+    if(!ok) return false;
+  }
+
+  const moved = mwTakeMarimoFromHand(marimoSide);
+  if(!moved) return false;
+
+  moveToWing(marimoSide, moved);
+  mwRegisterTurnMute(sourceCard, sourceSide, "MARIMO");
+  log(`${sideName(marimoSide)}：インフルエンサーまりもを発動 → ${sourceCard.name} をターン中無効`);
+  renderAll();
+  return true;
+}
+
+/* ---------------- 効果処理入口で「既にまりもで封印済み」を止める ---------------- */
+const __mw_processActivatedEffect_patch15 = processActivatedEffect;
+processActivatedEffect = async function(link){
+  mwCleanupEffectLocks();
+
+  const sourceCard = mwFindLikelySourceCard(link);
+  if(sourceCard && mwIsCardMutedThisTurn(sourceCard)){
+    log(`${sourceCard.name}：インフルエンサーまりもによりこのターン効果を発動できない`, "warn");
+    if(link && link.onNegated){
+      await link.onNegated({negated:true, negatorKind:"MARIMO"});
+    }
+    return {
+      ok:false,
+      detail:{negated:true, negatorKind:"MARIMO"}
+    };
+  }
+
+  state.effectContext = {
+    sourceCard: sourceCard || null,
+    sourceSide: link ? link.activatorSide : null,
+    label: link ? link.label : ""
+  };
+
+  try{
+    return await __mw_processActivatedEffect_patch15(link);
+  }finally{
+    state.effectContext = null;
+  }
+};
+
+/* ---------------- サーチ系にまりも割り込み ---------------- */
+async function mwCheckMarimoForDeckToHand(){
+  const ctx = state.effectContext;
+  if(!ctx || !ctx.sourceCard || !ctx.sourceSide) return false;
+  return await mwTryActivateMarimoAgainst(ctx.sourceSide, ctx.sourceCard, "デッキから手札に加える効果");
+}
+
+const __mw_searchFromDeckOrWingByTag_patch15 = searchFromDeckOrWingByTag;
+searchFromDeckOrWingByTag = async function(side, tag, n, opt={}){
+  if(await mwCheckMarimoForDeckToHand()){
+    log("まりも：サーチ効果を無効");
+    return;
+  }
+  return await __mw_searchFromDeckOrWingByTag_patch15(side, tag, n, opt);
+};
+
+const __mw_searchFromDeckOrWingByNameIncludes_patch15 = searchFromDeckOrWingByNameIncludes;
+searchFromDeckOrWingByNameIncludes = async function(side, word, n, opt={}){
+  if(await mwCheckMarimoForDeckToHand()){
+    log("まりも：サーチ効果を無効");
+    return;
+  }
+  return await __mw_searchFromDeckOrWingByNameIncludes_patch15(side, word, n, opt);
+};
+
+const __mw_searchDeckByTitleTagItem_patch15 = searchDeckByTitleTagItem;
+searchDeckByTitleTagItem = async function(side, titleTag, n, opt={}){
+  if(await mwCheckMarimoForDeckToHand()){
+    log("まりも：サーチ効果を無効");
+    return;
+  }
+  return await __mw_searchDeckByTitleTagItem_patch15(side, titleTag, n, opt);
+};
+
+if(typeof searchDeckOrWingByTitleTagItem === "function"){
+  const __mw_searchDeckOrWingByTitleTagItem_patch15 = searchDeckOrWingByTitleTagItem;
+  searchDeckOrWingByTitleTagItem = async function(side, titleTag, n, opt={}){
+    if(await mwCheckMarimoForDeckToHand()){
+      log("まりも：サーチ効果を無効");
+      return;
+    }
+    return await __mw_searchDeckOrWingByTitleTagItem_patch15(side, titleTag, n, opt);
+  };
+}
+
+if(typeof searchDeckByTitleTagSelectable === "function"){
+  const __mw_searchDeckByTitleTagSelectable_patch15 = searchDeckByTitleTagSelectable;
+  searchDeckByTitleTagSelectable = async function(side, titleTag, n, opt={}){
+    if(await mwCheckMarimoForDeckToHand()){
+      log("まりも：サーチ効果を無効");
+      return;
+    }
+    return await __mw_searchDeckByTitleTagSelectable_patch15(side, titleTag, n, opt);
+  };
+}
+
+/* ---------------- デッキ見参系にまりも割り込み ---------------- */
+async function mwCheckMarimoForDeckKensan(){
+  const ctx = state.effectContext;
+  if(!ctx || !ctx.sourceCard || !ctx.sourceSide) return false;
+  return await mwTryActivateMarimoAgainst(ctx.sourceSide, ctx.sourceCard, "デッキからキャラクターを見参する効果");
+}
+
+const __mw_activateSeshiaArisaSummon_patch15 = activateSeshiaArisaSummon;
+activateSeshiaArisaSummon = async function(side, pos, card){
+  /* 元効果文は手札からレイチェル見参だが、今後の対象拡張に備え source 情報を持たせておく */
+  return await __mw_activateSeshiaArisaSummon_patch15(side, pos, card);
+};
+
+if(typeof specialSummonKotaroKojiroFrom25 === "function"){
+  const __mw_specialSummonKotaroKojiroFrom25_patch15 = specialSummonKotaroKojiroFrom25;
+  specialSummonKotaroKojiroFrom25 = async function(side){
+    if(await mwCheckMarimoForDeckKensan()){
+      log("まりも：デッキ見参効果を無効");
+      return;
+    }
+    return await __mw_specialSummonKotaroKojiroFrom25_patch15(side);
+  };
+}
+
+/* ---------------- 明示的な sourceCard を持たせる補助 ---------------- */
+const __mw_activateFieldCardAbility_patch15 = activateFieldCardAbility;
+activateFieldCardAbility = async function(side, zone, pos, card){
+  if(card && mwIsCardMutedThisTurn(card)){
+    log(`${card.name}：インフルエンサーまりもによりこのターン効果を発動できない`, "warn");
+    return;
+  }
+  return await __mw_activateFieldCardAbility_patch15(side, zone, pos, card);
+};
+
+const __mw_onEnterTriggers_patch15 = onEnterTriggers;
+onEnterTriggers = async function(side, ctx){
+  if(ctx && ctx.card && mwIsCardMutedThisTurn(ctx.card)){
+    log(`${ctx.card.name}：インフルエンサーまりもによりこのターン効果を発動できない`, "warn");
+    return;
+  }
+  return await __mw_onEnterTriggers_patch15(side, ctx);
+};
+
+/* ---------------- まりもの価値をAIにも認識させる ---------------- */
+const __mw_chooseAIDiscardIndex_patch15 = chooseAIDiscardIndex;
+chooseAIDiscardIndex = function(side){
+  const hand = state[side].hand;
+  if(!hand.length) return -1;
+
+  let bestIdx = 0;
+  let bestScore = Infinity;
+
+  const aiShield0 = countShields(side) === 0;
+  const foeCanThreatenDirect =
+    countShields(side) === 0 &&
+    state[opponent(side)].C.some(c=>c && c.no!==7);
+
+  for(let i=0;i<hand.length;i++){
+    const c = hand[i];
+    let s = (c.baseAtk||0) + (c.rank||0)*120;
+
+    if(c.no===14) s += 1100;
+    if(c.no===17) s += 320;
+    if(c.no===21) s += aiShield0 ? 3000 : 1200;
+    if(c.no===22) s += 900;   // まりもは残し寄り
+    if(c.no===23) s += 320;
+    if(c.no===25) s += 280;
+    if(c.no===28) s += 260;
+    if(c.no===29) s += 260;
+    if(c.no===26 || c.no===27) s += 220;
+    if(c.no===30) s += 180;
+    if(isItem(c)) s += 70;
+    if(isEffect(c)) s += 90;
+
+    if(foeCanThreatenDirect && c.no===21) s += 3000;
+
+    if(s < bestScore){
+      bestScore = s;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+};
+
+/* ---------------- 画像反映補助 ---------------- */
+(async function patch15_refreshImageCache(){
+  try{
+    ensureInitialCollectionAndDeck();
+    const cache = getCache();
+    if(cache && cache.cardFiles){
+      const addMap = buildCardMapFromFileList(cache.cardFiles);
+      for(const k of Object.keys(addMap||{})){
+        state.img.cardUrlByNo[k] = vercelPathCards(addMap[k]);
+      }
+      renderAll();
+    }
+    log("PATCH15：画像反映補助完了（必要なら画像再スキャン）");
+  }catch(err){
+    log(`PATCH15：画像反映補助失敗 ${String(err.message||err)}`, "warn");
+  }
+})();
+
+log("PATCH 15 読み込み完了");
