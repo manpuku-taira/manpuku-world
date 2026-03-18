@@ -6746,3 +6746,357 @@ chooseAIDiscardIndex = function(side){
 })();
 
 log("PATCH 15 読み込み完了");
+/* =========================================================
+  PATCH 18+19
+  - 記憶抹消で無効にされた手形を必ずウイングへ送る
+  - 小太郎 / 小次郎 の相互バフ条件を厳密化
+========================================================= */
+
+/* =========================================================
+  1. 記憶抹消で無効にされた手形をウイングへ
+========================================================= */
+
+function mwFindHandgataOnField(side){
+  return state[side].C.find(c=>c && c.no===8) || null;
+}
+
+runCounterChain = async function(initialLink){
+  const chain = [initialLink];
+  let priority = opponent(initialLink.activatorSide);
+  let passCount = 0;
+
+  while(passCount < 2){
+    const prevLink = chain[chain.length - 1];
+    let choice = await chooseCounterForSide(priority, prevLink);
+
+    const availableNow = (typeof getAvailableCounters === "function")
+      ? getAvailableCounters(priority, prevLink)
+      : [];
+
+    if(choice === "HANDGATA" && availableNow.length && !availableNow.includes("HANDGATA")){
+      choice = "PASS";
+    }
+    if(choice === "MEMORY" && availableNow.length && !availableNow.includes("MEMORY")){
+      choice = "PASS";
+    }
+
+    if(choice === "HANDGATA"){
+      const source = mwFindHandgataOnField(priority);
+
+      state.limits[priority].handgataUsed = true;
+      chain.push({
+        kind:"HANDGATA",
+        label:"手形",
+        activatorSide: priority,
+        sourceUid: source ? source.uid : null
+      });
+      log(`${sideName(priority)}：手形を発動`);
+      priority = opponent(priority);
+      passCount = 0;
+      continue;
+    }
+
+    if(choice === "MEMORY"){
+      const me = takeMemoryEraseFromHand(priority);
+      if(me){
+        moveToWing(priority, me);
+        chain.push({
+          kind:"MEMORY",
+          label:"記憶抹消",
+          activatorSide: priority
+        });
+        log(`${sideName(priority)}：記憶抹消を発動`);
+        priority = opponent(priority);
+        passCount = 0;
+        continue;
+      }else{
+        choice = "PASS";
+      }
+    }
+
+    passCount += 1;
+    priority = opponent(priority);
+  }
+
+  const active = Array(chain.length).fill(true);
+  for(let i=chain.length-1; i>=1; i--){
+    if(active[i]) active[i-1] = false;
+  }
+
+  for(let i=1;i<chain.length;i++){
+    if(active[i]){
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：直前の効果を無効`);
+
+      const prev = chain[i-1];
+      const cur  = chain[i];
+
+      if(cur.kind === "MEMORY" && prev.kind === "HANDGATA"){
+        const targetSide = prev.activatorSide;
+
+        let handgata = null;
+        if(prev.sourceUid){
+          handgata = state[targetSide].C.find(c=>c && c.uid===prev.sourceUid) || null;
+        }
+        if(!handgata){
+          handgata = mwFindHandgataOnField(targetSide);
+        }
+
+        if(handgata){
+          await sendCharacterToWing(targetSide, handgata.uid);
+          log(`記憶抹消：${sideName(targetSide)}の手形をウイングへ`);
+          renderAll();
+        }
+      }
+    }else{
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効にされた`);
+    }
+  }
+
+  const negated = !active[0];
+  const negatorKind = negated && chain[1] ? chain[1].kind : null;
+  return { negated, negatorKind, chain, active };
+};
+
+/* =========================================================
+  2. 小太郎 / 小次郎 の相互バフを厳密化
+========================================================= */
+
+function mwHasKotaroOnStage(side){
+  return state[side].C.some(c=>c && c.no===9);
+}
+function mwHasKojiroOnStage(side){
+  return state[side].C.some(c=>c && c.no===10);
+}
+
+/* 現在ATK計算を上書きして、No.9 / No.10 のみ厳密に補正 */
+const __mw_calcCurrentAtk_patch19_base = calcCurrentAtk;
+calcCurrentAtk = function(side, card){
+  if(!card) return 0;
+
+  let atk = card.baseAtk + (card.tempAtk||0);
+
+  if(card.equipUid){
+    const equip = findEquipInE(side, card.equipUid);
+    if(equip && equip._equipBonus) atk += equip._equipBonus;
+    if(equip && equip._equipBonus2) atk += equip._equipBonus2;
+  }
+
+  /* 小太郎 / 小次郎の相互バフ
+     - 小太郎(No.9) は 小次郎(No.10) がいる時だけ +500
+     - 小次郎(No.10) は 小太郎(No.9) がいる時だけ +500
+     - 同名2枚のみでは発動しない
+     - No.25 は代用しない
+  */
+  if(card.no === 9 && mwHasKojiroOnStage(side)){
+    atk += 500;
+  }
+  if(card.no === 10 && mwHasKotaroOnStage(side)){
+    atk += 500;
+  }
+
+  if(card.tags && card.tags.includes("美少女戦士")){
+    atk += getRubySapphireStageBuffCount(side) * 500;
+  }
+
+  return atk;
+};
+
+log("PATCH 18+19 読み込み完了");
+/* =========================================================
+  PATCH 18R
+  - 記憶抹消で無効化された発動元カードを、種類を問わず必ずウイングへ送る
+  - 手形のみ限定ではなく、全発動カード共通ルール化
+========================================================= */
+
+function mw18rFindCardByUidEverywhere(side, uid){
+  if(!uid) return null;
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.hand || []),
+    ...(p.wing || []),
+    ...(p.deck || []),
+    ...(p.outside || [])
+  ];
+  return zones.find(c=>c && c.uid===uid) || null;
+}
+
+function mw18rFindLikelySourceCard(link){
+  if(!link) return null;
+
+  if(link.sourceCard && link.sourceCard.uid){
+    const live = mw18rFindCardByUidEverywhere(link.activatorSide, link.sourceCard.uid);
+    return live || link.sourceCard;
+  }
+
+  const side = link.activatorSide;
+  const label = link.label;
+  if(!side || !label) return null;
+
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.hand || [])
+  ];
+
+  return zones.find(c=>c && c.name===label) || null;
+}
+
+async function mw18rSendNegatedSourceToWing(side, sourceCard){
+  if(!side || !sourceCard) return false;
+
+  const p = state[side];
+
+  /* すでに場を離れているなら何もしない */
+  const inC = p.C.find(c=>c && c.uid===sourceCard.uid);
+  if(inC){
+    await sendCharacterToWing(side, inC.uid);
+    return true;
+  }
+
+  const ePos = p.E.findIndex(c=>c && c.uid===sourceCard.uid);
+  if(ePos >= 0){
+    const card = p.E[ePos];
+    p.E[ePos] = null;
+
+    if(card && card.equippedToUid){
+      const host = p.C.find(c=>c && c.uid===card.equippedToUid);
+      if(host && host.equipUid === card.uid){
+        host.equipUid = null;
+      }
+      card.equippedToUid = null;
+    }
+
+    moveToWing(side, card);
+    return true;
+  }
+
+  const hPos = p.hand.findIndex(c=>c && c.uid===sourceCard.uid);
+  if(hPos >= 0){
+    const card = p.hand.splice(hPos,1)[0];
+    moveToWing(side, card);
+    return true;
+  }
+
+  return false;
+}
+
+/* ---------------------------------------------------------
+  既存の processActivatedEffect を包んで、
+  記憶抹消で無効化された発動元カードを一律ウイングへ送る
+--------------------------------------------------------- */
+const __mw_processActivatedEffect_patch18R = processActivatedEffect;
+processActivatedEffect = async function(link){
+  const sourceCard = mw18rFindLikelySourceCard(link);
+  const sourceSide = link ? link.activatorSide : null;
+
+  const result = await __mw_processActivatedEffect_patch18R(link);
+
+  if(
+    result &&
+    result.ok === false &&
+    result.detail &&
+    result.detail.negatorKind === "MEMORY" &&
+    sourceCard &&
+    sourceSide
+  ){
+    const moved = await mw18rSendNegatedSourceToWing(sourceSide, sourceCard);
+    if(moved){
+      log(`記憶抹消：${sideName(sourceSide)}の「${sourceCard.name}」をウイングへ`);
+      renderAll();
+    }
+  }
+
+  return result;
+};
+
+/* ---------------------------------------------------------
+  念のため、runCounterChain も sourceUid を持つ形に統一
+  （手形など link.sourceCard を持たないケースの補強）
+--------------------------------------------------------- */
+function mw18rFindHandgataOnField(side){
+  return state[side].C.find(c=>c && c.no===8) || null;
+}
+
+runCounterChain = async function(initialLink){
+  const chain = [initialLink];
+  let priority = opponent(initialLink.activatorSide);
+  let passCount = 0;
+
+  while(passCount < 2){
+    const prevLink = chain[chain.length - 1];
+    let choice = await chooseCounterForSide(priority, prevLink);
+
+    const availableNow = (typeof getAvailableCounters === "function")
+      ? getAvailableCounters(priority, prevLink)
+      : [];
+
+    if(choice === "HANDGATA" && availableNow.length && !availableNow.includes("HANDGATA")){
+      choice = "PASS";
+    }
+    if(choice === "MEMORY" && availableNow.length && !availableNow.includes("MEMORY")){
+      choice = "PASS";
+    }
+
+    if(choice === "HANDGATA"){
+      const source = mw18rFindHandgataOnField(priority);
+
+      state.limits[priority].handgataUsed = true;
+      chain.push({
+        kind:"HANDGATA",
+        label:"手形",
+        activatorSide: priority,
+        sourceCard: source || null,
+        sourceUid: source ? source.uid : null
+      });
+      log(`${sideName(priority)}：手形を発動`);
+      priority = opponent(priority);
+      passCount = 0;
+      continue;
+    }
+
+    if(choice === "MEMORY"){
+      const me = takeMemoryEraseFromHand(priority);
+      if(me){
+        moveToWing(priority, me);
+        chain.push({
+          kind:"MEMORY",
+          label:"記憶抹消",
+          activatorSide: priority,
+          sourceCard: me,
+          sourceUid: me.uid
+        });
+        log(`${sideName(priority)}：記憶抹消を発動`);
+        priority = opponent(priority);
+        passCount = 0;
+        continue;
+      }else{
+        choice = "PASS";
+      }
+    }
+
+    passCount += 1;
+    priority = opponent(priority);
+  }
+
+  const active = Array(chain.length).fill(true);
+  for(let i=chain.length-1; i>=1; i--){
+    if(active[i]) active[i-1] = false;
+  }
+
+  for(let i=1;i<chain.length;i++){
+    if(active[i]){
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：直前の効果を無効`);
+    }else{
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効にされた`);
+    }
+  }
+
+  const negated = !active[0];
+  const negatorKind = negated && chain[1] ? chain[1].kind : null;
+  return { negated, negatorKind, chain, active };
+};
+
+log("PATCH 18R 読み込み完了");
