@@ -5858,3 +5858,257 @@ onClickYourC = async function(pos){
 };
 
 log("PATCH 11 読み込み完了");
+/* =========================================================
+  PATCH 12
+  - 装備先キャラが離れたら装備カードも必ずウイングへ
+  - AIの自爆特攻をさらに抑制
+========================================================= */
+
+/* ---------------- 装備整合チェック ---------------- */
+function cleanupDanglingEquips(side){
+  const p = state[side];
+  let changed = false;
+
+  for(let i=0;i<p.E.length;i++){
+    const eq = p.E[i];
+    if(!eq) continue;
+
+    /* 装備カードだけを対象にする */
+    if(!eq.equippedToUid) continue;
+
+    const host = p.C.find(c=>c && c.uid===eq.equippedToUid);
+    if(!host){
+      p.E[i] = null;
+      eq.equippedToUid = null;
+      moveToWing(side, eq);
+      log(`装備解除：${eq.name} → ${sideName(side)}ウイング`);
+      changed = true;
+      continue;
+    }
+
+    /* host側のequipUidが壊れている場合も補正 */
+    if(host.equipUid !== eq.uid){
+      host.equipUid = eq.uid;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+/* ---------------- キャラ離脱時は必ず装備も処理 ---------------- */
+const __mw_sendCharacterToWing_patch12 = sendCharacterToWing;
+sendCharacterToWing = async function(side, uid){
+  const p = state[side];
+  const pos = p.C.findIndex(c=>c && c.uid===uid);
+  if(pos < 0) return;
+
+  const card = p.C[pos];
+  if(card && card.equipUid){
+    await stripEquipIfAny(side, card);
+  }
+
+  p.C[pos] = null;
+  moveToWing(side, card);
+
+  /* 念のため盤面整合も取る */
+  const changed = cleanupDanglingEquips(side);
+  if(changed) renderAll();
+
+  /* No.25 の既存処理を維持 */
+  if(card && card.no===25){
+    const act = {
+      kind:"ACT",
+      label:card.name,
+      activatorSide: side,
+      resolve: async ()=>{
+        if(typeof specialSummonKotaroKojiroFrom25 === "function"){
+          await specialSummonKotaroKojiroFrom25(side);
+        }
+      },
+      onNegated: async ()=>{
+        log(`${card.name} の離脱時効果は無効`);
+      }
+    };
+    log(`${card.name}：離脱時効果を確認`);
+    await processActivatedEffect(act);
+  }
+};
+
+/* ---------------- 見参コストや直接除去でも装備を取りこぼさないよう補強 ---------------- */
+const __mw_doKensanSummonUsingOccupiedC_patch12 = typeof doKensanSummonUsingOccupiedC === "function" ? doKensanSummonUsingOccupiedC : null;
+if(__mw_doKensanSummonUsingOccupiedC_patch12){
+  doKensanSummonUsingOccupiedC = async function(side, cPos, handIdx){
+    const ok = await __mw_doKensanSummonUsingOccupiedC_patch12(side, cPos, handIdx);
+    cleanupDanglingEquips(side);
+    renderAll();
+    return ok;
+  };
+}
+
+const __mw_doKensanSummonByTappingOccupiedC_patch12 = typeof doKensanSummonByTappingOccupiedC === "function" ? doKensanSummonByTappingOccupiedC : null;
+if(__mw_doKensanSummonByTappingOccupiedC_patch12){
+  doKensanSummonByTappingOccupiedC = async function(side, occupiedPos, handIdx){
+    const ok = await __mw_doKensanSummonByTappingOccupiedC_patch12(side, occupiedPos, handIdx);
+    cleanupDanglingEquips(side);
+    renderAll();
+    return ok;
+  };
+}
+
+const __mw_doKensanSummonFlexible_patch12 = typeof doKensanSummonFlexible === "function" ? doKensanSummonFlexible : null;
+if(__mw_doKensanSummonFlexible_patch12){
+  doKensanSummonFlexible = async function(side, summonPos, handIdx){
+    const ok = await __mw_doKensanSummonFlexible_patch12(side, summonPos, handIdx);
+    cleanupDanglingEquips(side);
+    renderAll();
+    return ok;
+  };
+}
+
+/* ---------------- 毎描画時にも安全確認 ---------------- */
+const __mw_renderAll_patch12 = renderAll;
+renderAll = function(){
+  cleanupDanglingEquips("P1");
+  cleanupDanglingEquips("AI");
+  __mw_renderAll_patch12();
+};
+
+/* ---------------- AI攻撃評価をさらに保守的に ---------------- */
+pickBestAIAttackFor = function(attacker){
+  const atkA = calcCurrentAtk("AI", attacker);
+  const enemyChars = state.P1.C.filter(Boolean);
+  let best = null;
+
+  for(const t of enemyChars){
+    const atkD = calcCurrentAtk("P1", t);
+    let score = 0;
+
+    const selfCanSave = ((attacker.no===12 || attacker.no===21) && !attacker.flags.producerSavedThisTurn);
+    const foeCanSave  = ((t.no===12 || t.no===21) && !t.flags.producerSavedThisTurn);
+
+    if(atkA > atkD){
+      score += estimateRemoveValue(t) + 600;
+      if(attacker.no===23 && attacker.equipUid && countShields("P1") > 0) score += 320;
+      if(t.no===8) score += 260;
+    }else if(atkA === atkD){
+      /* 相打ちはかなり慎重に */
+      score += foeCanSave ? 80 : estimateRemoveValue(t) * 0.20;
+      score -= selfCanSave ? 60 : estimateRemoveValue(attacker) * 0.65;
+    }else{
+      /* 明確な不利はほぼ禁止 */
+      score -= selfCanSave ? 260 : (estimateRemoveValue(attacker) + 800);
+      if(t.no===8) score += 40;
+    }
+
+    if(attacker.no===7 && countShields("P1")===0) score -= 999999;
+
+    if(!best || score > best.score){
+      best = {type:"C", uid:t.uid, score};
+    }
+  }
+
+  if(!enemyChars.length){
+    const shields = state.P1.shield.map((c, idx)=>({c, idx})).filter(x=>!!x.c);
+    if(shields.length){
+      best = {type:"S", idx:shields[0].idx, score: 720 + countShields("P1") * 70};
+    }else if(attacker.no!==7){
+      best = {type:"D", score: 999999};
+    }
+  }
+
+  return best;
+};
+
+/* ---------------- AIバトル：不利手なら攻撃しない ---------------- */
+aiBattleBest = async function(){
+  const p = state.AI;
+
+  for(let i=0;i<3;i++){
+    const a = p.C[i];
+    if(!a) continue;
+
+    while(a && state.AI.C[i] && state.AI.C[i].uid===a.uid && a.flags.attackedCountThisTurn < getMaxAttacks("AI", a)){
+      const best = pickBestAIAttackFor(a);
+
+      /* ここを厳格化 */
+      if(!best || best.score <= 120){
+        break;
+      }
+
+      if(best.type==="C"){
+        const t = state.P1.C.find(c=>c && c.uid===best.uid);
+        if(!t) break;
+
+        if(typeof markSevenStarHit === "function"){
+          markSevenStarHit(a, t.uid);
+        }
+
+        if(typeof tryUseOuranDuringBattle === "function"){
+          await tryUseOuranDuringBattle("AI", a, t);
+          await tryUseOuranDuringBattle("P1", t, a);
+        }
+
+        const atkA = calcCurrentAtk("AI", a);
+        const atkD = calcCurrentAtk("P1", t);
+        log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
+
+        if(atkA > atkD){
+          await sendCharacterToWing("P1", t.uid);
+          log(`AI：撃破 ${t.name} → あなたウイング`);
+          await tryCattleTrigger_P1();
+          if(a.no===23 && a.equipUid){
+            await breakOneShieldByEffect("P1", a.name);
+          }
+        }else if(atkA < atkD){
+          const saved = await tryBattleSurvive("AI", a);
+          if(!saved){
+            await sendCharacterToWing("AI", a.uid);
+            log(`AI：敗北 ${a.name} → AIウイング`);
+          }
+        }else{
+          const savedA = await tryBattleSurvive("AI", a);
+          const savedD = await tryBattleSurvive("P1", t);
+          if(!savedA) await sendCharacterToWing("AI", a.uid);
+          if(!savedD){
+            await sendCharacterToWing("P1", t.uid);
+            await tryCattleTrigger_P1();
+          }
+          log("AI：相打ち");
+        }
+
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        await sleep(180);
+
+        if(!state.AI.C[i] || state.AI.C[i].uid!==a.uid) break;
+        continue;
+      }
+
+      if(best.type==="S"){
+        const sh = state.P1.shield[best.idx];
+        if(!sh) break;
+        state.P1.shield[best.idx] = null;
+        state.P1.hand.push(sh);
+        log(`AI：シールド破壊（あなた）${best.idx+1} → あなた手札へ`);
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        await sleep(150);
+        continue;
+      }
+
+      if(best.type==="D"){
+        const guarded = await tryMiikoDirectGuard("P1");
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        if(guarded) break;
+        await finishGame("AI");
+        return;
+      }
+
+      break;
+    }
+  }
+};
+
+log("PATCH 12 読み込み完了");
