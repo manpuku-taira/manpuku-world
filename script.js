@@ -6110,5 +6110,3 @@ aiBattleBest = async function(){
     }
   }
 };
-
-log("PATCH 12 読み込み完了");
