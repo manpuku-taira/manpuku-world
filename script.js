@@ -6110,3 +6110,298 @@ aiBattleBest = async function(){
     }
   }
 };
+
+/* =========================================================
+  PATCH 13+14
+  - デッキ編集中の長押しでカード詳細を前面表示
+  - AIが場の任意効果（特にエフィ）をメイン中に使うよう修正
+========================================================= */
+
+if(!state.deckEditPreview){
+  state.deckEditPreview = {
+    returning:false
+  };
+}
+
+/* =========================================================
+  1. デッキ編集画面の長押しプレビュー修正
+========================================================= */
+
+/* デッキ編集からの詳細表示は、いったん zoneM を閉じて viewerM を前面で開く */
+const __mw_openViewer_patch13_14 = openViewer;
+openViewer = function(card, ctx){
+  if(ctx && ctx.zone==="DECKEDIT"){
+    state.deckEditPreview.returning = true;
+    hideModal("zoneM");
+  }
+  return __mw_openViewer_patch13_14(card, ctx);
+};
+
+/* viewer を閉じた時、デッキ編集プレビューから来ていたらデッキ編集を復帰 */
+const __mw_hideModal_patch13_14 = hideModal;
+hideModal = function(id){
+  __mw_hideModal_patch13_14(id);
+
+  if(id==="viewerM" && state.deckEditPreview && state.deckEditPreview.returning){
+    state.deckEditPreview.returning = false;
+    try{
+      renderDeckEditor();
+      showModal("zoneM");
+    }catch(err){
+      log(`PATCH13+14: デッキ編集復帰失敗 ${String(err.message||err)}`, "warn");
+    }
+  }
+};
+
+/* =========================================================
+  2. AIの場の任意効果使用修正
+========================================================= */
+
+function aiShouldUseCruella_Field(side, card){
+  if(!card || card.no!==1) return false;
+  if(state.limits[side].cruellaUsed) return false;
+  return (
+    state[side].deck.some(c=>c && c.name.includes("黒魔法")) ||
+    state[side].wing.some(c=>c && c.name.includes("黒魔法"))
+  );
+}
+
+function aiShouldUseNikola_Field(side, card){
+  if(!card || card.no!==3) return false;
+  if(card.used.perTurn) return false;
+
+  const enemy = opponent(side);
+  const foes = state[enemy].C.filter(Boolean);
+  if(!foes.length) return countShields(enemy) > 0;
+
+  const myAtk = calcCurrentAtk(side, card);
+  const boosted = myAtk + 1000;
+  return foes.some(f => boosted > calcCurrentAtk(enemy, f) && myAtk <= calcCurrentAtk(enemy, f));
+}
+
+function aiShouldUseEfi_Field(side, card){
+  if(!card || card.no!==6) return false;
+  if(card.used.perTurn) return false;
+
+  const enemy = opponent(side);
+  const foes = state[enemy].C.filter(Boolean);
+  if(!foes.length) return false;
+
+  const myAtk = calcCurrentAtk(side, card);
+
+  /* -1000後に倒せる相手がいるなら最優先 */
+  const canWinAfterDebuff = foes.some(f => myAtk > (calcCurrentAtk(enemy, f) - 1000));
+  if(canWinAfterDebuff) return true;
+
+  /* 単純に相手最大打点を下げる価値が高い時も使う */
+  const maxEnemyAtk = Math.max(...foes.map(f=>calcCurrentAtk(enemy, f)));
+  return maxEnemyAtk >= myAtk;
+}
+
+function aiShouldUseTata_Field(side, card){
+  if(!card || card.no!==5) return false;
+  if(state.limits[side].tataUsed) return false;
+  if(!state[side].deck.some(c=>c && c.titleTag==="BUGBUG西遊記")) return false;
+  return state[side].hand.length >= 2;
+}
+
+async function aiTryUseFieldAbilities_Strict(){
+  let acted = false;
+  const side = "AI";
+  const p = state[side];
+
+  /* まずセシア＆アリサ */
+  const seshiaPos = p.C.findIndex(c=>c && c.no===28);
+  if(seshiaPos >= 0 && state.phase==="MAIN"){
+    const hasTarget = p.hand.some(c=>c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル"));
+    const hasEmpty = findEmptyIndex(p.C) >= 0;
+    if(hasTarget && hasEmpty){
+      const card = p.C[seshiaPos];
+      const act = {
+        kind:"ACT",
+        label:card.name,
+        activatorSide:side,
+        resolve: async ()=>{ await activateSeshiaArisaSummon(side, seshiaPos, card); },
+        onNegated: async (r)=>{
+          if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+          log(`${card.name} の効果は無効`);
+          renderAll();
+        }
+      };
+      await processActivatedEffect(act);
+      acted = true;
+    }
+  }
+
+  for(let i=0;i<3;i++){
+    const card = p.C[i];
+    if(!card) continue;
+    if(isRachelSealActiveAgainst(side, card)) continue;
+
+    if(card.no===1 && aiShouldUseCruella_Field(side, card)){
+      const act = {
+        kind:"ACT",
+        label:card.name,
+        activatorSide:side,
+        resolve: async ()=>{ await activateCruellaSearch(side, card); },
+        onNegated: async (r)=>{
+          if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+          log(`${card.name} の効果は無効`);
+          renderAll();
+        }
+      };
+      await processActivatedEffect(act);
+      acted = true;
+      continue;
+    }
+
+    if(card.no===3 && aiShouldUseNikola_Field(side, card)){
+      const act = {
+        kind:"ACT",
+        label:card.name,
+        activatorSide:side,
+        resolve: async ()=>{ await activateNikolaBuff(side, i, card); },
+        onNegated: async (r)=>{
+          if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+          log(`${card.name} の効果は無効`);
+          renderAll();
+        }
+      };
+      await processActivatedEffect(act);
+      acted = true;
+      continue;
+    }
+
+    if(card.no===5 && aiShouldUseTata_Field(side, card)){
+      const act = {
+        kind:"ACT",
+        label:card.name,
+        activatorSide:side,
+        resolve: async ()=>{ await activateTataExchange(side, card); },
+        onNegated: async (r)=>{
+          if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+          log(`${card.name} の効果は無効`);
+          renderAll();
+        }
+      };
+      await processActivatedEffect(act);
+      acted = true;
+      continue;
+    }
+
+    if(card.no===6 && aiShouldUseEfi_Field(side, card)){
+      const act = {
+        kind:"ACT",
+        label:card.name,
+        activatorSide:side,
+        resolve: async ()=>{ await activateEfiDebuff(side, card); },
+        onNegated: async (r)=>{
+          if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+          log(`${card.name} の効果は無効`);
+          renderAll();
+        }
+      };
+      await processActivatedEffect(act);
+      acted = true;
+      continue;
+    }
+
+    if(card.no===29 && state.phase==="MAIN" && !card.used.perTurn){
+      const hasItem = [
+        ...state[side].deck,
+        ...state[side].wing
+      ].some(c=>c && c.type==="item" && c.titleTag==="BUGBUG西遊記");
+
+      if(hasItem){
+        const act = {
+          kind:"ACT",
+          label:card.name,
+          activatorSide:side,
+          resolve: async ()=>{
+            card.used.perTurn = true;
+            if(typeof searchDeckOrWingByTitleTagItem === "function"){
+              await searchDeckOrWingByTitleTagItem(side, "BUGBUG西遊記", 1, {aiAuto:true});
+            }
+            renderAll();
+          },
+          onNegated: async (r)=>{
+            if(r.negatorKind==="MEMORY") await sendCharacterToWing(side, card.uid);
+            log(`${card.name} の効果は無効`);
+            renderAll();
+          }
+        };
+        await processActivatedEffect(act);
+        acted = true;
+        continue;
+      }
+    }
+  }
+
+  return acted;
+}
+
+/* AIメインループを、場の任意効果を必ず評価する形に上書き */
+aiTakeTurn = async function(){
+  state.phase = "DRAW";
+  draw("AI", 1);
+  enforceHandLimit("AI");
+  renderAll();
+  await sleep(120);
+
+  state.phase = "MAIN";
+  renderAll();
+  await sleep(120);
+
+  let actions = 0;
+  let acted = true;
+
+  while(acted && actions < 12 && !state.gameOver){
+    acted = false;
+
+    if(await aiTryPlayBestCharacter()){
+      acted = true; actions++; await sleep(70); continue;
+    }
+
+    if(await aiTryUseFieldAbilities_Strict()){
+      acted = true; actions++; await sleep(70); continue;
+    }
+
+    if(await aiTryPlayBestItem()){
+      acted = true; actions++; await sleep(70); continue;
+    }
+
+    const effectPlan = [2,16];
+    for(const no of effectPlan){
+      if(await aiTryPlayEffect(no)){
+        acted = true;
+        actions++;
+        await sleep(70);
+        break;
+      }
+    }
+  }
+
+  if(actions===0){
+    log("AI：有効なプレイが見つからず（このターンは展開なし）", "warn");
+  }
+
+  state.phase = "BATTLE";
+  renderAll();
+  await sleep(120);
+
+  if(!canBattleThisTurn("AI")){
+    log(`AI：${battleBanReason("AI")}（BATTLEスキップ）`);
+  }else{
+    await aiBattleBest();
+  }
+
+  state.phase = "END";
+  enforceHandLimit("AI");
+  clearEndTurnTemps("AI");
+  renderAll();
+  await sleep(100);
+
+  log("AI：ターン終了");
+};
+
+log("PATCH 13+14 読み込み完了");
