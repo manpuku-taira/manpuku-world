@@ -7687,3 +7687,465 @@ renderDeckEditor = function(){
 };
 
 log("PATCH 21 読み込み完了");
+/* =========================================================
+  PATCH 21
+  ① レイチェルのシールド破壊は必ず手札へ
+  ② 装備アイテムを複数装備可能化
+  ③ デッキ編集で複数デッキ保存対応
+  + 将来の禁止 / 制限枚数の土台
+========================================================= */
+
+/* =========================================================
+  0. 将来の制限枚数土台
+========================================================= */
+if(!window.MW_DECK_RULES){
+  window.MW_DECK_RULES = {
+    defaultMaxCopies: 3,
+    byNo: {
+      /* 例:
+      14: 2,
+      23: 1
+      */
+    }
+  };
+}
+function mwGetDeckMaxCopies(no){
+  const n = window.MW_DECK_RULES?.byNo?.[no];
+  return (typeof n === "number") ? n : (window.MW_DECK_RULES?.defaultMaxCopies || 3);
+}
+
+/* canAddToDeck を将来の制限枚数対応版で上書き */
+canAddToDeck = function(col, deck, no){
+  const k = pad2(no);
+  const inDeck = countDeckByNo(deck)[k] || 0;
+  const owned = col[k] || 0;
+  const maxCopies = mwGetDeckMaxCopies(no);
+
+  if(totalDeckCount(deck) >= 40) return {ok:false, reason:"デッキが40枚です"};
+  if(inDeck >= maxCopies) return {ok:false, reason:`同名は${maxCopies}枚までです`};
+  if(inDeck >= owned) return {ok:false, reason:"所持枚数が足りません"};
+  return {ok:true, reason:""};
+};
+
+deckEditorSummaryLine = function(deck){
+  const c = countDeckByNo(deck);
+  let kinds = 0;
+  for(const no of CARD_NOS){
+    if(c[pad2(no)]>0) kinds++;
+  }
+  return `40枚固定 / 採用${kinds}種 / 基本同名最大${window.MW_DECK_RULES.defaultMaxCopies}枚`;
+};
+
+/* =========================================================
+  1. レイチェルのシールド破壊は必ず手札へ
+========================================================= */
+breakOneShieldByEffect = async function(defSide, sourceName){
+  const idx = pickFirstShieldIndex(defSide);
+  if(idx < 0){
+    log(`${sourceName}：破壊できるシールドがありません`);
+    return false;
+  }
+  const sh = state[defSide].shield[idx];
+  state[defSide].shield[idx] = null;
+  state[defSide].hand.push(sh);
+  log(`${sourceName}：${sideName(defSide)}のシールドを1枚破壊 → 手札へ`);
+  renderAll();
+  return true;
+};
+
+/* =========================================================
+  2. 複数装備対応
+========================================================= */
+
+/* 既存の単一 equipUid を残しつつ、複数装備は equipUids で管理 */
+function mwEnsureEquipArray(card){
+  if(!card) return;
+  if(!Array.isArray(card.equipUids)){
+    card.equipUids = [];
+    if(card.equipUid){
+      card.equipUids.push(card.equipUid);
+    }
+  }
+}
+
+function mwGetEquipsForCharacter(side, characterCard){
+  if(!characterCard) return [];
+  mwEnsureEquipArray(characterCard);
+  const out = [];
+  for(const uid of characterCard.equipUids){
+    const eq = findEquipInE(side, uid);
+    if(eq) out.push(eq);
+  }
+  return out;
+}
+
+function mwAddEquipToCharacter(side, host, itemCard){
+  mwEnsureEquipArray(host);
+  if(!host.equipUids.includes(itemCard.uid)){
+    host.equipUids.push(itemCard.uid);
+  }
+  host.equipUid = host.equipUids[0] || null; /* 旧参照互換 */
+  itemCard.equippedToUid = host.uid;
+}
+
+function mwRemoveEquipFromCharacter(host, equipUid){
+  if(!host) return;
+  mwEnsureEquipArray(host);
+  host.equipUids = host.equipUids.filter(uid => uid !== equipUid);
+  host.equipUid = host.equipUids[0] || null;
+}
+
+function mwApplySingleEquipBonuses(itemCard, host){
+  itemCard._equipBonus = 0;
+  itemCard._equipBonus2 = 0;
+  itemCard._extraAttacks = 0;
+  itemCard._allEnemyOnce = false;
+
+  if(itemCard.no===18){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("射手")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===19){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("勇者") || host.tags.includes("剣士")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===20){
+    itemCard._equipBonus = 300;
+    if(host.tags.includes("勇者")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===24){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("除霊")){
+      itemCard._equipBonus2 = 500;
+      itemCard._extraAttacks = 2;
+    }
+  }else if(itemCard.no===30){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("剣士")){
+      itemCard._equipBonus2 = 500;
+      itemCard._allEnemyOnce = true;
+    }
+  }
+}
+
+/* 複数装備分を合算 */
+calcCurrentAtk = function(side, card){
+  if(!card) return 0;
+  let atk = card.baseAtk + (card.tempAtk||0);
+
+  const equips = mwGetEquipsForCharacter(side, card);
+  for(const eq of equips){
+    if(eq._equipBonus) atk += eq._equipBonus;
+    if(eq._equipBonus2) atk += eq._equipBonus2;
+  }
+
+  if(card.no === 9 && state[side].C.some(c=>c && c.no===10)) atk += 500;
+  if(card.no === 10 && state[side].C.some(c=>c && c.no===9)) atk += 500;
+
+  if(card.tags && card.tags.includes("美少女戦士")){
+    atk += getRubySapphireStageBuffCount(side) * 500;
+  }
+
+  return atk;
+};
+
+getEquippedItem = function(side, characterCard){
+  const arr = mwGetEquipsForCharacter(side, characterCard);
+  return arr[0] || null; /* 旧互換 */
+};
+
+getMaxAttacks = function(side, card){
+  if(!card || !isCharacter(card)) return 0;
+  let max = 1;
+
+  const equips = mwGetEquipsForCharacter(side, card);
+
+  /* まひる：アイテムを1枚でも装備していれば2回 */
+  if(card.no===7 && equips.length>0) max = Math.max(max, 2);
+
+  for(const eq of equips){
+    if(eq._extraAttacks) max += eq._extraAttacks;
+  }
+
+  /* 七星剣の全体1回ずつ攻撃は別ロジック側で対象数を使う */
+  const hasSevenStarMulti = equips.some(eq=>eq.no===30 && card.tags.includes("剣士"));
+  if(hasSevenStarMulti){
+    const enemyCount = state[opponent(side)].C.filter(Boolean).length;
+    if(enemyCount > 0) max = Math.max(max, enemyCount);
+  }
+
+  return max;
+};
+
+function hasSevenStarSwordBonus(side, card){
+  if(!card || !isCharacter(card)) return false;
+  const equips = mwGetEquipsForCharacter(side, card);
+  return equips.some(eq=>eq.no===30 && card.tags.includes("剣士"));
+}
+
+/* 装備先が場を離れたら、そのキャラの全装備をまとめてウイングへ */
+stripEquipIfAny = async function(side, characterCard){
+  if(!characterCard) return;
+  mwEnsureEquipArray(characterCard);
+
+  const p = state[side];
+  const targetUids = [...characterCard.equipUids];
+
+  for(const eqUid of targetUids){
+    const eq = findEquipInE(side, eqUid);
+    if(!eq) continue;
+
+    const ePos = p.E.findIndex(x=>x && x.uid===eq.uid);
+    if(ePos>=0) p.E[ePos]=null;
+
+    eq.equippedToUid = null;
+    moveToWing(side, eq);
+    log(`装備剥がれ：${eq.name} → ${sideName(side)}ウイング`);
+  }
+
+  characterCard.equipUids = [];
+  characterCard.equipUid = null;
+};
+
+function cleanupDanglingEquips(side){
+  const p = state[side];
+  let changed = false;
+
+  for(let i=0;i<p.E.length;i++){
+    const eq = p.E[i];
+    if(!eq || !eq.equippedToUid) continue;
+
+    const host = p.C.find(c=>c && c.uid===eq.equippedToUid);
+    if(!host){
+      p.E[i] = null;
+      eq.equippedToUid = null;
+      moveToWing(side, eq);
+      log(`装備解除：${eq.name} → ${sideName(side)}ウイング`);
+      changed = true;
+      continue;
+    }
+
+    mwEnsureEquipArray(host);
+    if(!host.equipUids.includes(eq.uid)){
+      host.equipUids.push(eq.uid);
+      host.equipUid = host.equipUids[0] || null;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+/* 装備は複数可能。既存装備を剥がさない */
+equipItemFromE = async function(side, ePos, itemCard){
+  const p = state[side];
+  const targets = [];
+  for(let i=0;i<3;i++){
+    const c = p.C[i];
+    if(c) targets.push({i, c});
+  }
+
+  if(!targets.length){
+    log("装備：対象キャラがいません（カードはウイングへ）", "warn");
+    p.E[ePos]=null;
+    moveToWing(side, itemCard);
+    renderAll();
+    return;
+  }
+
+  let cPos = 0;
+  if(side==="AI"){
+    let best = targets[0];
+    let bestScore = -999999;
+    for(const t of targets){
+      let s = calcCurrentAtk(side, t.c);
+      if(itemCard.no===24 && t.c.tags.includes("除霊")) s += 900;
+      if(itemCard.no===18 && t.c.tags.includes("射手")) s += 700;
+      if(itemCard.no===19 && (t.c.tags.includes("勇者") || t.c.tags.includes("剣士"))) s += 700;
+      if(itemCard.no===20 && t.c.tags.includes("勇者")) s += 600;
+      if(itemCard.no===30 && t.c.tags.includes("剣士")) s += 800;
+      if(s > bestScore){ bestScore=s; best=t; }
+    }
+    cPos = best.i;
+  }else{
+    const pick = await askChoice(
+      "装備先を選択",
+      "装備するキャラクターを選んでください。",
+      targets.map(x=>({
+        label:`C${x.i+1}：${x.c.name}`,
+        sub:`ATK ${calcCurrentAtk(side, x.c)}`,
+        value:`${x.i}`,
+        card:x.c
+      }))
+    );
+    cPos = Number(pick);
+  }
+
+  const host = p.C[cPos];
+  if(!host){
+    log("装備：対象が無効です", "warn");
+    p.E[ePos]=null;
+    moveToWing(side, itemCard);
+    renderAll();
+    return;
+  }
+
+  mwApplySingleEquipBonuses(itemCard, host);
+  mwAddEquipToCharacter(side, host, itemCard);
+
+  log(`装備：${itemCard.name} → ${host.name}`);
+  renderAll();
+};
+
+/* アイテム評価はそのまま使い、装備先に複数積めるように */
+aiTryPlayBestItem = async function(){
+  const p = state.AI;
+  const ePos = findEmptyIndex(p.E);
+  if(ePos<0) return false;
+
+  const items = [];
+  for(let i=0;i<p.hand.length;i++){
+    const c = p.hand[i];
+    if(c && isItem(c)) items.push({i, c});
+  }
+  if(!items.length) return false;
+
+  const hosts = [];
+  for(let i=0;i<3;i++){
+    const h = p.C[i];
+    if(h) hosts.push({i, h});
+  }
+  if(!hosts.length) return false;
+
+  let best = null;
+  for(const it of items){
+    for(const hs of hosts){
+      let bonus = 0;
+      if(it.c.no===18){
+        bonus = 500 + (hs.h.tags.includes("射手") ? 500 : 0);
+      }else if(it.c.no===19){
+        bonus = 500 + ((hs.h.tags.includes("勇者") || hs.h.tags.includes("剣士")) ? 500 : 0);
+      }else if(it.c.no===20){
+        bonus = 300 + (hs.h.tags.includes("勇者") ? 500 : 0);
+      }else if(it.c.no===24){
+        bonus = 500 + (hs.h.tags.includes("除霊") ? 500 : 0) + (hs.h.tags.includes("除霊") ? 180 : 0);
+      }else if(it.c.no===30){
+        bonus = 500 + (hs.h.tags.includes("剣士") ? 900 : 0);
+      }
+
+      let score = bonus + calcCurrentAtk("AI", hs.h)*0.2;
+      if(it.c.no===24 && hs.h.no===23) score += 700;
+      if(it.c.no===18 && hs.h.no===7) score += 620;
+      if(it.c.no===30 && hs.h.tags.includes("剣士")) score += 360;
+
+      if(score <= 0) continue;
+      if(!best || score > best.score){
+        best = {itemIndex: it.i, item: it.c, hostPos: hs.i, score};
+      }
+    }
+  }
+  if(!best) return false;
+
+  const item = p.hand.splice(best.itemIndex,1)[0];
+  p.E[ePos]=item;
+  log(`AI：E配置（発動） ${item.name}`);
+  renderAll();
+
+  const act = {
+    kind:"ACT",
+    label:item.name,
+    activatorSide:"AI",
+    sourceCard:item,
+    resolve: async ()=>{ await equipItemFromE("AI", ePos, item); },
+    onNegated: async ()=>{
+      if(state.AI.E[ePos] && state.AI.E[ePos].uid===item.uid) state.AI.E[ePos]=null;
+      moveToWing("AI", item);
+      log(`AI：無効化され ${item.name} → AIウイング`);
+      renderAll();
+    }
+  };
+  await processActivatedEffect(act);
+  return true;
+};
+
+/* =========================================================
+  3. 複数デッキ保存
+========================================================= */
+const LS_DECK_SLOTS = "mw_deck_slots_v1";
+
+function mwReadDeckSlots(){
+  const raw = safeJSONParse(localStorage.getItem(LS_DECK_SLOTS) || "", null);
+  if(raw && typeof raw==="object") return raw;
+  return {
+    A: readDeck(),
+    B: [],
+    C: []
+  };
+}
+function mwWriteDeckSlots(slots){
+  localStorage.setItem(LS_DECK_SLOTS, JSON.stringify(slots));
+}
+function mwSaveCurrentDeckToSlot(slotKey){
+  const slots = mwReadDeckSlots();
+  slots[slotKey] = readDeck().slice();
+  mwWriteDeckSlots(slots);
+  log(`デッキ編集：スロット${slotKey}に保存`);
+}
+function mwLoadDeckFromSlot(slotKey){
+  const slots = mwReadDeckSlots();
+  const deck = Array.isArray(slots[slotKey]) ? slots[slotKey].slice() : [];
+  if(!deck.length){
+    log(`デッキ編集：スロット${slotKey}は空です`, "warn");
+    return false;
+  }
+  writeDeck(deck);
+  log(`デッキ編集：スロット${slotKey}を読み込み`);
+  return true;
+}
+
+/* デッキ編集UIを拡張 */
+const __mw_renderDeckEditor_patch21 = renderDeckEditor;
+renderDeckEditor = function(){
+  __mw_renderDeckEditor_patch21();
+
+  if(!el.zoneBody) return;
+
+  const panel = document.createElement("div");
+  panel.className = "choiceMsg";
+  panel.style.whiteSpace = "pre-line";
+  panel.style.marginTop = "10px";
+  panel.textContent = "デッキスロット：保存 / 読み込み";
+
+  const row = document.createElement("div");
+  row.style.display = "flex";
+  row.style.flexWrap = "wrap";
+  row.style.gap = "8px";
+  row.style.marginTop = "8px";
+
+  const mkBtn = (label, fn)=>{
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.style.padding = "8px 10px";
+    b.style.borderRadius = "10px";
+    b.style.border = "1px solid rgba(255,255,255,.18)";
+    b.style.background = "rgba(0,0,0,.35)";
+    b.style.color = "white";
+    b.style.fontWeight = "800";
+    b.addEventListener("click", fn, {passive:true});
+    return b;
+  };
+
+  for(const key of ["A","B","C"]){
+    row.appendChild(mkBtn(`保存 ${key}`, ()=>{
+      mwSaveCurrentDeckToSlot(key);
+      renderDeckEditor();
+    }));
+    row.appendChild(mkBtn(`読込 ${key}`, ()=>{
+      if(mwLoadDeckFromSlot(key)){
+        renderDeckEditor();
+      }
+    }));
+  }
+
+  panel.appendChild(row);
+  el.zoneBody.appendChild(panel);
+};
+
+log("PATCH 21 読み込み完了");
