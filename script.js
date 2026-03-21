@@ -8398,664 +8398,209 @@ runCounterChain = async function(initialLink){
 };
 
 log("PATCH 26 読み込み完了");
+
+
 /* =========================================================
-  PATCH 27
-  ① 装備時のATK変動をチェーンUIに表示
-  ② まだらめプロデューサー：1ターン1回戦闘耐久
+  PATCH 30 SAFE UI PREVIEW
+  - バトル中の発動確認文に現在ATKを表示
+  - 装備アイテムのチェーン確認に装備先候補とATK変化予測を表示
+  - ask系を壊さない最小上書き
 ========================================================= */
 
-/* =========================
-  ATK計算（簡易）
-========================= */
-function mw27CalcAtk(card){
-  let base = card.atk || 0;
-
-  /* 装備補正 */
-  if(card.equipUids && card.equipUids.length){
-    const equips = card.equipUids
-      .map(uid => findCardByUid(card.side, uid))
-      .filter(Boolean);
-
-    for(const eq of equips){
-      if(eq.atkBuff) base += eq.atkBuff;
-    }
-  }
-
-  return base;
+function mw30FindCardByUid(side, uid){
+  if(!uid || !state[side]) return null;
+  const p = state[side];
+  const zones = [
+    ...(p.C||[]), ...(p.E||[]), ...(p.hand||[]), ...(p.wing||[]), ...(p.outside||[])
+  ];
+  return zones.find(c=>c && c.uid===uid) || null;
 }
 
-/* =========================
-  装備時ログ拡張
-========================= */
-const _mw27_equip = equipItemToCharacter;
-equipItemToCharacter = async function(side, charUid, itemUid){
-
-  const char = findCardByUid(side, charUid);
-  const item = findCardByUid(side, itemUid);
-
-  const before = char ? mw27CalcAtk(char) : 0;
-
-  const result = await _mw27_equip(side, charUid, itemUid);
-
-  const after = char ? mw27CalcAtk(char) : 0;
-  const diff = after - before;
-
-  if(char && item && diff !== 0){
-    log(
-      `${sideName(side)}が「${item.name}」を装備\n\n` +
-      `ATK変化：${before} → ${after}（${diff > 0 ? "+" : ""}${diff}）`
-    );
-  }
-
-  return result;
-};
-
-/* =========================
-  チェーン確認にATK表示追加
-========================= */
-const _mw27_choose = chooseCounterForSide;
-chooseCounterForSide = async function(side, prevLink){
-
-  let extra = "";
-
-  /* 装備系ならATK表示 */
-  if(prevLink && prevLink.sourceCard){
-
-    const card = prevLink.sourceCard;
-
-    if(card.equippedToUid){
-      const host = findCardByUid(card.side, card.equippedToUid);
-      if(host){
-        const before = mw27CalcAtk(host);
-
-        /* 仮で+補正（簡易） */
-        const after = before + (card.atkBuff || 0);
-
-        extra =
-          `\n\nATK変化予測：\n` +
-          `${before} → ${after}（${card.atkBuff > 0 ? "+" : ""}${card.atkBuff || 0}）`;
-      }
-    }
-  }
-
-  if(side === "P1"){
-    const v = await askChoice(
-      "チェーン確認",
-      `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。${extra}\n反応しますか？`,
-      [
-        {label:"手形で無効", value:"HANDGATA"},
-        {label:"記憶抹消で無効", value:"MEMORY"},
-        {label:"しない", value:"PASS"}
-      ]
-    );
-    return v || "PASS";
-  }
-
-  return _mw27_choose(side, prevLink);
-};
-
-/* =========================
-  まだらめプロデューサー耐久
-========================= */
-function mw27InitEndureFlag(card){
-  if(card && card.no === 999){ // ←番号は後で合わせてください
-    if(card.endureTurn !== state.turn){
-      card.endureTurn = state.turn;
-      card.endureUsed = false;
-    }
-  }
-}
-
-/* -------------------------
-  戦闘破壊フック
-------------------------- */
-const _mw27_battleDestroy = destroyCharacter;
-destroyCharacter = async function(side, uid, reason){
-
-  const card = findCardByUid(side, uid);
-
-  if(card){
-    mw27InitEndureFlag(card);
-
-    if(card.no === 999){ // まだらめプロデューサー番号に変更
-      if(!card.endureUsed && reason === "BATTLE"){
-        card.endureUsed = true;
-
-        log(`${card.name}は一度だけ戦闘に耐えた！`);
-        return; // 破壊キャンセル
-      }
-    }
-  }
-
-  return await _mw27_battleDestroy(side, uid, reason);
-};
-
-log("PATCH 27 読み込み完了");
-/* =========================================================
-  PATCH 29
-  - バトル中のATK変動カードの発動確認を汎用表示化
-  - 個別カードではなく「現在のバトル状況」を確認UIへ必ず埋め込む
-========================================================= */
-
-/* ------------------------------
-  現在のバトル対象を取得
------------------------------- */
-function mw29GetBattlePair(){
-  if(!state || !state.battle) return null;
-
-  const attackerPos = state.battle.attackerPos;
-  const attackerSide = state.battle.attackerSide;
-  const attackerUid = state.battle.attackerUid;
-
-  if(attackerPos == null || !attackerSide || !attackerUid) return null;
-
-  const atkCard = state[attackerSide]?.C?.[attackerPos];
-  if(!atkCard || atkCard.uid !== attackerUid) return null;
-
-  const defSide = opponent(attackerSide);
-
-  /* いま選ばれている防御対象を保存していない構造でも、
-     直近のバトル演出用として attacker 対 指定対象 を拾えるようにするため、
-     一時的に defender を state.__mw29BattleDefenderUid に保持できるようにする */
-  let defCard = null;
-  const defUid = state.__mw29BattleDefenderUid || null;
-  if(defUid){
-    defCard = state[defSide].C.find(c => c && c.uid === defUid) || null;
-  }
-
-  return {
-    atkSide: attackerSide,
-    atkCard,
-    defSide,
-    defCard
-  };
-}
-
-/* ------------------------------
-  防御対象UIDを補足
------------------------------- */
-const __mw29_resolveBattle = resolveBattle;
-resolveBattle = async function(attacker, defenderUid){
-  state.__mw29BattleDefenderUid = defenderUid || null;
-  try{
-    return await __mw29_resolveBattle(attacker, defenderUid);
-  }finally{
-    state.__mw29BattleDefenderUid = null;
-  }
-};
-
-/* ------------------------------
-  効果でどちらのATKがどれだけ動くかの予測
-  現時点では「よくあるパターン」を汎用化
-  今後カード追加時はここに1行足せばよい
------------------------------- */
-function mw29PredictAtkDelta(card, ownerSide){
-  if(!card) return null;
-
-  /* 返り値:
-     {
-       target: "self_attacker" | "self_defender" | "enemy_attacker" | "enemy_defender" | "picked_enemy" | "picked_self",
-       delta: number,
-       label: string
-     }
-  */
-
-  /* 既存カードの代表例 */
-  if(card.no === 15){
-    return { target: "picked_self", delta: +1000, label: "ATK+1000" }; // 桜蘭の陰陽術
-  }
-  if(card.no === 3){
-    return { target: "picked_self", delta: +1000, label: "ATK+1000" }; // ニコラ
-  }
-  if(card.no === 6){
-    return { target: "picked_enemy", delta: -1000, label: "ATK-1000" }; // エフィ
-  }
-  if(card.no === 13){
-    return { target: "picked_enemy", delta: -1000, label: "ATK-1000" }; // スタマックス
-  }
-
-  /* 今後のための汎用拡張口
-     card._previewAtkDelta / card._previewAtkTarget をカード解決時に持たせても使える */
-  if(typeof card._previewAtkDelta === "number" && card._previewAtkTarget){
-    return {
-      target: card._previewAtkTarget,
-      delta: card._previewAtkDelta,
-      label: `ATK${card._previewAtkDelta >= 0 ? "+" : ""}${card._previewAtkDelta}`
-    };
-  }
-
-  return null;
-}
-
-/* ------------------------------
-  バトル確認文面を組み立てる
------------------------------- */
-function mw29BuildBattlePreviewText(card, ownerSide, baseMessage){
-  if(state.phase !== "BATTLE") return baseMessage;
-
-  const pair = mw29GetBattlePair();
-  if(!pair || !pair.atkCard || !pair.defCard) return baseMessage;
-
-  const atkNow = calcCurrentAtk(pair.atkSide, pair.atkCard);
-  const defNow = calcCurrentAtk(pair.defSide, pair.defCard);
-
-  const pred = mw29PredictAtkDelta(card, ownerSide);
-
-  let extra = `\n\n【現在のバトル】\n`;
-  extra += `${sideName(pair.atkSide)}：${pair.atkCard.name} ATK ${atkNow}\n`;
-  extra += `${sideName(pair.defSide)}：${pair.defCard.name} ATK ${defNow}`;
-
-  if(!pred){
-    return baseMessage + extra;
-  }
-
-  let atkAfter = atkNow;
-  let defAfter = defNow;
-
-  /* ownerSide基準でターゲット解釈 */
-  if(pred.target === "picked_self"){
-    if(ownerSide === pair.atkSide){
-      atkAfter += pred.delta;
-    }else if(ownerSide === pair.defSide){
-      defAfter += pred.delta;
-    }
-  }else if(pred.target === "picked_enemy"){
-    if(ownerSide === pair.atkSide){
-      defAfter += pred.delta;
-    }else if(ownerSide === pair.defSide){
-      atkAfter += pred.delta;
-    }
-  }else if(pred.target === "self_attacker"){
-    atkAfter += pred.delta;
-  }else if(pred.target === "self_defender"){
-    defAfter += pred.delta;
-  }else if(pred.target === "enemy_attacker"){
-    atkAfter += pred.delta;
-  }else if(pred.target === "enemy_defender"){
-    defAfter += pred.delta;
-  }
-
-  extra += `\n\n【発動後の予測】\n`;
-  extra += `${sideName(pair.atkSide)}：${pair.atkCard.name} ATK ${atkAfter}\n`;
-  extra += `${sideName(pair.defSide)}：${pair.defCard.name} ATK ${defAfter}\n`;
-  extra += `（${pred.label}）`;
-
-  return baseMessage + extra;
-}
-
-/* ------------------------------
-  askYesNo を汎用的に上書き
-  バトル中のATK変動系確認なら自動で追記
------------------------------- */
-const __mw29_askYesNo = askYesNo;
-askYesNo = async function(title, message){
-  let ownerSide = state.activeSide;
-
-  /* タイトル・文面・選択中カード・表示中カードなどから推定 */
-  const selected = (state.selectedHandIndex != null && state.activeSide === "P1")
-    ? state.P1.hand[state.selectedHandIndex]
-    : null;
-
-  let srcCard = selected || null;
-
-  if(!srcCard && state.viewer && state.viewer.uid){
-    const zones = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ];
-    srcCard = zones.find(c => c && c.uid === state.viewer.uid) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  /* タイトルから代表カードを推定 */
-  if(!srcCard){
-    const all = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ].filter(Boolean);
-
-    srcCard = all.find(c => title.includes(c.name) || message.includes(c.name)) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  if(srcCard){
-    message = mw29BuildBattlePreviewText(srcCard, ownerSide, message);
-  }
-
-  return await __mw29_askYesNo(title, message);
-};
-
-/* ------------------------------
-  askChoice も同様に上書き
------------------------------- */
-const __mw29_askChoice = askChoice;
-askChoice = async function(title, message, items){
-  let ownerSide = state.activeSide;
-
-  const selected = (state.selectedHandIndex != null && state.activeSide === "P1")
-    ? state.P1.hand[state.selectedHandIndex]
-    : null;
-
-  let srcCard = selected || null;
-
-  if(!srcCard && state.viewer && state.viewer.uid){
-    const zones = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ];
-    srcCard = zones.find(c => c && c.uid === state.viewer.uid) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  if(!srcCard){
-    const all = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ].filter(Boolean);
-
-    srcCard = all.find(c => title.includes(c.name) || message.includes(c.name)) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  if(srcCard){
-    message = mw29BuildBattlePreviewText(srcCard, ownerSide, message);
-  }
-
-  return await __mw29_askChoice(title, message, items);
-};
-
-log("PATCH 29 読み込み完了");
-/* =========================================================
-  PATCH 29
-  - バトル中のATK変動カードの発動確認を汎用表示化
-  - 個別カードではなく「現在のバトル状況」を確認UIへ必ず埋め込む
-========================================================= */
-
-/* ------------------------------
-  現在のバトル対象を取得
------------------------------- */
-function mw29GetBattlePair(){
-  if(!state || !state.battle) return null;
-
-  const attackerPos = state.battle.attackerPos;
-  const attackerSide = state.battle.attackerSide;
-  const attackerUid = state.battle.attackerUid;
-
-  if(attackerPos == null || !attackerSide || !attackerUid) return null;
-
-  const atkCard = state[attackerSide]?.C?.[attackerPos];
-  if(!atkCard || atkCard.uid !== attackerUid) return null;
-
-  const defSide = opponent(attackerSide);
-
-  /* いま選ばれている防御対象を保存していない構造でも、
-     直近のバトル演出用として attacker 対 指定対象 を拾えるようにするため、
-     一時的に defender を state.__mw29BattleDefenderUid に保持できるようにする */
-  let defCard = null;
-  const defUid = state.__mw29BattleDefenderUid || null;
-  if(defUid){
-    defCard = state[defSide].C.find(c => c && c.uid === defUid) || null;
-  }
-
-  return {
-    atkSide: attackerSide,
-    atkCard,
-    defSide,
-    defCard
-  };
-}
-
-/* ------------------------------
-  防御対象UIDを補足
------------------------------- */
-const __mw29_resolveBattle = resolveBattle;
-resolveBattle = async function(attacker, defenderUid){
-  state.__mw29BattleDefenderUid = defenderUid || null;
-  try{
-    return await __mw29_resolveBattle(attacker, defenderUid);
-  }finally{
-    state.__mw29BattleDefenderUid = null;
-  }
-};
-
-/* ------------------------------
-  効果でどちらのATKがどれだけ動くかの予測
-  現時点では「よくあるパターン」を汎用化
-  今後カード追加時はここに1行足せばよい
------------------------------- */
-function mw29PredictAtkDelta(card, ownerSide){
-  if(!card) return null;
-
-  /* 返り値:
-     {
-       target: "self_attacker" | "self_defender" | "enemy_attacker" | "enemy_defender" | "picked_enemy" | "picked_self",
-       delta: number,
-       label: string
-     }
-  */
-
-  /* 既存カードの代表例 */
-  if(card.no === 15){
-    return { target: "picked_self", delta: +1000, label: "ATK+1000" }; // 桜蘭の陰陽術
-  }
-  if(card.no === 3){
-    return { target: "picked_self", delta: +1000, label: "ATK+1000" }; // ニコラ
-  }
-  if(card.no === 6){
-    return { target: "picked_enemy", delta: -1000, label: "ATK-1000" }; // エフィ
-  }
-  if(card.no === 13){
-    return { target: "picked_enemy", delta: -1000, label: "ATK-1000" }; // スタマックス
-  }
-
-  /* 今後のための汎用拡張口
-     card._previewAtkDelta / card._previewAtkTarget をカード解決時に持たせても使える */
-  if(typeof card._previewAtkDelta === "number" && card._previewAtkTarget){
-    return {
-      target: card._previewAtkTarget,
-      delta: card._previewAtkDelta,
-      label: `ATK${card._previewAtkDelta >= 0 ? "+" : ""}${card._previewAtkDelta}`
-    };
-  }
-
-  return null;
-}
-
-/* ------------------------------
-  バトル確認文面を組み立てる
------------------------------- */
-function mw29BuildBattlePreviewText(card, ownerSide, baseMessage){
-  if(state.phase !== "BATTLE") return baseMessage;
-
-  const pair = mw29GetBattlePair();
-  if(!pair || !pair.atkCard || !pair.defCard) return baseMessage;
-
-  const atkNow = calcCurrentAtk(pair.atkSide, pair.atkCard);
-  const defNow = calcCurrentAtk(pair.defSide, pair.defCard);
-
-  const pred = mw29PredictAtkDelta(card, ownerSide);
-
-  let extra = `\n\n【現在のバトル】\n`;
-  extra += `${sideName(pair.atkSide)}：${pair.atkCard.name} ATK ${atkNow}\n`;
-  extra += `${sideName(pair.defSide)}：${pair.defCard.name} ATK ${defNow}`;
-
-  if(!pred){
-    return baseMessage + extra;
-  }
-
-  let atkAfter = atkNow;
-  let defAfter = defNow;
-
-  /* ownerSide基準でターゲット解釈 */
-  if(pred.target === "picked_self"){
-    if(ownerSide === pair.atkSide){
-      atkAfter += pred.delta;
-    }else if(ownerSide === pair.defSide){
-      defAfter += pred.delta;
-    }
-  }else if(pred.target === "picked_enemy"){
-    if(ownerSide === pair.atkSide){
-      defAfter += pred.delta;
-    }else if(ownerSide === pair.defSide){
-      atkAfter += pred.delta;
-    }
-  }else if(pred.target === "self_attacker"){
-    atkAfter += pred.delta;
-  }else if(pred.target === "self_defender"){
-    defAfter += pred.delta;
-  }else if(pred.target === "enemy_attacker"){
-    atkAfter += pred.delta;
-  }else if(pred.target === "enemy_defender"){
-    defAfter += pred.delta;
-  }
-
-  extra += `\n\n【発動後の予測】\n`;
-  extra += `${sideName(pair.atkSide)}：${pair.atkCard.name} ATK ${atkAfter}\n`;
-  extra += `${sideName(pair.defSide)}：${pair.defCard.name} ATK ${defAfter}\n`;
-  extra += `（${pred.label}）`;
-
-  return baseMessage + extra;
-}
-
-/* ------------------------------
-  askYesNo を汎用的に上書き
-  バトル中のATK変動系確認なら自動で追記
------------------------------- */
-const __mw29_askYesNo = askYesNo;
-askYesNo = async function(title, message){
-  let ownerSide = state.activeSide;
-
-  /* タイトル・文面・選択中カード・表示中カードなどから推定 */
-  const selected = (state.selectedHandIndex != null && state.activeSide === "P1")
-    ? state.P1.hand[state.selectedHandIndex]
-    : null;
-
-  let srcCard = selected || null;
-
-  if(!srcCard && state.viewer && state.viewer.uid){
-    const zones = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ];
-    srcCard = zones.find(c => c && c.uid === state.viewer.uid) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  /* タイトルから代表カードを推定 */
-  if(!srcCard){
-    const all = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ].filter(Boolean);
-
-    srcCard = all.find(c => title.includes(c.name) || message.includes(c.name)) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  if(srcCard){
-    message = mw29BuildBattlePreviewText(srcCard, ownerSide, message);
-  }
-
-  return await __mw29_askYesNo(title, message);
-};
-
-/* ------------------------------
-  askChoice も同様に上書き
------------------------------- */
-const __mw29_askChoice = askChoice;
-askChoice = async function(title, message, items){
-  let ownerSide = state.activeSide;
-
-  const selected = (state.selectedHandIndex != null && state.activeSide === "P1")
-    ? state.P1.hand[state.selectedHandIndex]
-    : null;
-
-  let srcCard = selected || null;
-
-  if(!srcCard && state.viewer && state.viewer.uid){
-    const zones = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ];
-    srcCard = zones.find(c => c && c.uid === state.viewer.uid) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  if(!srcCard){
-    const all = [
-      ...(state.P1.C || []), ...(state.P1.E || []), ...(state.P1.hand || []),
-      ...(state.AI.C || []), ...(state.AI.E || []), ...(state.AI.hand || [])
-    ].filter(Boolean);
-
-    srcCard = all.find(c => title.includes(c.name) || message.includes(c.name)) || null;
-    if(srcCard){
-      ownerSide = state.P1.C.includes(srcCard) || state.P1.E.includes(srcCard) || state.P1.hand.includes(srcCard) ? "P1" : "AI";
-    }
-  }
-
-  if(srcCard){
-    message = mw29BuildBattlePreviewText(srcCard, ownerSide, message);
-  }
-
-  return await __mw29_askChoice(title, message, items);
-};
-
-log("PATCH 29 読み込み完了");
-/* =========================================================
-  PATCH SAFE ATK PREVIEW
-  - ask系は触らない
-  - バトル時のみログにATK表示
-========================================================= */
-
-function mwSafeBattleLogPreview(){
-  if(state.phase !== "BATTLE") return;
-
-  const atkSide = state.battle.attackerSide;
-  const atkUid = state.battle.attackerUid;
-
-  if(!atkSide || !atkUid) return;
-
-  const atkCard = state[atkSide].C.find(c=>c && c.uid===atkUid);
-  if(!atkCard) return;
+function mw30GetBattlePair(){
+  const atkSide = state?.battle?.attackerSide || null;
+  const atkUid  = state?.battle?.attackerUid || null;
+  if(!atkSide || !atkUid) return null;
+  const atkCard = state[atkSide].C.find(c=>c && c.uid===atkUid) || null;
+  if(!atkCard) return null;
 
   const defSide = opponent(atkSide);
-
-  // 防御対象（直近）
   let defCard = null;
-  for(const c of state[defSide].C){
-    if(c){
-      defCard = c;
-      break;
+
+  const defUid = state.__mw29BattleDefenderUid || state.__mw30BattleDefenderUid || null;
+  if(defUid){
+    defCard = state[defSide].C.find(c=>c && c.uid===defUid) || null;
+  }
+  if(!defCard){
+    // バトル時の確認UIで最低限使えるよう、相手場の先頭を暫定表示
+    defCard = state[defSide].C.find(Boolean) || null;
+  }
+  if(!defCard) return null;
+
+  return { atkSide, defSide, atkCard, defCard };
+}
+
+const __mw30_resolveBattle = resolveBattle;
+resolveBattle = async function(attacker, defenderUid){
+  state.__mw30BattleDefenderUid = defenderUid || null;
+  try{
+    return await __mw30_resolveBattle(attacker, defenderUid);
+  } finally {
+    state.__mw30BattleDefenderUid = null;
+  }
+};
+
+function mw30BuildBattleStatusText(extraLines=[]){
+  const pair = mw30GetBattlePair();
+  if(!pair) return "";
+  const atkNow = calcCurrentAtk(pair.atkSide, pair.atkCard);
+  const defNow = calcCurrentAtk(pair.defSide, pair.defCard);
+  let txt =
+    `\n\n【現在のバトル】\n` +
+    `${sideName(pair.atkSide)}：${pair.atkCard.name} ATK ${atkNow}\n` +
+    `${sideName(pair.defSide)}：${pair.defCard.name} ATK ${defNow}`;
+  if(extraLines && extraLines.length){
+    txt += `\n\n` + extraLines.join("\n");
+  }
+  return txt;
+}
+
+function mw30FindEffectSourceCard(title, message){
+  const all = [
+    ...(state.P1.C||[]), ...(state.P1.E||[]), ...(state.P1.hand||[]),
+    ...(state.AI.C||[]), ...(state.AI.E||[]), ...(state.AI.hand||[])
+  ].filter(Boolean);
+
+  // viewer selected
+  if(state.viewer?.uid){
+    const found = all.find(c=>c.uid===state.viewer.uid);
+    if(found) return found;
+  }
+  // selected hand
+  if(state.activeSide==="P1" && state.selectedHandIndex!=null){
+    const c = state.P1.hand[state.selectedHandIndex];
+    if(c) return c;
+  }
+  return all.find(c => (title && title.includes(c.name)) || (message && message.includes(c.name))) || null;
+}
+
+function mw30ShouldAnnotateBattlePrompt(title, message, sourceCard){
+  if(state.phase !== "BATTLE") return false;
+  if(!mw30GetBattlePair()) return false;
+  if(sourceCard){
+    if(typeof sourceCard._previewAtkDelta === "number") return true;
+    if([3,6,13,15].includes(sourceCard.no)) return true;
+  }
+  const raw = `${title}\n${message}`;
+  return /ATK|攻撃力|陰陽術|バトル中/.test(raw);
+}
+
+const __mw30_askYesNo = askYesNo;
+askYesNo = async function(title, message){
+  const sourceCard = mw30FindEffectSourceCard(title, message);
+  if(mw30ShouldAnnotateBattlePrompt(title, message, sourceCard)){
+    let extra = [];
+    if(sourceCard){
+      const pair = mw30GetBattlePair();
+      if(pair){
+        let delta = 0;
+        if(sourceCard.no===15 || sourceCard.no===3) delta = 1000;
+        if(sourceCard.no===6 || sourceCard.no===13) delta = -1000;
+        if(delta!==0){
+          const targetSelf = (sourceCard.no===15 || sourceCard.no===3);
+          if(targetSelf){
+            // own battler side of sourceCard owner
+            const ownerSide = state.activeSide;
+            if(ownerSide===pair.atkSide){
+              extra.push(`発動後予測：${pair.atkCard.name} ATK ${calcCurrentAtk(pair.atkSide, pair.atkCard)+delta}`);
+            }else if(ownerSide===pair.defSide){
+              extra.push(`発動後予測：${pair.defCard.name} ATK ${calcCurrentAtk(pair.defSide, pair.defCard)+delta}`);
+            }
+          }else{
+            const ownerSide = state.activeSide;
+            if(ownerSide===pair.atkSide){
+              extra.push(`発動後予測：${pair.defCard.name} ATK ${calcCurrentAtk(pair.defSide, pair.defCard)+delta}`);
+            }else if(ownerSide===pair.defSide){
+              extra.push(`発動後予測：${pair.atkCard.name} ATK ${calcCurrentAtk(pair.atkSide, pair.atkCard)+delta}`);
+            }
+          }
+        }
+      }
+    }
+    message = message + mw30BuildBattleStatusText(extra);
+  }
+  return await __mw30_askYesNo(title, message);
+};
+
+function mw30PredictEquipPreview(side, itemCard){
+  if(!itemCard || !isItem(itemCard)) return null;
+  const hosts = [];
+  for(let i=0;i<3;i++){
+    const h = state[side].C[i];
+    if(h) hosts.push(h);
+  }
+  if(!hosts.length) return null;
+
+  let host = hosts[0];
+  if(side==="AI"){
+    let best = hosts[0];
+    let bestScore = -999999;
+    for(const h of hosts){
+      const bonus = itemBonusForHost(itemCard, h);
+      const score = calcCurrentAtk(side, h) + bonus;
+      if(score > bestScore){ bestScore = score; best = h; }
+    }
+    host = best;
+  }
+  const before = calcCurrentAtk(side, host);
+  const after  = before + itemBonusForHost(itemCard, host);
+  return { host, before, after };
+}
+
+const __mw30_chooseCounterForSide = chooseCounterForSide;
+chooseCounterForSide = async function(side, prevLink){
+  if(side !== "P1" || !prevLink){
+    return await __mw30_chooseCounterForSide(side, prevLink);
+  }
+
+  const available = [];
+  if(typeof mw26GetCounters === "function"){
+    for(const x of mw26GetCounters(side, prevLink)) available.push(x);
+  } else if(typeof mw25GetCounters === "function"){
+    for(const x of mw25GetCounters(side, prevLink)) available.push(x);
+  } else {
+    if(hasHandgataOnField(side) && !state.limits[side].handgataUsed && prevLink.activatorSide!==side) available.push("HANDGATA");
+    if(hasMemoryEraseInHand(side) && prevLink.activatorSide!==side) available.push("MEMORY");
+  }
+
+  if(available.length===0) return "PASS";
+
+  const items = [];
+  if(available.includes("HANDGATA")) items.push({label:"手形で無効", value:"HANDGATA"});
+  if(available.includes("MEMORY")) items.push({label:"記憶抹消で無効", value:"MEMORY"});
+  items.push({label:"しない", value:"PASS"});
+
+  let msg = `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。`;
+
+  // 相手装備アイテム時のATK予測
+  let sourceCard = prevLink.sourceCard || (prevLink.sourceUid ? mw30FindCardByUid(prevLink.activatorSide, prevLink.sourceUid) : null);
+  if(!sourceCard){
+    sourceCard = (state[prevLink.activatorSide].E||[]).find(c=>c && c.name===prevLink.label) || null;
+  }
+  if(sourceCard && isItem(sourceCard)){
+    const pv = mw30PredictEquipPreview(prevLink.activatorSide, sourceCard);
+    if(pv){
+      msg += `\n\n【装備予測】\n${pv.host.name}\nATK ${pv.before} → ${pv.after}`;
     }
   }
 
-  if(!defCard) return;
+  if(state.phase === "BATTLE"){
+    msg += mw30BuildBattleStatusText();
+  }
 
-  const atk = calcCurrentAtk(atkSide, atkCard);
-  const def = calcCurrentAtk(defSide, defCard);
+  msg += `\n\n反応しますか？`;
 
-  log(`【バトル状況】${sideName(atkSide)} ${atkCard.name} ATK${atk} vs ${sideName(defSide)} ${defCard.name} ATK${def}`);
-}
-
-/* フック：バトル開始時 */
-const __mwSafe_resolveBattle = resolveBattle;
-resolveBattle = async function(attacker, defenderUid){
-  mwSafeBattleLogPreview();
-  return await __mwSafe_resolveBattle(attacker, defenderUid);
+  const v = await askChoice("チェーン確認", msg, items);
+  return v || "PASS";
 };
 
-log("PATCH SAFE ATK PREVIEW 読み込み完了");
+log("PATCH 30 SAFE UI PREVIEW 読み込み完了");
