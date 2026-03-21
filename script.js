@@ -8398,3 +8398,136 @@ runCounterChain = async function(initialLink){
 };
 
 log("PATCH 26 読み込み完了");
+/* =========================================================
+  PATCH 27
+  ① 装備時のATK変動をチェーンUIに表示
+  ② まだらめプロデューサー：1ターン1回戦闘耐久
+========================================================= */
+
+/* =========================
+  ATK計算（簡易）
+========================= */
+function mw27CalcAtk(card){
+  let base = card.atk || 0;
+
+  /* 装備補正 */
+  if(card.equipUids && card.equipUids.length){
+    const equips = card.equipUids
+      .map(uid => findCardByUid(card.side, uid))
+      .filter(Boolean);
+
+    for(const eq of equips){
+      if(eq.atkBuff) base += eq.atkBuff;
+    }
+  }
+
+  return base;
+}
+
+/* =========================
+  装備時ログ拡張
+========================= */
+const _mw27_equip = equipItemToCharacter;
+equipItemToCharacter = async function(side, charUid, itemUid){
+
+  const char = findCardByUid(side, charUid);
+  const item = findCardByUid(side, itemUid);
+
+  const before = char ? mw27CalcAtk(char) : 0;
+
+  const result = await _mw27_equip(side, charUid, itemUid);
+
+  const after = char ? mw27CalcAtk(char) : 0;
+  const diff = after - before;
+
+  if(char && item && diff !== 0){
+    log(
+      `${sideName(side)}が「${item.name}」を装備\n\n` +
+      `ATK変化：${before} → ${after}（${diff > 0 ? "+" : ""}${diff}）`
+    );
+  }
+
+  return result;
+};
+
+/* =========================
+  チェーン確認にATK表示追加
+========================= */
+const _mw27_choose = chooseCounterForSide;
+chooseCounterForSide = async function(side, prevLink){
+
+  let extra = "";
+
+  /* 装備系ならATK表示 */
+  if(prevLink && prevLink.sourceCard){
+
+    const card = prevLink.sourceCard;
+
+    if(card.equippedToUid){
+      const host = findCardByUid(card.side, card.equippedToUid);
+      if(host){
+        const before = mw27CalcAtk(host);
+
+        /* 仮で+補正（簡易） */
+        const after = before + (card.atkBuff || 0);
+
+        extra =
+          `\n\nATK変化予測：\n` +
+          `${before} → ${after}（${card.atkBuff > 0 ? "+" : ""}${card.atkBuff || 0}）`;
+      }
+    }
+  }
+
+  if(side === "P1"){
+    const v = await askChoice(
+      "チェーン確認",
+      `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。${extra}\n反応しますか？`,
+      [
+        {label:"手形で無効", value:"HANDGATA"},
+        {label:"記憶抹消で無効", value:"MEMORY"},
+        {label:"しない", value:"PASS"}
+      ]
+    );
+    return v || "PASS";
+  }
+
+  return _mw27_choose(side, prevLink);
+};
+
+/* =========================
+  まだらめプロデューサー耐久
+========================= */
+function mw27InitEndureFlag(card){
+  if(card && card.no === 999){ // ←番号は後で合わせてください
+    if(card.endureTurn !== state.turn){
+      card.endureTurn = state.turn;
+      card.endureUsed = false;
+    }
+  }
+}
+
+/* -------------------------
+  戦闘破壊フック
+------------------------- */
+const _mw27_battleDestroy = destroyCharacter;
+destroyCharacter = async function(side, uid, reason){
+
+  const card = findCardByUid(side, uid);
+
+  if(card){
+    mw27InitEndureFlag(card);
+
+    if(card.no === 999){ // まだらめプロデューサー番号に変更
+      if(!card.endureUsed && reason === "BATTLE"){
+        card.endureUsed = true;
+
+        log(`${card.name}は一度だけ戦闘に耐えた！`);
+        return; // 破壊キャンセル
+      }
+    }
+  }
+
+  return await _mw27_battleDestroy(side, uid, reason);
+};
+
+log("PATCH 27 読み込み完了");
