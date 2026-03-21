@@ -9015,3 +9015,47 @@ askChoice = async function(title, message, items){
 };
 
 log("PATCH 29 読み込み完了");
+/* =========================================================
+  PATCH SAFE ATK PREVIEW
+  - ask系は触らない
+  - バトル時のみログにATK表示
+========================================================= */
+
+function mwSafeBattleLogPreview(){
+  if(state.phase !== "BATTLE") return;
+
+  const atkSide = state.battle.attackerSide;
+  const atkUid = state.battle.attackerUid;
+
+  if(!atkSide || !atkUid) return;
+
+  const atkCard = state[atkSide].C.find(c=>c && c.uid===atkUid);
+  if(!atkCard) return;
+
+  const defSide = opponent(atkSide);
+
+  // 防御対象（直近）
+  let defCard = null;
+  for(const c of state[defSide].C){
+    if(c){
+      defCard = c;
+      break;
+    }
+  }
+
+  if(!defCard) return;
+
+  const atk = calcCurrentAtk(atkSide, atkCard);
+  const def = calcCurrentAtk(defSide, defCard);
+
+  log(`【バトル状況】${sideName(atkSide)} ${atkCard.name} ATK${atk} vs ${sideName(defSide)} ${defCard.name} ATK${def}`);
+}
+
+/* フック：バトル開始時 */
+const __mwSafe_resolveBattle = resolveBattle;
+resolveBattle = async function(attacker, defenderUid){
+  mwSafeBattleLogPreview();
+  return await __mwSafe_resolveBattle(attacker, defenderUid);
+};
+
+log("PATCH SAFE ATK PREVIEW 読み込み完了");
