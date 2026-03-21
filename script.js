@@ -7687,3 +7687,157 @@ renderDeckEditor = function(){
 };
 
 log("PATCH 21 読み込み完了");
+/* =========================================================
+  PATCH 23
+  完全チェーン対応版
+  - 手形→手形→記憶抹消→記憶抹消 無限対応
+========================================================= */
+
+function mw23GetCounters(side){
+  const list = [];
+
+  /* 手形 */
+  if(
+    state.activeSide !== side &&
+    !state.limits[side].handgataUsed &&
+    state[side].C.some(c=>c && c.no===8)
+  ){
+    list.push("HANDGATA");
+  }
+
+  /* 記憶抹消 */
+  if(state[side].hand.some(c=>c && c.no===14)){
+    list.push("MEMORY");
+  }
+
+  return list;
+}
+
+function mw23FindHandgata(side){
+  return state[side].C.find(c=>c && c.no===8) || null;
+}
+
+/* ================================
+  完全チェーン処理
+================================ */
+runCounterChain = async function(initialLink){
+
+  const chain = [initialLink];
+  let priority = opponent(initialLink.activatorSide);
+  let passCount = 0;
+
+  while(true){
+
+    /* 毎回最新状態で取得 */
+    const available = mw23GetCounters(priority);
+
+    let choice = "PASS";
+
+    if(available.length > 0){
+
+      if(priority === "P1"){
+        const items = [];
+
+        if(available.includes("HANDGATA")){
+          items.push({label:"手形で無効", value:"HANDGATA"});
+        }
+        if(available.includes("MEMORY")){
+          items.push({label:"記憶抹消で無効", value:"MEMORY"});
+        }
+
+        items.push({label:"しない", value:"PASS"});
+
+        choice = await askChoice(
+          "チェーン確認",
+          `${sideName(chain[chain.length-1].activatorSide)}の「${chain[chain.length-1].label}」に反応しますか？`,
+          items
+        ) || "PASS";
+
+      }else{
+        /* AI優先 */
+        if(available.includes("MEMORY")) choice = "MEMORY";
+        else if(available.includes("HANDGATA")) choice = "HANDGATA";
+      }
+    }
+
+    /* ===== 発動処理 ===== */
+
+    if(choice === "HANDGATA"){
+      const src = mw23FindHandgata(priority);
+
+      state.limits[priority].handgataUsed = true;
+
+      chain.push({
+        kind:"HANDGATA",
+        label:"手形",
+        activatorSide: priority,
+        sourceCard: src,
+        sourceUid: src ? src.uid : null
+      });
+
+      log(`${sideName(priority)}：手形発動`);
+
+      priority = opponent(priority);
+      passCount = 0;
+      continue;
+    }
+
+    if(choice === "MEMORY"){
+      const card = takeMemoryEraseFromHand(priority);
+      if(card){
+        moveToWing(priority, card);
+
+        chain.push({
+          kind:"MEMORY",
+          label:"記憶抹消",
+          activatorSide: priority,
+          sourceCard: card,
+          sourceUid: card.uid
+        });
+
+        log(`${sideName(priority)}：記憶抹消発動`);
+
+        priority = opponent(priority);
+        passCount = 0;
+        continue;
+      }
+    }
+
+    /* ===== PASS処理 ===== */
+
+    passCount++;
+
+    if(passCount >= 2){
+      break;
+    }
+
+    priority = opponent(priority);
+  }
+
+  /* ================================
+    解決処理（後ろから）
+  =============================== */
+
+  const active = Array(chain.length).fill(true);
+
+  for(let i = chain.length - 1; i >= 1; i--){
+    if(active[i]){
+      active[i - 1] = false;
+    }
+  }
+
+  for(let i=1;i<chain.length;i++){
+    if(active[i]){
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効成功`);
+    }else{
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効化された`);
+    }
+  }
+
+  const negated = !active[0];
+  const negatorKind = negated ? chain[1].kind : null;
+
+  return {negated, negatorKind, chain, active};
+};
+
+log("PATCH 23 完全チェーン対応");
