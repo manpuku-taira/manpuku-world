@@ -7841,3 +7841,101 @@ runCounterChain = async function(initialLink){
 };
 
 log("PATCH 23 完全チェーン対応");
+/* =========================================================
+  PATCH 24 COMPLETE
+  ・バトル中ATK表示
+  ・ダメージ確定演出
+========================================================= */
+
+/* =========================
+  ATK取得
+========================= */
+function mw24GetBattleView(){
+
+  if(!state.battle) return null;
+
+  const atk = state.battle.attacker;
+  const def = state.battle.defender;
+
+  if(!atk || !def) return null;
+
+  return {
+    atkSide: atk.side,
+    atkValue: atk.currentAtk ?? atk.atk ?? 0,
+    defSide: def.side,
+    defValue: def.currentAtk ?? def.atk ?? 0
+  };
+}
+
+/* =========================
+  現在ATK表示
+========================= */
+function mw24ShowCurrentBattle(){
+
+  const v = mw24GetBattleView();
+  if(!v) return;
+
+  log(
+    `現在のバトル：\n` +
+    `${sideName(v.atkSide)} ${v.atkValue} vs ${sideName(v.defSide)} ${v.defValue}`
+  );
+}
+
+/* =========================
+  ダメージ確定演出
+========================= */
+function mw24ShowBattleResult(){
+
+  const v = mw24GetBattleView();
+  if(!v) return;
+
+  let result = "";
+
+  if(v.atkValue > v.defValue){
+    result = `▶ ${sideName(v.atkSide)}の勝利`;
+  }else if(v.atkValue < v.defValue){
+    result = `▶ ${sideName(v.defSide)}の勝利`;
+  }else{
+    result = "▶ 相打ち";
+  }
+
+  log(
+    `【バトル確定】\n` +
+    `${sideName(v.atkSide)} ${v.atkValue} vs ${sideName(v.defSide)} ${v.defValue}\n\n` +
+    result
+  );
+}
+
+/* =========================
+  logフック（効果発動時）
+========================= */
+const _mw24_originalLog = log;
+
+log = function(msg){
+
+  _mw24_originalLog(msg);
+
+  if(state.phase === "BATTLE"){
+
+    /* 効果発動系で現在値表示 */
+    if(
+      msg.includes("発動") ||
+      msg.includes("ATK") ||
+      msg.includes("上昇") ||
+      msg.includes("減少")
+    ){
+      mw24ShowCurrentBattle();
+    }
+
+    /* 解決・ダメージ直前っぽいログで確定演出 */
+    if(
+      msg.includes("解決") ||
+      msg.includes("ダメージ") ||
+      msg.includes("バトル")
+    ){
+      mw24ShowBattleResult();
+    }
+  }
+};
+
+log("PATCH 24 COMPLETE loaded");
