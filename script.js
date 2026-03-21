@@ -8227,3 +8227,174 @@ processActivatedEffect = async function(link){
 };
 
 log("PATCH 25 読み込み完了");
+/* =========================================================
+  PATCH 26
+  - 手形の発動条件を「相手ターン中」ではなく
+    「直前の効果を相手が発動した時」に修正
+  - クルエラ → AI手形 → 自分手形 のような再カウンターを正しく表示
+========================================================= */
+
+/* ---------------- 手形 / 記憶抹消の候補判定を修正 ---------------- */
+function mw26GetCounters(side, prevLink){
+  const list = [];
+  if(!prevLink) return list;
+
+  /* 自分が今発動したリンクには自分で反応しない */
+  if(prevLink.activatorSide === side) return list;
+
+  /* 手形
+     相手が直前リンクを発動したなら、ターン中かどうかに関係なく反応可能
+  */
+  if(
+    !state.limits[side].handgataUsed &&
+    state[side].C.some(c => c && c.no === 8)
+  ){
+    list.push("HANDGATA");
+  }
+
+  /* 記憶抹消
+     相手が直前リンクを発動したなら反応可能
+  */
+  if(state[side].hand.some(c => c && c.no === 14)){
+    list.push("MEMORY");
+  }
+
+  return list;
+}
+
+/* ---------------- 選択UI上書き ---------------- */
+chooseCounterForSide = async function(side, prevLink){
+  const available = mw26GetCounters(side, prevLink);
+
+  if(available.length === 0){
+    return "PASS";
+  }
+
+  const items = [];
+  if(available.includes("HANDGATA")){
+    items.push({label:"手形で無効", value:"HANDGATA"});
+  }
+  if(available.includes("MEMORY")){
+    items.push({label:"記憶抹消で無効", value:"MEMORY"});
+  }
+  items.push({label:"しない", value:"PASS"});
+
+  if(side === "P1"){
+    const v = await askChoice(
+      "チェーン確認",
+      `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。\n反応しますか？`,
+      items
+    );
+    return v || "PASS";
+  }
+
+  /* AI優先順
+     1. 記憶抹消
+     2. 手形
+  */
+  if(available.includes("MEMORY")) return "MEMORY";
+  if(available.includes("HANDGATA")) return "HANDGATA";
+  return "PASS";
+};
+
+/* ---------------- runCounterChain も同じ判定系に統一 ---------------- */
+runCounterChain = async function(initialLink){
+  if(initialLink && !initialLink.sourceCard){
+    initialLink.sourceCard = (typeof mw25FindLikelySourceCard === "function")
+      ? mw25FindLikelySourceCard(initialLink)
+      : null;
+  }
+  if(initialLink && !initialLink.sourceUid && initialLink.sourceCard){
+    initialLink.sourceUid = initialLink.sourceCard.uid;
+  }
+
+  const chain = [initialLink];
+  let priority = opponent(initialLink.activatorSide);
+  let passCount = 0;
+
+  while(true){
+    const prevLink = chain[chain.length - 1];
+    const available = mw26GetCounters(priority, prevLink);
+
+    let choice = "PASS";
+
+    if(available.length > 0){
+      choice = await chooseCounterForSide(priority, prevLink);
+      if(!choice) choice = "PASS";
+    }
+
+    const availableNow = mw26GetCounters(priority, prevLink);
+    if(choice === "HANDGATA" && !availableNow.includes("HANDGATA")) choice = "PASS";
+    if(choice === "MEMORY" && !availableNow.includes("MEMORY")) choice = "PASS";
+
+    if(choice === "HANDGATA"){
+      const src = state[priority].C.find(c=>c && c.no===8) || null;
+
+      state.limits[priority].handgataUsed = true;
+      chain.push({
+        kind:"HANDGATA",
+        label:"手形",
+        activatorSide: priority,
+        sourceCard: src,
+        sourceUid: src ? src.uid : null
+      });
+
+      log(`${sideName(priority)}：手形発動`);
+      priority = opponent(priority);
+      passCount = 0;
+      continue;
+    }
+
+    if(choice === "MEMORY"){
+      const card = takeMemoryEraseFromHand(priority);
+      if(card){
+        moveToWing(priority, card);
+
+        chain.push({
+          kind:"MEMORY",
+          label:"記憶抹消",
+          activatorSide: priority,
+          sourceCard: card,
+          sourceUid: card.uid
+        });
+
+        log(`${sideName(priority)}：記憶抹消発動`);
+        priority = opponent(priority);
+        passCount = 0;
+        continue;
+      }
+    }
+
+    passCount++;
+    if(passCount >= 2) break;
+    priority = opponent(priority);
+  }
+
+  const active = Array(chain.length).fill(true);
+  for(let i = chain.length - 1; i >= 1; i--){
+    if(active[i]){
+      active[i - 1] = false;
+    }
+  }
+
+  for(let i=1;i<chain.length;i++){
+    if(active[i]){
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効成功`);
+    }else{
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効化された`);
+    }
+  }
+
+  const negated = !active[0];
+  const negatorKind = negated && chain[1] ? chain[1].kind : null;
+
+  return {
+    negated,
+    negatorKind,
+    chain,
+    active,
+    finalNegatorLink: negated && chain[1] ? chain[1] : null
+  };
+};
+
+log("PATCH 26 読み込み完了");
