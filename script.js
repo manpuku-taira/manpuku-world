@@ -9096,3 +9096,78 @@ sendCharacterToWing = async function(side, uid){
 };
 
 log("PATCH 32 読み込み完了");
+/* =========================================================
+  PATCH 33
+  - セシア＆アリサの効果で、空きCが複数ある時は
+    P1側のみ見参場所を選択できるようにする
+========================================================= */
+
+activateSeshiaArisaSummon = async function(side, pos, card){
+  const p = state[side];
+
+  const emptyPositions = [];
+  for(let i=0;i<3;i++){
+    if(!p.C[i]) emptyPositions.push(i);
+  }
+
+  if(emptyPositions.length <= 0){
+    log("セシア＆アリサ：空きCがありません", "warn");
+    return;
+  }
+
+  const candidates = p.hand.filter(c =>
+    c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル")
+  );
+  if(!candidates.length){
+    log("セシア＆アリサ：手札に条件を満たすレイチェルがいません", "warn");
+    return;
+  }
+
+  let chosen = null;
+  if(side==="AI"){
+    chosen = candidates.sort((a,b)=> calcCurrentAtk(side,b)-calcCurrentAtk(side,a))[0];
+  }else{
+    const pick = await askChoice(
+      "セシア＆アリサ",
+      "条件無視で見参させるレイチェルを選んでください。",
+      candidates.map(c=>({
+        label: c.name,
+        sub: `RANK ${c.rank} / ATK ${c.baseAtk}`,
+        value: c.uid,
+        card: c
+      }))
+    );
+    chosen = p.hand.find(c=>c && c.uid===String(pick)) || null;
+  }
+  if(!chosen) return;
+
+  let summonPos = emptyPositions[0];
+
+  if(side==="P1" && emptyPositions.length >= 2){
+    const posPick = await askChoice(
+      "見参場所を選択",
+      `${chosen.name} を見参させる場所を選んでください。`,
+      emptyPositions.map(i=>({
+        label: `C${i+1}`,
+        sub: "空きエリア",
+        value: String(i)
+      }))
+    );
+    const pickedPos = Number(posPick);
+    if(Number.isNaN(pickedPos) || !emptyPositions.includes(pickedPos)){
+      log("セシア＆アリサ：見参場所の選択が無効です", "warn");
+      return;
+    }
+    summonPos = pickedPos;
+  }
+
+  const moved = removeFromHandByUid(side, chosen.uid);
+  if(!moved) return;
+
+  p.C[summonPos] = moved;
+  log(`セシア＆アリサ：条件無視で見参 ${moved.name} → C${summonPos+1}`);
+  renderAll();
+  await onEnterTriggers(side, {zone:"C", pos:summonPos, card:moved});
+};
+
+log("PATCH 33 読み込み完了");
