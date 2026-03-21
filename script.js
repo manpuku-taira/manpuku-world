@@ -8604,3 +8604,495 @@ chooseCounterForSide = async function(side, prevLink){
 };
 
 log("PATCH 30 SAFE UI PREVIEW 読み込み完了");
+/* =========================================================
+  PATCH 32
+  1) 班目プロデューサーの戦闘1回耐久を完全修正
+  2) 桜蘭の陰陽術の確認UIを汎用バトル比較つきに修正
+  3) 複数装備に対応
+========================================================= */
+
+/* ------------------------------
+  共通ヘルパ
+------------------------------ */
+function mw32FindCardByUid(side, uid){
+  if(!uid || !state[side]) return null;
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.hand || []),
+    ...(p.deck || []),
+    ...(p.wing || []),
+    ...(p.outside || []),
+    ...(p.shield || [])
+  ];
+  return zones.find(c => c && c.uid === uid) || null;
+}
+function mw32EnsureEquipState(card){
+  if(!card) return;
+  if(!Array.isArray(card.equipUids)) card.equipUids = [];
+  if(card.equipUid && !card.equipUids.includes(card.equipUid)){
+    card.equipUids.unshift(card.equipUid);
+  }
+  card.equipUids = [...new Set(card.equipUids.filter(Boolean))];
+  card.equipUid = card.equipUids[0] || null; // 既存互換
+}
+function mw32GetEquipUids(card){
+  if(!card) return [];
+  mw32EnsureEquipState(card);
+  return card.equipUids.slice();
+}
+function mw32GetEquippedItems(side, card){
+  if(!card) return [];
+  const uids = mw32GetEquipUids(card);
+  return uids
+    .map(uid => findEquipInE(side, uid))
+    .filter(Boolean);
+}
+function mw32HasAnyEquip(card){
+  return mw32GetEquipUids(card).length > 0;
+}
+function mw32HasEquipNo(side, card, no){
+  return mw32GetEquippedItems(side, card).some(eq => eq && eq.no === no);
+}
+
+/* ------------------------------
+  makeInstance補強
+------------------------------ */
+const __mw32_makeInstance = makeInstance;
+makeInstance = function(cardDef){
+  const c = __mw32_makeInstance(cardDef);
+  c.equipUids = [];
+  return c;
+};
+
+/* ------------------------------
+  ATK計算を複数装備対応化
+------------------------------ */
+calcCurrentAtk = function(side, card){
+  if(!card) return 0;
+
+  mw32EnsureEquipState(card);
+
+  let atk = (card.baseAtk || 0) + (card.tempAtk || 0);
+
+  const equips = mw32GetEquippedItems(side, card);
+  for(const equip of equips){
+    atk += (equip._equipBonus || 0);
+    atk += (equip._equipBonus2 || 0);
+  }
+
+  /* 小太郎 / 小次郎 相互のみ */
+  if(card.no===9 && hasOnStage(side, (c)=>c && c.no===10)) atk += 500;
+  if(card.no===10 && hasOnStage(side, (c)=>c && c.no===9)) atk += 500;
+
+  /* 美少女戦士支援 */
+  if(card.tags && card.tags.includes("美少女戦士")){
+    atk += getRubySapphireStageBuffCount(side) * 500;
+  }
+
+  return atk;
+};
+
+/* ------------------------------
+  攻撃回数を複数装備対応化
+------------------------------ */
+getMaxAttacks = function(side, card){
+  if(!card || !isCharacter(card)) return 0;
+
+  mw32EnsureEquipState(card);
+
+  let max = 1;
+
+  /* まひるは装備していれば2回 */
+  if(card.no===7 && mw32HasAnyEquip(card)){
+    max = Math.max(max, 2);
+  }
+
+  /* 装備由来の追加回数 */
+  for(const eq of mw32GetEquippedItems(side, card)){
+    if(eq && eq._extraAttacks) max += eq._extraAttacks;
+  }
+
+  /* 七星剣＋剣士：相手ステージ全員に1回ずつ */
+  if(mw32HasEquipNo(side, card, 30) && card.tags.includes("剣士")){
+    const enemyCount = state[opponent(side)].C.filter(Boolean).length;
+    if(enemyCount > 0) max = Math.max(max, enemyCount);
+  }
+
+  return max;
+};
+
+/* ------------------------------
+  1枚取得関数は先頭装備を返す互換にする
+------------------------------ */
+getEquippedItem = function(side, characterCard){
+  const items = mw32GetEquippedItems(side, characterCard);
+  return items[0] || null;
+};
+
+/* ------------------------------
+  装備解除：キャラが離れた時は全装備を剥がす
+------------------------------ */
+stripEquipIfAny = async function(side, characterCard){
+  if(!characterCard) return;
+
+  mw32EnsureEquipState(characterCard);
+
+  const p = state[side];
+  const equips = mw32GetEquippedItems(side, characterCard);
+
+  for(const eq of equips){
+    const ePos = p.E.findIndex(x => x && x.uid === eq.uid);
+    if(ePos >= 0) p.E[ePos] = null;
+    eq.equippedToUid = null;
+    moveToWing(side, eq);
+    log(`装備剥がれ：${eq.name} → ${sideName(side)}ウイング`);
+  }
+
+  characterCard.equipUids = [];
+  characterCard.equipUid = null;
+};
+
+/* ------------------------------
+  アイテム装備：複数装備対応
+------------------------------ */
+equipItemFromE = async function(side, ePos, itemCard){
+  const p = state[side];
+  const targets = [];
+
+  for(let i=0;i<3;i++){
+    const c = p.C[i];
+    if(c) targets.push({i, c});
+  }
+
+  if(!targets.length){
+    log("装備：対象キャラがいません（カードはウイングへ）", "warn");
+    p.E[ePos] = null;
+    moveToWing(side, itemCard);
+    renderAll();
+    return;
+  }
+
+  let cPos = 0;
+
+  if(side==="AI"){
+    let best = targets[0];
+    let bestScore = -999999;
+    for(const t of targets){
+      let s = calcCurrentAtk(side, t.c);
+      if(itemCard.no===24 && t.c.tags.includes("除霊")) s += 900;
+      if(itemCard.no===18 && t.c.tags.includes("射手")) s += 700;
+      if(itemCard.no===19 && (t.c.tags.includes("勇者") || t.c.tags.includes("剣士"))) s += 700;
+      if(itemCard.no===20 && t.c.tags.includes("勇者")) s += 600;
+      if(itemCard.no===30 && t.c.tags.includes("剣士")) s += 900;
+      if(s > bestScore){ bestScore = s; best = t; }
+    }
+    cPos = best.i;
+  }else{
+    const pick = await askChoice(
+      "装備先を選択",
+      "装備するキャラクターを選んでください。",
+      targets.map(x=>({
+        label:`C${x.i+1}：${x.c.name}`,
+        sub:`ATK ${calcCurrentAtk(side, x.c)}`,
+        value:String(x.i),
+        card:x.c
+      }))
+    );
+    cPos = Number(pick);
+  }
+
+  const host = p.C[cPos];
+  if(!host){
+    log("装備：対象が無効です（取り消し）", "warn");
+    return;
+  }
+
+  mw32EnsureEquipState(host);
+
+  /* 装備ボーナス初期化 */
+  itemCard._equipBonus = 0;
+  itemCard._equipBonus2 = 0;
+  itemCard._extraAttacks = 0;
+
+  if(itemCard.no===18){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("射手")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===19){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("勇者") || host.tags.includes("剣士")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===20){
+    itemCard._equipBonus = 300;
+    if(host.tags.includes("勇者")) itemCard._equipBonus2 = 500;
+  }else if(itemCard.no===24){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("除霊")){
+      itemCard._equipBonus2 = 500;
+      itemCard._extraAttacks = 2;
+    }
+  }else if(itemCard.no===30){
+    itemCard._equipBonus = 500;
+    if(host.tags.includes("剣士")) itemCard._equipBonus2 = 500;
+  }
+
+  itemCard.equippedToUid = host.uid;
+
+  if(!host.equipUids.includes(itemCard.uid)){
+    host.equipUids.push(itemCard.uid);
+  }
+  host.equipUid = host.equipUids[0] || itemCard.uid; // 既存互換
+
+  log(`装備：${itemCard.name} → ${host.name}`);
+  renderAll();
+};
+
+/* ------------------------------
+  バトル確認UIの汎用ヘルパ
+  今後のATK上下カードはこれを呼べば同じ表示形式で使える
+------------------------------ */
+function mw32BuildBattlePreview(attackerSide, attackerCard, defenderCard, previewLines=[]){
+  if(!attackerSide || !attackerCard || !defenderCard) return "";
+  const defenderSide = opponent(attackerSide);
+
+  const atkNow = calcCurrentAtk(attackerSide, attackerCard);
+  const defNow = calcCurrentAtk(defenderSide, defenderCard);
+
+  let msg =
+    `\n\n【現在のバトル】\n` +
+    `${sideName(attackerSide)}：${attackerCard.name} ATK ${atkNow}\n` +
+    `${sideName(defenderSide)}：${defenderCard.name} ATK ${defNow}`;
+
+  if(previewLines.length){
+    msg += `\n\n【発動後の予測】\n` + previewLines.join("\n");
+  }
+
+  return msg;
+}
+
+/* ------------------------------
+  桜蘭の陰陽術：確認UIを強化
+------------------------------ */
+tryUseOuranDuringBattle = async function(side, ownBattler, enemyBattler){
+  if(!hasOuranInHand(side)) return false;
+  if(!ownBattler || !enemyBattler) return false;
+
+  if(side==="P1"){
+    const enemySide = state.AI.C.includes(enemyBattler) ? "AI" : "P1";
+    const previewMsg =
+      "バトル中です。桜蘭の陰陽術 - 闘 - を発動しますか？" +
+      mw32BuildBattlePreview(
+        enemySide,
+        enemyBattler,
+        ownBattler,
+        [`自分側の選択キャラ ATK +1000`]
+      );
+
+    const ok = await askYesNo("桜蘭の陰陽術 - 闘 -", previewMsg);
+    if(!ok) return false;
+
+    const target = await pickOwnCharacterForOuran(side);
+    if(!target) return false;
+
+    const card = takeOuranFromHand(side);
+    if(!card) return false;
+
+    moveToWing(side, card);
+    target.tempAtk += 1000;
+    log(`桜蘭の陰陽術 - 闘 -：${target.name} ATK+1000（ターン終了まで）`);
+    renderAll();
+    return true;
+  }
+
+  if(side==="AI"){
+    const myAtk = calcCurrentAtk(side, ownBattler);
+    const enAtk = calcCurrentAtk(opponent(side), enemyBattler);
+    if(!(myAtk <= enAtk && myAtk + 1000 > enAtk)) return false;
+
+    const card = takeOuranFromHand(side);
+    if(!card) return false;
+
+    moveToWing(side, card);
+    ownBattler.tempAtk += 1000;
+    log(`AI：桜蘭の陰陽術 - 闘 - → ${ownBattler.name} ATK+1000`);
+    renderAll();
+    return true;
+  }
+
+  return false;
+};
+
+/* ------------------------------
+  班目 / ミーコの戦闘1回耐久を全分岐で通す
+------------------------------ */
+resolveBattle = async function(attacker, defenderUid){
+  const enemySide = "AI";
+  const defender = state[enemySide].C.find(c=>c && c.uid===defenderUid);
+  if(!defender){
+    log("対象が無効です", "warn");
+    return;
+  }
+
+  if(typeof markSevenStarHit === "function" && attacker && defenderUid){
+    markSevenStarHit(attacker, defenderUid);
+  }
+
+  await tryUseOuranDuringBattle("P1", attacker, defender);
+  await tryUseOuranDuringBattle("AI", defender, attacker);
+
+  const atkA = calcCurrentAtk("P1", attacker);
+  const atkD = calcCurrentAtk("AI", defender);
+  log(`バトル：${attacker.name}(${atkA}) vs ${defender.name}(${atkD})`);
+
+  if(atkA > atkD){
+    const savedD = await tryBattleSurvive("AI", defender);
+    if(!savedD){
+      await sendCharacterToWing("AI", defender.uid);
+      log(`撃破：${defender.name} → AIウイング`);
+      if(attacker.no===23 && mw32HasAnyEquip(attacker)){
+        await breakOneShieldByEffect("AI", attacker.name);
+      }
+    }
+  }else if(atkA < atkD){
+    const savedA = await tryBattleSurvive("P1", attacker);
+    if(!savedA){
+      await sendCharacterToWing("P1", attacker.uid);
+      log(`敗北：${attacker.name} → あなたウイング`);
+      await tryCattleTrigger_P1();
+    }
+  }else{
+    const savedA = await tryBattleSurvive("P1", attacker);
+    const savedD = await tryBattleSurvive("AI", defender);
+    if(!savedA){
+      await sendCharacterToWing("P1", attacker.uid);
+      await tryCattleTrigger_P1();
+    }
+    if(!savedD){
+      await sendCharacterToWing("AI", defender.uid);
+    }
+    log("相打ち：双方ウイング");
+  }
+
+  attacker.flags.attackedCountThisTurn += 1;
+  state.battle.attackerUid = null;
+  state.battle.attackerPos = null;
+  renderAll();
+};
+
+/* ------------------------------
+  AI側バトルも同様に修正
+------------------------------ */
+aiBattleBest = async function(){
+  const p = state.AI;
+
+  for(let i=0;i<3;i++){
+    const a = p.C[i];
+    if(!a) continue;
+
+    while(a && state.AI.C[i] && state.AI.C[i].uid===a.uid && a.flags.attackedCountThisTurn < getMaxAttacks("AI", a)){
+      const best = pickBestAIAttackFor(a);
+      if(!best || best.score <= 120) break;
+
+      if(best.type==="C"){
+        const t = state.P1.C.find(c=>c && c.uid===best.uid);
+        if(!t) break;
+
+        if(typeof markSevenStarHit === "function"){
+          markSevenStarHit(a, t.uid);
+        }
+
+        await tryUseOuranDuringBattle("AI", a, t);
+        await tryUseOuranDuringBattle("P1", t, a);
+
+        const atkA = calcCurrentAtk("AI", a);
+        const atkD = calcCurrentAtk("P1", t);
+        log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
+
+        if(atkA > atkD){
+          const savedD = await tryBattleSurvive("P1", t);
+          if(!savedD){
+            await sendCharacterToWing("P1", t.uid);
+            log(`AI：撃破 ${t.name} → あなたウイング`);
+            await tryCattleTrigger_P1();
+            if(a.no===23 && mw32HasAnyEquip(a)){
+              await breakOneShieldByEffect("P1", a.name);
+            }
+          }
+        }else if(atkA < atkD){
+          const savedA = await tryBattleSurvive("AI", a);
+          if(!savedA){
+            await sendCharacterToWing("AI", a.uid);
+            log(`AI：敗北 ${a.name} → AIウイング`);
+          }
+        }else{
+          const savedA = await tryBattleSurvive("AI", a);
+          const savedD = await tryBattleSurvive("P1", t);
+          if(!savedA) await sendCharacterToWing("AI", a.uid);
+          if(!savedD){
+            await sendCharacterToWing("P1", t.uid);
+            await tryCattleTrigger_P1();
+          }
+          log("AI：相打ち");
+        }
+
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        await sleep(180);
+
+        if(!state.AI.C[i] || state.AI.C[i].uid!==a.uid) break;
+        continue;
+      }
+
+      if(best.type==="S"){
+        const sh = state.P1.shield[best.idx];
+        if(!sh) break;
+        state.P1.shield[best.idx] = null;
+        state.P1.hand.push(sh);
+        log(`AI：シールド破壊（あなた）${best.idx+1} → あなた手札へ`);
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        await sleep(150);
+        break;
+      }
+
+      if(best.type==="D"){
+        const guarded = await tryMiikoDirectGuard("P1");
+        a.flags.attackedCountThisTurn += 1;
+        renderAll();
+        if(guarded) break;
+        await finishGame("AI");
+        return;
+      }
+
+      break;
+    }
+  }
+};
+
+/* ------------------------------
+  装備先が離れたら全装備を必ずウイングへ
+------------------------------ */
+sendCharacterToWing = async function(side, uid){
+  const p = state[side];
+  const pos = p.C.findIndex(c=>c && c.uid===uid);
+  if(pos<0) return;
+
+  const card = p.C[pos];
+  await stripEquipIfAny(side, card);
+  p.C[pos] = null;
+  moveToWing(side, card);
+
+  if(card && card.no===25 && typeof specialSummonKotaroKojiroFrom25 === "function"){
+    const act = {
+      kind:"ACT",
+      label:card.name,
+      activatorSide: side,
+      resolve: async ()=>{ await specialSummonKotaroKojiroFrom25(side); },
+      onNegated: async ()=>{ log(`${card.name} の離脱時効果は無効`); }
+    };
+    log(`${card.name}：離脱時効果を確認`);
+    await processActivatedEffect(act);
+  }
+};
+
+log("PATCH 32 読み込み完了");
