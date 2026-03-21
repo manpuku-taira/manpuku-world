@@ -7939,3 +7939,291 @@ log = function(msg){
 };
 
 log("PATCH 24 COMPLETE loaded");
+/* =========================================================
+  PATCH 25
+  - 記憶抹消で無効化された発動元カードを正しくウイングへ送る
+  - AIが自分の効果に自分で手形 / 記憶抹消を使わない
+========================================================= */
+
+/* ---------------- 共通：発動元カード探索 ---------------- */
+function mw25FindCardByUid(side, uid){
+  if(!uid) return null;
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.hand || []),
+    ...(p.wing || []),
+    ...(p.deck || []),
+    ...(p.outside || [])
+  ];
+  return zones.find(c=>c && c.uid===uid) || null;
+}
+
+function mw25FindLikelySourceCard(link){
+  if(!link) return null;
+
+  if(link.sourceCard && link.sourceCard.uid){
+    return mw25FindCardByUid(link.activatorSide, link.sourceCard.uid) || link.sourceCard;
+  }
+
+  if(link.sourceUid){
+    return mw25FindCardByUid(link.activatorSide, link.sourceUid);
+  }
+
+  const side = link.activatorSide;
+  const label = link.label;
+  if(!side || !label) return null;
+
+  const p = state[side];
+  const zones = [
+    ...(p.C || []),
+    ...(p.E || []),
+    ...(p.hand || [])
+  ];
+  return zones.find(c=>c && c.name===label) || null;
+}
+
+async function mw25SendNegatedSourceToWing(side, sourceCard){
+  if(!side || !sourceCard) return false;
+
+  const p = state[side];
+
+  /* C */
+  const inC = p.C.find(c=>c && c.uid===sourceCard.uid);
+  if(inC){
+    await sendCharacterToWing(side, inC.uid);
+    return true;
+  }
+
+  /* E */
+  const ePos = p.E.findIndex(c=>c && c.uid===sourceCard.uid);
+  if(ePos >= 0){
+    const card = p.E[ePos];
+    p.E[ePos] = null;
+
+    if(card && card.equippedToUid){
+      const host = p.C.find(c=>c && c.uid===card.equippedToUid);
+      if(host){
+        if(Array.isArray(host.equipUids)){
+          host.equipUids = host.equipUids.filter(uid => uid !== card.uid);
+          host.equipUid = host.equipUids[0] || null;
+        }else if(host.equipUid === card.uid){
+          host.equipUid = null;
+        }
+      }
+      card.equippedToUid = null;
+    }
+
+    moveToWing(side, card);
+    return true;
+  }
+
+  /* hand */
+  const hPos = p.hand.findIndex(c=>c && c.uid===sourceCard.uid);
+  if(hPos >= 0){
+    const card = p.hand.splice(hPos,1)[0];
+    moveToWing(side, card);
+    return true;
+  }
+
+  return false;
+}
+
+/* ---------------- カウンター可能判定 ----------------
+   自分の効果には自分で反応しない
+----------------------------------------------------- */
+function mw25GetCounters(side, prevLink){
+  const list = [];
+  if(!prevLink) return list;
+
+  /* 自分が発動したリンクには自分で反応しない */
+  if(prevLink.activatorSide === side) return list;
+
+  /* 手形 */
+  if(
+    state.activeSide !== side &&
+    !state.limits[side].handgataUsed &&
+    state[side].C.some(c=>c && c.no===8)
+  ){
+    list.push("HANDGATA");
+  }
+
+  /* 記憶抹消 */
+  if(state[side].hand.some(c=>c && c.no===14)){
+    list.push("MEMORY");
+  }
+
+  return list;
+}
+
+function mw25FindHandgata(side){
+  return state[side].C.find(c=>c && c.no===8) || null;
+}
+
+/* ---------------- 選択UI ---------------- */
+chooseCounterForSide = async function(side, prevLink){
+  const available = mw25GetCounters(side, prevLink);
+
+  if(available.length === 0){
+    return "PASS";
+  }
+
+  const items = [];
+  if(available.includes("HANDGATA")){
+    items.push({label:"手形で無効", value:"HANDGATA"});
+  }
+  if(available.includes("MEMORY")){
+    items.push({label:"記憶抹消で無効", value:"MEMORY"});
+  }
+  items.push({label:"しない", value:"PASS"});
+
+  if(side === "P1"){
+    const v = await askChoice(
+      "チェーン確認",
+      `${sideName(prevLink.activatorSide)}が「${prevLink.label}」を発動しました。\n反応しますか？`,
+      items
+    );
+    return v || "PASS";
+  }
+
+  /* AIは相手の効果にだけ反応する */
+  if(available.includes("MEMORY")) return "MEMORY";
+  if(available.includes("HANDGATA")) return "HANDGATA";
+  return "PASS";
+};
+
+/* ---------------- 完全チェーン再定義 ----------------
+   各リンクに sourceCard / sourceUid を必ず持たせる
+----------------------------------------------------- */
+runCounterChain = async function(initialLink){
+  if(initialLink && !initialLink.sourceCard){
+    initialLink.sourceCard = mw25FindLikelySourceCard(initialLink);
+  }
+  if(initialLink && !initialLink.sourceUid && initialLink.sourceCard){
+    initialLink.sourceUid = initialLink.sourceCard.uid;
+  }
+
+  const chain = [initialLink];
+  let priority = opponent(initialLink.activatorSide);
+  let passCount = 0;
+
+  while(true){
+    const prevLink = chain[chain.length - 1];
+    const available = mw25GetCounters(priority, prevLink);
+
+    let choice = "PASS";
+
+    if(available.length > 0){
+      choice = await chooseCounterForSide(priority, prevLink);
+      if(!choice) choice = "PASS";
+    }
+
+    const availableNow = mw25GetCounters(priority, prevLink);
+    if(choice === "HANDGATA" && !availableNow.includes("HANDGATA")) choice = "PASS";
+    if(choice === "MEMORY" && !availableNow.includes("MEMORY")) choice = "PASS";
+
+    if(choice === "HANDGATA"){
+      const src = mw25FindHandgata(priority);
+
+      state.limits[priority].handgataUsed = true;
+      chain.push({
+        kind:"HANDGATA",
+        label:"手形",
+        activatorSide: priority,
+        sourceCard: src || null,
+        sourceUid: src ? src.uid : null
+      });
+
+      log(`${sideName(priority)}：手形発動`);
+      priority = opponent(priority);
+      passCount = 0;
+      continue;
+    }
+
+    if(choice === "MEMORY"){
+      const card = takeMemoryEraseFromHand(priority);
+      if(card){
+        moveToWing(priority, card);
+
+        chain.push({
+          kind:"MEMORY",
+          label:"記憶抹消",
+          activatorSide: priority,
+          sourceCard: card,
+          sourceUid: card.uid
+        });
+
+        log(`${sideName(priority)}：記憶抹消発動`);
+        priority = opponent(priority);
+        passCount = 0;
+        continue;
+      }
+    }
+
+    passCount++;
+    if(passCount >= 2) break;
+    priority = opponent(priority);
+  }
+
+  const active = Array(chain.length).fill(true);
+  for(let i = chain.length - 1; i >= 1; i--){
+    if(active[i]){
+      active[i - 1] = false;
+    }
+  }
+
+  for(let i=1;i<chain.length;i++){
+    if(active[i]){
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効成功`);
+    }else{
+      log(`${sideName(chain[i].activatorSide)}の${chain[i].label}：無効化された`);
+    }
+  }
+
+  const negated = !active[0];
+  const negatorKind = negated && chain[1] ? chain[1].kind : null;
+
+  return {
+    negated,
+    negatorKind,
+    chain,
+    active,
+    finalNegatorLink: negated && chain[1] ? chain[1] : null
+  };
+};
+
+/* ---------------- 記憶抹消成功後、発動元を必ずウイングへ ---------------- */
+const __mw25_processActivatedEffect = processActivatedEffect;
+processActivatedEffect = async function(link){
+  if(link && !link.sourceCard){
+    link.sourceCard = mw25FindLikelySourceCard(link);
+  }
+  if(link && !link.sourceUid && link.sourceCard){
+    link.sourceUid = link.sourceCard.uid;
+  }
+
+  const result = await __mw25_processActivatedEffect(link);
+
+  if(
+    result &&
+    result.ok === false &&
+    result.detail &&
+    result.detail.negatorKind === "MEMORY"
+  ){
+    const sourceSide = link ? link.activatorSide : null;
+    const sourceCard = (link && (link.sourceCard || mw25FindLikelySourceCard(link))) || null;
+
+    if(sourceSide && sourceCard){
+      const moved = await mw25SendNegatedSourceToWing(sourceSide, sourceCard);
+      if(moved){
+        log(`記憶抹消：${sideName(sourceSide)}の「${sourceCard.name}」をウイングへ`);
+        renderAll();
+      }
+    }
+  }
+
+  return result;
+};
+
+log("PATCH 25 読み込み完了");
