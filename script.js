@@ -9653,3 +9653,458 @@ log("PATCH 33 読み込み完了");
     init();
   }
 })();
+/* =========================================================
+ * Manpuku World 追加追記パッチ v2
+ * 目的：
+ * 1) フェイズバーを「次フェイズへ進むボタン」のすぐ上へ固定
+ * 2) フェイズ表示を現在フェイズと強く同期
+ * 3) 手形の無効化を自動発動させず、必ずプレイヤー選択にする
+ *
+ * 使い方：
+ * - 前回の追記パッチのさらに下にそのまま追記
+ * - 関数名が異なる場合は CONFIG の候補名だけ合わせる
+ * ========================================================= */
+(() => {
+  'use strict';
+
+  const CONFIG = {
+    phaseOrder: ['START', 'DRAW', 'MAIN', 'BATTLE', 'END'],
+
+    // 現在フェイズ取得候補
+    phaseStateCandidates: [
+      () => window.currentPhase,
+      () => window.phase,
+      () => window.gameState?.phase,
+      () => window.state?.phase,
+      () => window.turnState?.phase,
+      () => window.game?.phase
+    ],
+
+    // フェイズ進行関数候補
+    nextPhaseFunctionNames: [
+      'nextPhase',
+      'advancePhase',
+      'goNextPhase',
+      'proceedPhase',
+      'onNextPhase',
+      'endPhase'
+    ],
+
+    // 各フェイズへ直接切り替える系の候補があれば拾う
+    setPhaseFunctionNames: [
+      'setPhase',
+      'changePhase',
+      'gotoPhase',
+      'moveToPhase',
+      'enterPhase'
+    ],
+
+    // 「次フェイズへ進む」ボタン候補
+    nextPhaseButtonSelectors: [
+      '#nextPhaseBtn',
+      '#phaseNextBtn',
+      '#btnNextPhase',
+      '#next-phase-btn',
+      '.next-phase-btn',
+      '.phase-next-btn',
+      'button[data-action="next-phase"]',
+      'button[onclick*="nextPhase"]',
+      'button[onclick*="advancePhase"]'
+    ],
+
+    phaseBarId: 'mw-phase-bar-v2',
+    phaseBarStyleId: 'mw-phase-style-v2',
+
+    // 手形・無効関連の候補
+    counterNegateFunctionNames: [
+      'tryAutoCounterNegate',
+      'autoCounterNegate',
+      'checkCounterNegate',
+      'resolveCounterNegate',
+      'tryHandShapeNegate',
+      'resolveHandShapeNegate',
+      'checkHandShapeNegate',
+      'reactToNegate',
+      'handleNegateReaction'
+    ],
+
+    playerChoiceFunctionNames: [
+      'showChoiceDialog',
+      'showConfirmDialog',
+      'showYesNoDialog',
+      'openChoiceModal',
+      'askPlayerChoice'
+    ],
+
+    phasePollMs: 80
+  };
+
+  /* =========================
+   * 共通
+   * ========================= */
+  function normalizePhase(value) {
+    if (value == null) return '';
+    const s = String(value).trim().toUpperCase();
+    if (s.includes('START') || s.includes('スタート')) return 'START';
+    if (s.includes('DRAW') || s.includes('ドロー')) return 'DRAW';
+    if (s.includes('MAIN') || s.includes('メイン')) return 'MAIN';
+    if (s.includes('BATTLE') || s.includes('バトル')) return 'BATTLE';
+    if (s.includes('END') || s.includes('エンド')) return 'END';
+    return '';
+  }
+
+  function getCurrentPhase() {
+    for (const getter of CONFIG.phaseStateCandidates) {
+      try {
+        const v = normalizePhase(getter());
+        if (v) return v;
+      } catch (_) {}
+    }
+
+    const textCandidates = [
+      document.querySelector('#phase'),
+      document.querySelector('.phase'),
+      document.querySelector('.phase-label'),
+      document.querySelector('.turn-phase'),
+      document.querySelector('[data-phase]')
+    ];
+
+    for (const el of textCandidates) {
+      if (!el) continue;
+      const v = normalizePhase(el.dataset?.phase || el.textContent || '');
+      if (v) return v;
+    }
+
+    return '';
+  }
+
+  function findExistingFunctionName(names) {
+    for (const name of names) {
+      if (typeof window[name] === 'function') return name;
+    }
+    return null;
+  }
+
+  function safeAnnounce(message) {
+    if (typeof window.showAnnouncement === 'function') return window.showAnnouncement(message);
+    if (typeof window.announce === 'function') return window.announce(message);
+    if (typeof window.pushLog === 'function') return window.pushLog(message);
+    if (typeof window.addLog === 'function') return window.addLog(message);
+    console.log('[Manpuku World]', message);
+  }
+
+  /* =========================
+   * 1. フェイズバー再構築
+   * ========================= */
+  function removeOldPhaseBars() {
+    const oldIds = ['mw-phase-bar', 'mw-phase-bar-v2'];
+    oldIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+
+    const oldStyles = ['mw-phase-style', 'mw-phase-style-v2'];
+    oldStyles.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+  }
+
+  function injectPhaseBarStyle() {
+    if (document.getElementById(CONFIG.phaseBarStyleId)) return;
+
+    const style = document.createElement('style');
+    style.id = CONFIG.phaseBarStyleId;
+    style.textContent = `
+      #${CONFIG.phaseBarId} {
+        position: fixed;
+        left: 50%;
+        bottom: 92px;
+        transform: translateX(-50%);
+        z-index: 9999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 7px 9px;
+        border-radius: 14px;
+        background: rgba(8, 10, 16, 0.82);
+        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.30);
+        backdrop-filter: blur(4px);
+        transition: left 0.12s ease, bottom 0.12s ease, opacity 0.12s ease;
+      }
+
+      #${CONFIG.phaseBarId}.is-hidden {
+        opacity: 0;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item {
+        min-width: 52px;
+        text-align: center;
+        font-size: 10px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: rgba(255,255,255,0.42);
+        padding: 7px 6px;
+        border-radius: 10px;
+        transition:
+          transform 0.16s ease,
+          color 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease,
+          opacity 0.16s ease;
+        opacity: 0.92;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item.is-done {
+        color: rgba(255,255,255,0.65);
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item.is-active {
+        color: rgba(255,255,255,1);
+        background: rgba(255,255,255,0.12);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset,
+                    0 0 10px rgba(255,255,255,0.10);
+        transform: scale(1.16);
+      }
+
+      @media (max-width: 520px) {
+        #${CONFIG.phaseBarId} {
+          gap: 4px;
+          padding: 6px 7px;
+        }
+        #${CONFIG.phaseBarId} .mw-phase-item {
+          min-width: 46px;
+          font-size: 9px;
+          padding: 6px 5px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function injectPhaseBarDom() {
+    if (document.getElementById(CONFIG.phaseBarId)) return;
+
+    const bar = document.createElement('div');
+    bar.id = CONFIG.phaseBarId;
+    bar.setAttribute('aria-hidden', 'true');
+
+    CONFIG.phaseOrder.forEach(phase => {
+      const item = document.createElement('div');
+      item.className = 'mw-phase-item';
+      item.dataset.phase = phase;
+      item.textContent = phase;
+      bar.appendChild(item);
+    });
+
+    document.body.appendChild(bar);
+  }
+
+  function findNextPhaseButton() {
+    for (const selector of CONFIG.nextPhaseButtonSelectors) {
+      const el = document.querySelector(selector);
+      if (el) return el;
+    }
+
+    // 文言検索の保険
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const byText = buttons.find(btn => {
+      const t = (btn.textContent || '').replace(/\s+/g, '');
+      return t.includes('次フェイズ') || t.includes('フェイズ進行') || t.includes('次へ');
+    });
+    return byText || null;
+  }
+
+  function placePhaseBarAboveButton() {
+    const bar = document.getElementById(CONFIG.phaseBarId);
+    if (!bar) return;
+
+    const btn = findNextPhaseButton();
+    if (!btn) {
+      bar.style.left = '50%';
+      bar.style.bottom = '92px';
+      return;
+    }
+
+    const rect = btn.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+
+    const centerX = rect.left + rect.width / 2;
+    const gap = 10;
+    const targetBottom = Math.max(window.innerHeight - rect.top + gap, 70);
+
+    // 画面外にはみ出ないよう軽く補正
+    const halfBar = Math.max(barRect.width / 2, 140);
+    const minX = halfBar + 8;
+    const maxX = window.innerWidth - halfBar - 8;
+    const clampedX = Math.min(Math.max(centerX, minX), maxX);
+
+    bar.style.left = `${clampedX}px`;
+    bar.style.bottom = `${targetBottom}px`;
+  }
+
+  function updatePhaseBar(forcePhase) {
+    const bar = document.getElementById(CONFIG.phaseBarId);
+    if (!bar) return;
+
+    const current = forcePhase || getCurrentPhase();
+    const items = bar.querySelectorAll('.mw-phase-item');
+
+    if (!current) {
+      bar.classList.add('is-hidden');
+      return;
+    }
+
+    bar.classList.remove('is-hidden');
+
+    const currentIndex = CONFIG.phaseOrder.indexOf(current);
+
+    items.forEach((item, index) => {
+      item.classList.remove('is-active', 'is-done');
+      if (index < currentIndex) item.classList.add('is-done');
+      if (CONFIG.phaseOrder[index] === current) item.classList.add('is-active');
+    });
+
+    placePhaseBarAboveButton();
+  }
+
+  function startPhaseBarUpdater() {
+    updatePhaseBar();
+    setInterval(() => updatePhaseBar(), CONFIG.phasePollMs);
+
+    window.addEventListener('resize', () => placePhaseBarAboveButton());
+    window.addEventListener('scroll', () => placePhaseBarAboveButton(), true);
+  }
+
+  /* =========================
+   * 2. フェイズ進行関数に強く同期
+   * ========================= */
+  function wrapPhaseFunction(name) {
+    const original = window[name];
+    if (typeof original !== 'function') return;
+    if (original.__mwPhaseSyncWrapped) return;
+
+    window[name] = function (...args) {
+      const result = original.apply(this, args);
+
+      // 進行直後と少し後でも再同期
+      setTimeout(() => updatePhaseBar(), 0);
+      setTimeout(() => updatePhaseBar(), 30);
+      setTimeout(() => updatePhaseBar(), 120);
+      setTimeout(() => updatePhaseBar(), 220);
+
+      return result;
+    };
+    window[name].__mwPhaseSyncWrapped = true;
+  }
+
+  function patchPhaseSync() {
+    CONFIG.nextPhaseFunctionNames.forEach(name => wrapPhaseFunction(name));
+    CONFIG.setPhaseFunctionNames.forEach(name => wrapPhaseFunction(name));
+
+    // 既存左上フェイズ表示が書き換わる場合にも追従
+    const watchTargets = [
+      document.querySelector('#phase'),
+      document.querySelector('.phase'),
+      document.querySelector('.phase-label'),
+      document.querySelector('.turn-phase')
+    ].filter(Boolean);
+
+    watchTargets.forEach(target => {
+      const observer = new MutationObserver(() => updatePhaseBar());
+      observer.observe(target, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true
+      });
+    });
+  }
+
+  /* =========================
+   * 3. 手形の自動無効を禁止して選択制へ
+   *
+   * 方針：
+   * - 候補関数をラップし、「自動で無効化」しようとしたら確認を挟む
+   * - 確認を拒否した場合は無効化処理を発動しない
+   *
+   * 注意：
+   * - 実際の関数名が別の場合は CONFIG.counterNegateFunctionNames に追加が必要
+   * ========================= */
+  function chooseWithUi(message) {
+    // 既存の選択UIがあれば優先
+    for (const fnName of CONFIG.playerChoiceFunctionNames) {
+      if (typeof window[fnName] === 'function') {
+        try {
+          const result = window[fnName](message, ['はい', 'いいえ']);
+          if (typeof result === 'boolean') return result;
+        } catch (_) {}
+      }
+    }
+    return window.confirm(message);
+  }
+
+  function patchCounterNegateSelection() {
+    let patchedCount = 0;
+
+    CONFIG.counterNegateFunctionNames.forEach(fnName => {
+      const original = window[fnName];
+      if (typeof original !== 'function') return;
+      if (original.__mwCounterChoiceWrapped) return;
+
+      window[fnName] = function (...args) {
+        // 相手の手形がこちらの効果を無効にした後、
+        // こちらの手形でさらに無効にし返すかを必ず確認
+        const ok = chooseWithUi('こちらの手形で相手の無効効果を無効にしますか？');
+        if (!ok) {
+          safeAnnounce('手形の無効化は行いませんでした');
+          return false;
+        }
+        return original.apply(this, args);
+      };
+
+      window[fnName].__mwCounterChoiceWrapped = true;
+      patchedCount++;
+    });
+
+    if (!patchedCount) {
+      console.warn(
+        '[Manpuku World] 手形の自動無効を止める対象関数が見つかりませんでした。CONFIG.counterNegateFunctionNames に実際の関数名を追加してください。'
+      );
+    }
+  }
+
+  /* =========================
+   * 4. 初期化
+   * ========================= */
+  function init() {
+    removeOldPhaseBars();
+    injectPhaseBarStyle();
+    injectPhaseBarDom();
+    patchPhaseSync();
+    patchCounterNegateSelection();
+    startPhaseBarUpdater();
+
+    setTimeout(() => {
+      updatePhaseBar();
+      placePhaseBarAboveButton();
+    }, 0);
+
+    setTimeout(() => {
+      updatePhaseBar();
+      placePhaseBarAboveButton();
+    }, 120);
+
+    safeAnnounce('UI追加修正版を適用しました');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
