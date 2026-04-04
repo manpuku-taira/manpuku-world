@@ -9171,3 +9171,485 @@ activateSeshiaArisaSummon = async function(side, pos, card){
 };
 
 log("PATCH 33 読み込み完了");
+/* =========================================================
+ * Manpuku World 追記パッチ
+ * 目的：
+ * 1) AIターンの見せ方を少しゆっくりにする
+ * 2) 中央フェイズバーを追加する
+ * 3) MAIN→BATTLE / BATTLE→END の確認を入れる
+ *
+ * 使い方：
+ * - このコードを script.js の末尾にそのまま追記
+ * - 関数名が異なる場合は CONFIG だけ調整
+ * ========================================================= */
+(() => {
+  'use strict';
+
+  /* =========================
+   * 0. 設定
+   * ========================= */
+  const CONFIG = {
+    phaseOrder: ['START', 'DRAW', 'MAIN', 'BATTLE', 'END'],
+
+    // 現在フェイズを取得する候補
+    phaseStateCandidates: [
+      () => window.currentPhase,
+      () => window.phase,
+      () => window.gameState?.phase,
+      () => window.state?.phase,
+      () => window.turnState?.phase
+    ],
+
+    // フェイズ進行関数候補
+    nextPhaseFunctionNames: [
+      'nextPhase',
+      'advancePhase',
+      'goNextPhase',
+      'proceedPhase',
+      'onNextPhase',
+      'endPhase'
+    ],
+
+    // AIターン関数候補
+    enemyTurnFunctionNames: [
+      'enemyTurn',
+      'aiTurn',
+      'startEnemyTurn',
+      'runEnemyTurn',
+      'doEnemyTurn'
+    ],
+
+    // AI行動として遅延を入れたい関数候補
+    aiActionFunctionNames: [
+      'drawCard',
+      'enemyDraw',
+      'aiDraw',
+      'summonAI',
+      'enemySummon',
+      'aiSummon',
+      'playAICard',
+      'enemyPlayCard',
+      'performAttack',
+      'enemyAttack',
+      'aiAttack',
+      'resolveAttack',
+      'startBattle',
+      'activateCardEffect',
+      'enemyUseEffect',
+      'aiUseEffect',
+      'endTurn',
+      'enemyEndTurn',
+      'aiEndTurn'
+    ],
+
+    // フェイズバーを差し込む位置
+    // body直下に固定配置します。既存HTML変更不要です。
+    phaseBarId: 'mw-phase-bar',
+
+    // AIターンの見せ方
+    pacing: {
+      enabled: true,
+      preDelay: 180,
+      postDelay: 260,
+      afterEnemyTurnDelay: 180,
+      maxQueueTime: 12000
+    },
+
+    // フェイズ確認
+    confirmPhaseTransition: true,
+
+    // 表示更新間隔
+    phasePollMs: 120
+  };
+
+  /* =========================
+   * 1. 共通ユーティリティ
+   * ========================= */
+  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  function normalizePhase(value) {
+    if (value == null) return '';
+    const s = String(value).trim().toUpperCase();
+
+    if (s.includes('START')) return 'START';
+    if (s.includes('DRAW')) return 'DRAW';
+    if (s.includes('MAIN')) return 'MAIN';
+    if (s.includes('BATTLE')) return 'BATTLE';
+    if (s.includes('END')) return 'END';
+
+    // 日本語表記への保険
+    if (s.includes('スタート')) return 'START';
+    if (s.includes('ドロー')) return 'DRAW';
+    if (s.includes('メイン')) return 'MAIN';
+    if (s.includes('バトル')) return 'BATTLE';
+    if (s.includes('エンド')) return 'END';
+
+    return s;
+  }
+
+  function getCurrentPhase() {
+    for (const getter of CONFIG.phaseStateCandidates) {
+      try {
+        const v = getter();
+        const normalized = normalizePhase(v);
+        if (normalized) return normalized;
+      } catch (_) {}
+    }
+
+    // 左上など既存表示から拾う保険
+    const phaseTextCandidates = [
+      document.querySelector('#phase'),
+      document.querySelector('.phase'),
+      document.querySelector('.phase-label'),
+      document.querySelector('.turn-phase'),
+      document.querySelector('[data-phase]')
+    ];
+
+    for (const el of phaseTextCandidates) {
+      if (!el) continue;
+      const v = el.dataset?.phase || el.textContent || '';
+      const normalized = normalizePhase(v);
+      if (normalized) return normalized;
+    }
+
+    return '';
+  }
+
+  function findExistingFunctionName(names) {
+    for (const name of names) {
+      if (typeof window[name] === 'function') return name;
+    }
+    return null;
+  }
+
+  function findExistingFunctionNames(names) {
+    return names.filter(name => typeof window[name] === 'function');
+  }
+
+  function safeAnnounce(message) {
+    if (typeof window.showAnnouncement === 'function') {
+      window.showAnnouncement(message);
+      return;
+    }
+    if (typeof window.announce === 'function') {
+      window.announce(message);
+      return;
+    }
+    if (typeof window.pushLog === 'function') {
+      window.pushLog(message);
+      return;
+    }
+    if (typeof window.addLog === 'function') {
+      window.addLog(message);
+      return;
+    }
+    console.log('[Manpuku World]', message);
+  }
+
+  /* =========================
+   * 2. フェイズバーDOM/CSSをJSだけで追加
+   * ========================= */
+  function injectPhaseBarStyle() {
+    if (document.getElementById('mw-phase-style')) return;
+
+    const style = document.createElement('style');
+    style.id = 'mw-phase-style';
+    style.textContent = `
+      #${CONFIG.phaseBarId} {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 9999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 14px;
+        background: rgba(10, 12, 18, 0.52);
+        backdrop-filter: blur(4px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+        border: 1px solid rgba(255,255,255,0.10);
+      }
+
+      #${CONFIG.phaseBarId}.is-hidden {
+        opacity: 0;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item {
+        min-width: 64px;
+        text-align: center;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        color: rgba(255,255,255,0.45);
+        padding: 6px 8px;
+        border-radius: 10px;
+        transition:
+          transform 0.18s ease,
+          color 0.18s ease,
+          background 0.18s ease,
+          box-shadow 0.18s ease,
+          opacity 0.18s ease;
+        opacity: 0.82;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item.is-active {
+        color: rgba(255,255,255,0.98);
+        background: rgba(255,255,255,0.12);
+        transform: scale(1.16);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.10) inset,
+                    0 0 14px rgba(255,255,255,0.12);
+        opacity: 1;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item.is-done {
+        color: rgba(255,255,255,0.68);
+        opacity: 0.95;
+      }
+
+      /* カード系に軽い遷移を追加（既存HTML/CSS変更不要） */
+      .card, .hand-card, .field-card, .zone-card, [data-card-id] {
+        transition:
+          transform 0.18s ease,
+          left 0.18s ease,
+          top 0.18s ease,
+          opacity 0.18s ease,
+          filter 0.18s ease;
+        will-change: transform, left, top, opacity;
+      }
+
+      /* 盤面がとても狭い場合の簡易対応 */
+      @media (max-width: 520px) {
+        #${CONFIG.phaseBarId} {
+          gap: 5px;
+          padding: 6px 8px;
+        }
+        #${CONFIG.phaseBarId} .mw-phase-item {
+          min-width: 52px;
+          font-size: 10px;
+          padding: 5px 6px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function injectPhaseBarDom() {
+    if (document.getElementById(CONFIG.phaseBarId)) return;
+
+    const bar = document.createElement('div');
+    bar.id = CONFIG.phaseBarId;
+    bar.setAttribute('aria-hidden', 'true');
+
+    CONFIG.phaseOrder.forEach(phase => {
+      const item = document.createElement('div');
+      item.className = 'mw-phase-item';
+      item.dataset.phase = phase;
+      item.textContent = phase;
+      bar.appendChild(item);
+    });
+
+    document.body.appendChild(bar);
+  }
+
+  function updatePhaseBar() {
+    const bar = document.getElementById(CONFIG.phaseBarId);
+    if (!bar) return;
+
+    const current = getCurrentPhase();
+    const items = bar.querySelectorAll('.mw-phase-item');
+
+    if (!current) {
+      bar.classList.add('is-hidden');
+      return;
+    }
+
+    bar.classList.remove('is-hidden');
+
+    const currentIndex = CONFIG.phaseOrder.indexOf(current);
+
+    items.forEach((item, index) => {
+      item.classList.remove('is-active', 'is-done');
+
+      if (index < currentIndex) item.classList.add('is-done');
+      if (CONFIG.phaseOrder[index] === current) item.classList.add('is-active');
+    });
+  }
+
+  function startPhaseBarUpdater() {
+    updatePhaseBar();
+    setInterval(updatePhaseBar, CONFIG.phasePollMs);
+  }
+
+  /* =========================
+   * 3. フェイズ進行確認の差し込み
+   * ========================= */
+  function shouldConfirmPhaseTransition(currentPhase) {
+    if (!CONFIG.confirmPhaseTransition) return null;
+
+    if (currentPhase === 'MAIN') {
+      return 'バトルフェイズに入ってよろしいですか？';
+    }
+    if (currentPhase === 'BATTLE') {
+      return 'バトルフェイズを終了してエンドフェイズに進んでよろしいですか？';
+    }
+    return null;
+  }
+
+  function patchPhaseAdvance() {
+    const fnName = findExistingFunctionName(CONFIG.nextPhaseFunctionNames);
+    if (!fnName) {
+      console.warn('[Manpuku World] フェイズ進行関数が見つかりませんでした。CONFIG.nextPhaseFunctionNames を確認してください。');
+      return;
+    }
+
+    if (window[fnName].__mwPatchedPhaseAdvance) return;
+
+    const original = window[fnName];
+
+    window[fnName] = function patchedPhaseAdvance(...args) {
+      const currentPhase = getCurrentPhase();
+      const message = shouldConfirmPhaseTransition(currentPhase);
+
+      if (message) {
+        const ok = window.confirm(message);
+        if (!ok) return;
+      }
+
+      const result = original.apply(this, args);
+
+      // フェイズ表示を即更新
+      setTimeout(updatePhaseBar, 0);
+      setTimeout(updatePhaseBar, 80);
+      setTimeout(updatePhaseBar, 180);
+
+      return result;
+    };
+
+    window[fnName].__mwPatchedPhaseAdvance = true;
+    console.log(`[Manpuku World] フェイズ進行関数 ${fnName} に確認処理を追加しました。`);
+  }
+
+  /* =========================
+   * 4. AIターンの“見せ方”を少しゆっくりにする
+   *
+   * 方式：
+   * - AIターン関数を包む
+   * - その間だけ、登録済みAI行動関数をキューに積む
+   * - 少しずつ実行して「相手が動いている感」を出す
+   *
+   * 注意：
+   * - 既存AIが「1アクションずつ順に実行する」構造なら有効
+   * - 既存AIが1フレーム内で高度に再計算している場合は、
+   *   体験改善はできても、完全最適にはならない可能性があります
+   * ========================= */
+  const AI_PACING = {
+    active: false,
+    queue: Promise.resolve(),
+    wrappedActionNames: [],
+    originals: new Map()
+  };
+
+  function wrapAiActionFunctions() {
+    const names = findExistingFunctionNames(CONFIG.aiActionFunctionNames);
+
+    names.forEach(name => {
+      if (AI_PACING.originals.has(name)) return;
+
+      const original = window[name];
+      AI_PACING.originals.set(name, original);
+
+      window[name] = function pacedAiActionWrapper(...args) {
+        // AIターン中のみキュー制御
+        if (!AI_PACING.active) {
+          return original.apply(this, args);
+        }
+
+        AI_PACING.queue = AI_PACING.queue.then(async () => {
+          await wait(CONFIG.pacing.preDelay);
+
+          try {
+            original.apply(this, args);
+          } catch (err) {
+            console.error(`[Manpuku World] AI行動関数 ${name} の実行中にエラー`, err);
+          }
+
+          updatePhaseBar();
+          await wait(CONFIG.pacing.postDelay);
+        });
+
+        // 呼び元が返り値を使っていない前提の見せ方パッチ
+        return undefined;
+      };
+
+      AI_PACING.wrappedActionNames.push(name);
+    });
+
+    if (AI_PACING.wrappedActionNames.length) {
+      console.log('[Manpuku World] AI演出用にラップした関数:', AI_PACING.wrappedActionNames.join(', '));
+    } else {
+      console.warn('[Manpuku World] AI演出用にラップできる行動関数が見つかりませんでした。CONFIG.aiActionFunctionNames を確認してください。');
+    }
+  }
+
+  function patchEnemyTurn() {
+    if (!CONFIG.pacing.enabled) return;
+
+    const fnName = findExistingFunctionName(CONFIG.enemyTurnFunctionNames);
+    if (!fnName) {
+      console.warn('[Manpuku World] AIターン関数が見つかりませんでした。CONFIG.enemyTurnFunctionNames を確認してください。');
+      return;
+    }
+
+    if (window[fnName].__mwPatchedEnemyTurn) return;
+
+    wrapAiActionFunctions();
+
+    const original = window[fnName];
+
+    window[fnName] = async function patchedEnemyTurn(...args) {
+      AI_PACING.active = true;
+      AI_PACING.queue = Promise.resolve();
+
+      safeAnnounce('ENEMY TURN');
+
+      // original が同期関数でも非同期関数でも対応
+      const result = await Promise.resolve(original.apply(this, args));
+
+      // 行動キューの完了待ち
+      const queueDone = AI_PACING.queue;
+      const timeout = wait(CONFIG.pacing.maxQueueTime);
+
+      await Promise.race([queueDone, timeout]);
+
+      await wait(CONFIG.pacing.afterEnemyTurnDelay);
+      AI_PACING.active = false;
+
+      return result;
+    };
+
+    window[fnName].__mwPatchedEnemyTurn = true;
+    console.log(`[Manpuku World] AIターン関数 ${fnName} に速度演出を追加しました。`);
+  }
+
+  /* =========================
+   * 5. 初期化
+   * ========================= */
+  function init() {
+    injectPhaseBarStyle();
+    injectPhaseBarDom();
+    startPhaseBarUpdater();
+    patchPhaseAdvance();
+    patchEnemyTurn();
+
+    safeAnnounce('演出パッチを適用しました');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
