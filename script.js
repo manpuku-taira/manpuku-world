@@ -10108,3 +10108,353 @@ log("PATCH 33 読み込み完了");
     init();
   }
 })();
+/* =========================================================
+ * Manpuku World フェイズバー修正版 v3
+ * 目的：
+ * 1) 左上の現在フェイズ表示と完全同期
+ * 2) タイトル画面では非表示、ゲーム開始後のみ表示
+ * 3) 次のフェイズボタンのすぐ上に、前回より少し下げて配置
+ * ========================================================= */
+(() => {
+  'use strict';
+
+  const CONFIG = {
+    phaseOrder: ['START', 'DRAW', 'MAIN', 'BATTLE', 'END'],
+    phaseBarId: 'mw-phase-bar-v3',
+    phaseStyleId: 'mw-phase-style-v3',
+
+    // 既存バーを掃除
+    oldBarIds: ['mw-phase-bar', 'mw-phase-bar-v2', 'mw-phase-bar-v3'],
+    oldStyleIds: ['mw-phase-style', 'mw-phase-style-v2', 'mw-phase-style-v3'],
+
+    // 左上のフェイズ表示候補
+    phaseBadgeSelectors: [
+      '.phase',
+      '#phase',
+      '.phase-label',
+      '.turn-phase',
+      '.phaseBadge',
+      '.phase-badge',
+      'button.phase',
+      'button.phase-badge'
+    ],
+
+    // 「次のフェイズ」ボタン候補
+    nextPhaseButtonSelectors: [
+      '#nextPhaseBtn',
+      '#phaseNextBtn',
+      '#btnNextPhase',
+      '#next-phase-btn',
+      '.next-phase-btn',
+      '.phase-next-btn',
+      'button[data-action="next-phase"]'
+    ],
+
+    // ターン終了ボタン候補（位置補助）
+    endTurnButtonSelectors: [
+      '#endTurnBtn',
+      '#btnEndTurn',
+      '#turnEndBtn',
+      '.end-turn-btn',
+      'button[data-action="end-turn"]'
+    ],
+
+    pollMs: 80
+  };
+
+  function normalizePhase(value) {
+    if (value == null) return '';
+    const s = String(value).trim().toUpperCase();
+    if (s.includes('START') || s.includes('スタート')) return 'START';
+    if (s.includes('DRAW') || s.includes('ドロー')) return 'DRAW';
+    if (s.includes('MAIN') || s.includes('メイン')) return 'MAIN';
+    if (s.includes('BATTLE') || s.includes('バトル')) return 'BATTLE';
+    if (s.includes('END') || s.includes('エンド')) return 'END';
+    return '';
+  }
+
+  function removeOldBars() {
+    CONFIG.oldBarIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+    CONFIG.oldStyleIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+  }
+
+  function injectStyle() {
+    if (document.getElementById(CONFIG.phaseStyleId)) return;
+
+    const style = document.createElement('style');
+    style.id = CONFIG.phaseStyleId;
+    style.textContent = `
+      #${CONFIG.phaseBarId} {
+        position: fixed;
+        left: 50%;
+        bottom: 108px;
+        transform: translateX(-50%);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 8px 10px;
+        border-radius: 16px;
+        background: rgba(14, 15, 24, 0.88);
+        border: 1px solid rgba(255,255,255,0.10);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.34);
+        backdrop-filter: blur(6px);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.18s ease, left 0.12s ease, bottom 0.12s ease;
+      }
+
+      #${CONFIG.phaseBarId}.is-visible {
+        opacity: 1;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item {
+        min-width: 52px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: rgba(255,255,255,0.36);
+        padding: 7px 6px;
+        border-radius: 10px;
+        transition:
+          transform 0.16s ease,
+          color 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease,
+          opacity 0.16s ease;
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item.is-done {
+        color: rgba(255,255,255,0.62);
+      }
+
+      #${CONFIG.phaseBarId} .mw-phase-item.is-active {
+        color: rgba(255,255,255,1);
+        background: rgba(255,255,255,0.13);
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.10) inset,
+          0 0 10px rgba(255,255,255,0.10);
+        transform: scale(1.14);
+      }
+
+      @media (max-width: 520px) {
+        #${CONFIG.phaseBarId} {
+          padding: 7px 8px;
+          gap: 3px;
+        }
+        #${CONFIG.phaseBarId} .mw-phase-item {
+          min-width: 48px;
+          font-size: 9px;
+          padding: 6px 5px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function injectDom() {
+    if (document.getElementById(CONFIG.phaseBarId)) return;
+
+    const bar = document.createElement('div');
+    bar.id = CONFIG.phaseBarId;
+
+    CONFIG.phaseOrder.forEach(phase => {
+      const item = document.createElement('div');
+      item.className = 'mw-phase-item';
+      item.dataset.phase = phase;
+      item.textContent = phase;
+      bar.appendChild(item);
+    });
+
+    document.body.appendChild(bar);
+  }
+
+  function findFirstVisible(selectors) {
+    for (const selector of selectors) {
+      const nodes = document.querySelectorAll(selector);
+      for (const el of nodes) {
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        if (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.opacity !== '0'
+        ) {
+          return el;
+        }
+      }
+    }
+    return null;
+  }
+
+  function findPhaseBadge() {
+    // まず候補セレクタ
+    let badge = findFirstVisible(CONFIG.phaseBadgeSelectors);
+    if (badge) return badge;
+
+    // 補助：左上付近のボタン/ラベルから START/DRAW/MAIN/BATTLE/END を探す
+    const candidates = Array.from(document.querySelectorAll('button, div, span'));
+    badge = candidates.find(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top > 220 || rect.left > 220) return false;
+      const text = normalizePhase(el.textContent || '');
+      return !!text;
+    });
+
+    return badge || null;
+  }
+
+  function getPhaseFromBadge() {
+    const badge = findPhaseBadge();
+    if (!badge) return '';
+    return normalizePhase(badge.textContent || badge.dataset?.phase || '');
+  }
+
+  function findNextPhaseButton() {
+    let btn = findFirstVisible(CONFIG.nextPhaseButtonSelectors);
+    if (btn) return btn;
+
+    const buttons = Array.from(document.querySelectorAll('button'));
+    btn = buttons.find(btn => {
+      const t = (btn.textContent || '').replace(/\s+/g, '');
+      return t.includes('次のフェイズ') || t.includes('次フェイズ') || t.includes('フェイズ');
+    });
+
+    return btn || null;
+  }
+
+  function findEndTurnButton() {
+    let btn = findFirstVisible(CONFIG.endTurnButtonSelectors);
+    if (btn) return btn;
+
+    const buttons = Array.from(document.querySelectorAll('button'));
+    btn = buttons.find(btn => {
+      const t = (btn.textContent || '').replace(/\s+/g, '');
+      return t.includes('ターン終了') || t.includes('終了');
+    });
+
+    return btn || null;
+  }
+
+  function isGameStarted() {
+    // 「次のフェイズ」ボタンが見えている = ゲーム開始後 とみなす
+    const nextBtn = findNextPhaseButton();
+    if (!nextBtn) return false;
+
+    // フェイズ表示も取れているとさらに確実
+    const phase = getPhaseFromBadge();
+    if (!phase) return false;
+
+    return true;
+  }
+
+  function placeBar() {
+    const bar = document.getElementById(CONFIG.phaseBarId);
+    if (!bar) return;
+
+    const nextBtn = findNextPhaseButton();
+    const endBtn = findEndTurnButton();
+
+    if (!nextBtn) {
+      bar.style.left = '50%';
+      bar.style.bottom = '96px';
+      return;
+    }
+
+    const nextRect = nextBtn.getBoundingClientRect();
+    const endRect = endBtn ? endBtn.getBoundingClientRect() : nextRect;
+
+    const centerX = (nextRect.left + endRect.right) / 2;
+
+    // 前回より少し下げる
+    // ボタン上端から +4px 程度まで寄せる
+    const targetBottom = Math.max(window.innerHeight - nextRect.top + 4, 84);
+
+    bar.style.left = `${centerX}px`;
+    bar.style.bottom = `${targetBottom}px`;
+  }
+
+  function updateBar() {
+    const bar = document.getElementById(CONFIG.phaseBarId);
+    if (!bar) return;
+
+    const started = isGameStarted();
+    if (!started) {
+      bar.classList.remove('is-visible');
+      return;
+    }
+
+    const currentPhase = getPhaseFromBadge();
+    if (!currentPhase) {
+      bar.classList.remove('is-visible');
+      return;
+    }
+
+    const items = bar.querySelectorAll('.mw-phase-item');
+    const currentIndex = CONFIG.phaseOrder.indexOf(currentPhase);
+
+    items.forEach((item, index) => {
+      item.classList.remove('is-active', 'is-done');
+
+      if (index < currentIndex) item.classList.add('is-done');
+      if (CONFIG.phaseOrder[index] === currentPhase) item.classList.add('is-active');
+    });
+
+    placeBar();
+    bar.classList.add('is-visible');
+  }
+
+  function observePhaseBadge() {
+    const badge = findPhaseBadge();
+    if (!badge || badge.__mwObservedPhaseBadge) return;
+
+    const observer = new MutationObserver(() => {
+      updateBar();
+    });
+
+    observer.observe(badge, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true
+    });
+
+    badge.__mwObservedPhaseBadge = true;
+  }
+
+  function startUpdater() {
+    updateBar();
+    observePhaseBadge();
+
+    setInterval(() => {
+      updateBar();
+      observePhaseBadge();
+    }, CONFIG.pollMs);
+
+    window.addEventListener('resize', updateBar);
+    window.addEventListener('scroll', updateBar, true);
+  }
+
+  function init() {
+    removeOldBars();
+    injectStyle();
+    injectDom();
+    startUpdater();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
