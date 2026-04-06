@@ -10458,3 +10458,251 @@ log("PATCH 33 読み込み完了");
     init();
   }
 })();
+/* =========================================================
+ * Manpuku World フェイズバー復旧パッチ（追記専用）
+ * 使い方：
+ * - script.js の一番下に、そのまま追記するだけ
+ * - 既存コードは消さない
+ * 目的：
+ * 1) これまでの追加バーを強制的に隠す
+ * 2) 背景・カード・盤面が見えなくなる副作用を打ち消す
+ * 3) 左上フェイズ表示と連動する安全な新バーを出す
+ * 4) タイトルでは出さない
+ * 5) バーを「次のフェイズ」ボタンのすぐ上に寄せる
+ * ========================================================= */
+(() => {
+  'use strict';
+
+  const CFG = {
+    barId: 'mw-recovery-phase-bar',
+    styleId: 'mw-recovery-phase-style',
+    phaseOrder: ['START', 'DRAW', 'MAIN', 'BATTLE', 'END'],
+    pollMs: 120
+  };
+
+  function normalizePhase(value) {
+    if (value == null) return '';
+    const s = String(value).trim().toUpperCase();
+    if (s.includes('START') || s.includes('スタート')) return 'START';
+    if (s.includes('DRAW') || s.includes('ドロー')) return 'DRAW';
+    if (s.includes('MAIN') || s.includes('メイン')) return 'MAIN';
+    if (s.includes('BATTLE') || s.includes('バトル')) return 'BATTLE';
+    if (s.includes('END') || s.includes('エンド')) return 'END';
+    return '';
+  }
+
+  function injectStyle() {
+    if (document.getElementById(CFG.styleId)) return;
+
+    const style = document.createElement('style');
+    style.id = CFG.styleId;
+    style.textContent = `
+      /* 以前のバーを全部無効化 */
+      #mw-phase-bar,
+      #mw-phase-bar-v2,
+      #mw-phase-bar-v3,
+      #mw-safe-phase-bar {
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
+      /* 以前の追記で崩れた場合の最低限の復旧 */
+      .card, .hand-card, .field-card, .zone-card, [data-card-id],
+      .board, .field, .play-field, .game-board, .game-field,
+      canvas, img {
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+
+      #${CFG.barId} {
+        position: fixed;
+        left: 50%;
+        bottom: 96px;
+        transform: translateX(-50%);
+        z-index: 3000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 8px 10px;
+        border-radius: 16px;
+        background: rgba(14, 15, 24, 0.92);
+        border: 1px solid rgba(255,255,255,0.10);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.30);
+        backdrop-filter: blur(6px);
+        pointer-events: none;
+      }
+
+      #${CFG.barId}.is-visible {
+        display: flex;
+      }
+
+      #${CFG.barId} .mw-phase-item {
+        min-width: 52px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: rgba(255,255,255,0.36);
+        padding: 7px 6px;
+        border-radius: 10px;
+        transition:
+          transform 0.16s ease,
+          color 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+
+      #${CFG.barId} .mw-phase-item.is-done {
+        color: rgba(255,255,255,0.62);
+      }
+
+      #${CFG.barId} .mw-phase-item.is-active {
+        color: rgba(255,255,255,1);
+        background: rgba(255,255,255,0.13);
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.10) inset,
+          0 0 10px rgba(255,255,255,0.10);
+        transform: scale(1.14);
+      }
+
+      @media (max-width: 520px) {
+        #${CFG.barId} {
+          padding: 7px 8px;
+          gap: 3px;
+        }
+        #${CFG.barId} .mw-phase-item {
+          min-width: 48px;
+          font-size: 9px;
+          padding: 6px 5px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function injectDom() {
+    if (document.getElementById(CFG.barId)) return;
+
+    const bar = document.createElement('div');
+    bar.id = CFG.barId;
+
+    CFG.phaseOrder.forEach(phase => {
+      const item = document.createElement('div');
+      item.className = 'mw-phase-item';
+      item.dataset.phase = phase;
+      item.textContent = phase;
+      bar.appendChild(item);
+    });
+
+    document.body.appendChild(bar);
+  }
+
+  function getVisibleElements() {
+    return Array.from(document.querySelectorAll('button, div, span')).filter(el => {
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return rect.width > 0 &&
+             rect.height > 0 &&
+             style.display !== 'none' &&
+             style.visibility !== 'hidden' &&
+             style.opacity !== '0';
+    });
+  }
+
+  function findPhaseBadge() {
+    return getVisibleElements().find(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top > 240 || rect.left > 240) return false;
+      return !!normalizePhase(el.textContent || '');
+    }) || null;
+  }
+
+  function getCurrentPhase() {
+    const badge = findPhaseBadge();
+    return badge ? normalizePhase(badge.textContent || '') : '';
+  }
+
+  function findNextPhaseButton() {
+    return getVisibleElements().find(el => {
+      if (el.tagName !== 'BUTTON') return false;
+      const t = (el.textContent || '').replace(/\s+/g, '');
+      return t.includes('次のフェイズ') || t.includes('次フェイズ');
+    }) || null;
+  }
+
+  function findEndTurnButton() {
+    return getVisibleElements().find(el => {
+      if (el.tagName !== 'BUTTON') return false;
+      const t = (el.textContent || '').replace(/\s+/g, '');
+      return t.includes('ターン終了');
+    }) || null;
+  }
+
+  function placeBar() {
+    const bar = document.getElementById(CFG.barId);
+    if (!bar) return;
+
+    const nextBtn = findNextPhaseButton();
+    const endBtn = findEndTurnButton();
+
+    if (!nextBtn) return;
+
+    const nextRect = nextBtn.getBoundingClientRect();
+    const endRect = endBtn ? endBtn.getBoundingClientRect() : nextRect;
+    const centerX = (nextRect.left + endRect.right) / 2;
+
+    /* ボタンにかなり近づける */
+    const bottom = Math.max(window.innerHeight - nextRect.top + 2, 80);
+
+    bar.style.left = `${centerX}px`;
+    bar.style.bottom = `${bottom}px`;
+  }
+
+  function updateBar() {
+    const bar = document.getElementById(CFG.barId);
+    if (!bar) return;
+
+    const nextBtn = findNextPhaseButton();
+    const currentPhase = getCurrentPhase();
+
+    /* タイトル画面や未開始時は非表示 */
+    if (!nextBtn || !currentPhase) {
+      bar.classList.remove('is-visible');
+      return;
+    }
+
+    const currentIndex = CFG.phaseOrder.indexOf(currentPhase);
+    const items = bar.querySelectorAll('.mw-phase-item');
+
+    items.forEach((item, index) => {
+      item.classList.remove('is-active', 'is-done');
+      if (index < currentIndex) item.classList.add('is-done');
+      if (CFG.phaseOrder[index] === currentPhase) item.classList.add('is-active');
+    });
+
+    placeBar();
+    bar.classList.add('is-visible');
+  }
+
+  function init() {
+    injectStyle();
+    injectDom();
+    updateBar();
+
+    setInterval(() => {
+      updateBar();
+    }, CFG.pollMs);
+
+    window.addEventListener('resize', updateBar);
+    window.addEventListener('scroll', updateBar, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
