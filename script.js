@@ -10706,3 +10706,149 @@ log("PATCH 33 読み込み完了");
     init();
   }
 })();
+/* =========================================================
+  PATCH 27
+  - 手形が記憶抹消で無効化された時、手形本体を必ずウイングへ送る
+  - ミーコの見参は「発動する効果」ではなく、無効化対象外にする
+  - 手形 / 記憶抹消 は「発動した効果」にのみ反応
+========================================================= */
+
+/* ---------------- 共通ヘルパ ---------------- */
+function mw27FindStageCardByUid(side, uid){
+  if(!uid) return null;
+  const p = state[side];
+  if(!p) return null;
+  return p.C.find(c => c && c.uid === uid) || p.E.find(c => c && c.uid === uid) || null;
+}
+
+function mw27FindHandgataOnStage(side){
+  const p = state[side];
+  if(!p) return null;
+  return p.C.find(c => c && c.no === 8) || null;
+}
+
+function mw27IsMikoKensanLink(link){
+  if(!link) return false;
+  if(link.noCounter === true) return true;
+  if(link.counterable === false) return true;
+  if(link.activationKind === "nonActivated") return true;
+  if(link.activationType === "nonActivated") return true;
+  if(link.reason === "MIKO_DIRECT_GUARD") return true;
+  if(link.sourceCard && link.sourceCard.no === 21){
+    const txt = `${link.label || ""}\n${link.reason || ""}\n${link.kind || ""}`;
+    if(txt.includes("見参") || txt.includes("直接攻撃") || txt.includes("バトル終了") || txt.includes("ミーコ")){
+      return true;
+    }
+  }
+  return false;
+}
+
+function mw27IsCounterableLink(link){
+  if(!link) return false;
+  if(mw27IsMikoKensanLink(link)) return false;
+  return true;
+}
+
+/* ---------------- 記憶抹消成功時の移動先を強化 ---------------- */
+const __mw27_processActivatedEffect = processActivatedEffect;
+processActivatedEffect = async function(link){
+  const result = await __mw27_processActivatedEffect(link);
+
+  if(
+    result &&
+    result.ok === false &&
+    result.detail &&
+    result.detail.negatorKind === "MEMORY"
+  ){
+    const sourceSide = link ? link.activatorSide : null;
+    if(!sourceSide) return result;
+
+    let sourceCard = null;
+
+    if(link && link.sourceCard){
+      sourceCard = link.sourceCard;
+    }else if(link && link.sourceUid){
+      sourceCard = mw27FindStageCardByUid(sourceSide, link.sourceUid);
+    }
+
+    /* 手形は sourceCard/sourceUid が抜けても盤面から拾って確実に送る */
+    if(!sourceCard && link && link.kind === "HANDGATA"){
+      sourceCard = mw27FindHandgataOnStage(sourceSide);
+    }
+
+    if(sourceCard){
+      if(sourceCard.type === "character"){
+        await sendCharacterToWing(sourceSide, sourceCard.uid);
+        log(`記憶抹消：${sideName(sourceSide)}の「${sourceCard.name}」をウイングへ`);
+      }else if(sourceCard.type === "item" || sourceCard.type === "effect"){
+        const p = state[sourceSide];
+        let moved = false;
+
+        const cIdx = p.C.findIndex(c => c && c.uid === sourceCard.uid);
+        if(cIdx >= 0){
+          const card = p.C[cIdx];
+          p.C[cIdx] = null;
+          moveToWing(sourceSide, card);
+          moved = true;
+        }
+
+        const eIdx = p.E.findIndex(c => c && c.uid === sourceCard.uid);
+        if(eIdx >= 0){
+          const card = p.E[eIdx];
+          p.E[eIdx] = null;
+          moveToWing(sourceSide, card);
+          moved = true;
+        }
+
+        if(moved){
+          log(`記憶抹消：${sideName(sourceSide)}の「${sourceCard.name}」をウイングへ`);
+        }
+      }
+
+      renderAll();
+    }
+  }
+
+  return result;
+};
+
+/* ---------------- 手形 / 記憶抹消の反応対象を限定 ---------------- */
+const __mw27_chooseCounterForSide = chooseCounterForSide;
+chooseCounterForSide = async function(side, prevLink){
+  if(!mw27IsCounterableLink(prevLink)){
+    return "PASS";
+  }
+  return await __mw27_chooseCounterForSide(side, prevLink);
+};
+
+const __mw27_runCounterChain = runCounterChain;
+runCounterChain = async function(initialLink){
+  if(!mw27IsCounterableLink(initialLink)){
+    return {
+      negated: false,
+      negatorKind: null,
+      chain: [initialLink],
+      active: [true]
+    };
+  }
+  return await __mw27_runCounterChain(initialLink);
+};
+
+/* ---------------- ミーコ見参専用の起動効果フラグ付け補助 ----------------
+   既存処理側で link を作る時に sourceCard=no.21 だけでも拾えるようにしているが、
+   もし見参処理で専用 link を作っている場合は、下の形に合わせれば確実に無効化対象外になる。
+
+   例:
+   {
+     kind: "MIKO_KENSAN",
+     label: "ミーコの見参",
+     activatorSide: side,
+     sourceCard: mikoCard,
+     sourceUid: mikoCard.uid,
+     reason: "MIKO_DIRECT_GUARD",
+     noCounter: true,
+     activationKind: "nonActivated"
+   }
+---------------------------------------------------------------- */
+
+log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ見参は無効化対象外");
