@@ -10852,3 +10852,143 @@ runCounterChain = async function(initialLink){
 ---------------------------------------------------------------- */
 
 log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ見参は無効化対象外");
+/* =========================================================
+  PATCH 34
+  - P1側の登場時/見参時の自動発動を任意化
+  - 対象：タータ / ルビー / サファイア / セシア＆アリサ
+  - 既に任意確認済みの聖ラウス / 司令は既存処理を維持
+  - ミーコ / 手形 / 記憶抹消まわりの既存PATCH 25-27はそのまま維持
+========================================================= */
+
+function mw34MakeActivatedLink(side, card, resolveFn, labelSuffix="効果"){
+  return {
+    kind:"ACT",
+    label: `${card.name}${labelSuffix ? ` ${labelSuffix}` : ""}`.trim(),
+    activatorSide: side,
+    sourceCard: card,
+    sourceUid: card.uid,
+    resolve: resolveFn,
+    onNegated: async (r)=>{
+      if(r && r.negatorKind === "MEMORY"){
+        await sendCharacterToWing(side, card.uid);
+      }
+      log(`${card.name} の効果は無効`);
+      renderAll();
+    }
+  };
+}
+
+function mw34HasRachelInHandForSeshia(side){
+  return state[side].hand.some(c=>c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル"));
+}
+
+const __mw34_onEnterTriggers = onEnterTriggers;
+onEnterTriggers = async function(side, ctx){
+  const card = ctx && ctx.card ? ctx.card : null;
+  if(!card) return await __mw34_onEnterTriggers(side, ctx);
+
+  if(isRachelSealActiveAgainst(side, card)){
+    log(`${card.name}：退魔師レイチェルの効果により発動できません`, "warn");
+    return;
+  }
+
+  /* タータの登場時2ドローを任意化 */
+  if(card.no===5){
+    const act = mw34MakeActivatedLink(side, card, async ()=>{
+      if(side==="P1"){
+        const ok = await askYesNo("効果確認", "統括AI タータの登場時効果を発動しますか？\nデッキから2枚ドローします。\n（発動しない事も選べます）");
+        if(!ok){
+          log("タータ：登場時効果を発動しませんでした");
+          return;
+        }
+      }
+      draw(side, 2);
+      log(`${sideName(side)}：タータ登場→2ドロー`);
+      renderAll();
+    }, "登場時効果");
+    await processActivatedEffect(act);
+    return;
+  }
+
+  /* ルビー / サファイアの登場時サーチを任意化 */
+  if(card.no===26 || card.no===27){
+    const act = mw34MakeActivatedLink(side, card, async ()=>{
+      if(side==="P1"){
+        const ok = await askYesNo(
+          "効果確認",
+          `${card.name} の登場時効果を発動しますか？\n手札を1枚ウイングに送り、デッキ・ウイングからタグ「アニメ」カード1枚を手札に加えます。\n（発動しない事も選べます）`
+        );
+        if(!ok){
+          log(`${card.name}：登場時効果を発動しませんでした`);
+          return;
+        }
+      }
+      await resolveRubySapphireEnter(side, card, ctx);
+    }, "登場時効果");
+    await processActivatedEffect(act);
+    return;
+  }
+
+  /* セシア＆アリサの登場時サーチを任意化 */
+  if(card.no===28){
+    const act = mw34MakeActivatedLink(side, card, async ()=>{
+      if(side==="P1"){
+        const ok = await askYesNo(
+          "効果確認",
+          "セシア＆アリサの登場時効果を発動しますか？\nデッキからタイトルタグ「怨霊撲滅屋GB」アイテムカード1枚を手札に加えます。\n（発動しない事も選べます）"
+        );
+        if(!ok){
+          log("セシア＆アリサ：登場時効果を発動しませんでした");
+          return;
+        }
+      }
+      await searchDeckByTitleTagItem(side, "怨霊撲滅屋GB", 1, {aiAuto: side==="AI"});
+    }, "登場時効果");
+    await processActivatedEffect(act);
+    return;
+  }
+
+  return await __mw34_onEnterTriggers(side, ctx);
+};
+
+/* セシア＆アリサの場の起動効果は「発動できる」なので、
+   P1では従来どおりボタンを押した時点で任意選択とみなす。
+   ただし発動前の確認を明示的に追加しておく。 */
+const __mw34_activateFieldCardAbility = activateFieldCardAbility;
+activateFieldCardAbility = async function(side, zone, pos, card){
+  if(side==="P1" && card){
+    if(card.no===28){
+      const ok = await askYesNo(
+        "効果確認",
+        "セシア＆アリサの効果を発動しますか？\nこのカードが自分ステージに存在する時、手札のrank5以下の「レイチェル」キャラクター1体を条件無視で見参させます。"
+      );
+      if(!ok){
+        log("セシア＆アリサ：効果を発動しませんでした");
+        return;
+      }
+    }
+    if(card.no===9){
+      const ok = await askYesNo(
+        "効果確認",
+        "小太郎・孫悟空Lv17 の効果を発動しますか？\n手札の「小次郎」カードを見参させます。"
+      );
+      if(!ok){
+        log("小太郎・孫悟空Lv17：効果を発動しませんでした");
+        return;
+      }
+    }
+    if(card.no===10){
+      const ok = await askYesNo(
+        "効果確認",
+        "小次郎・孫悟空Lv17 の効果を発動しますか？\n手札の「小太郎」カードを見参させます。"
+      );
+      if(!ok){
+        log("小次郎・孫悟空Lv17：効果を発動しませんでした");
+        return;
+      }
+    }
+  }
+  return await __mw34_activateFieldCardAbility(side, zone, pos, card);
+};
+
+log("PATCH 34 適用：登場時/見参時の任意発動確認を追加");
