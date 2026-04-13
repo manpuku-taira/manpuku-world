@@ -10852,143 +10852,246 @@ runCounterChain = async function(initialLink){
 ---------------------------------------------------------------- */
 
 log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ見参は無効化対象外");
+
 /* =========================================================
-  PATCH 34
-  - P1側の登場時/見参時の自動発動を任意化
-  - 対象：タータ / ルビー / サファイア / セシア＆アリサ
-  - 既に任意確認済みの聖ラウス / 司令は既存処理を維持
-  - ミーコ / 手形 / 記憶抹消まわりの既存PATCH 25-27はそのまま維持
+  PATCH 28
+  勝利報酬システム
+  - YOU WIN 後に裏向き3枚から1枚選択
+  - 選んだカードを3枚獲得
+  - 獲得カードを表向き1枚 + ×3 で確認
+  - デッキプール（LS_COLLECTION）へ反映
 ========================================================= */
 
-function mw34MakeActivatedLink(side, card, resolveFn, labelSuffix="効果"){
-  return {
-    kind:"ACT",
-    label: `${card.name}${labelSuffix ? ` ${labelSuffix}` : ""}`.trim(),
-    activatorSide: side,
-    sourceCard: card,
-    sourceUid: card.uid,
-    resolve: resolveFn,
-    onNegated: async (r)=>{
-      if(r && r.negatorKind === "MEMORY"){
-        await sendCharacterToWing(side, card.uid);
-      }
-      log(`${card.name} の効果は無効`);
-      renderAll();
-    }
+const MW_REWARD_PATCH_VERSION = "REWARD_PATCH_V1";
+
+const rewardState = {
+  pending: null,   // { choices:[no,no,no], chosenNo:null, claimed:false }
+};
+
+function rewardReadCollection(){
+  const col = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", {});
+  for(const no of CARD_NOS){
+    const k = pad2(no);
+    if(typeof col[k] !== "number") col[k] = 0;
+  }
+  return col;
+}
+function rewardWriteCollection(col){
+  localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
+}
+function rewardGrantCardTriplet(no){
+  const col = rewardReadCollection();
+  const k = pad2(no);
+  col[k] = (col[k] || 0) + 3;
+  rewardWriteCollection(col);
+}
+function rewardPick3RandomNos(){
+  const pool = CARD_NOS.slice();
+  shuffle(pool);
+  return pool.slice(0, 3);
+}
+function rewardReset(){
+  rewardState.pending = null;
+}
+function rewardEnsurePending(){
+  if(!rewardState.pending){
+    rewardState.pending = {
+      choices: rewardPick3RandomNos(),
+      chosenNo: null,
+      claimed: false,
+    };
+  }
+  return rewardState.pending;
+}
+function rewardCardThumbStyle(no){
+  const url = state.img.cardUrlByNo[pad2(no)] || "";
+  return url ? `background-image:url("${url}")` : "";
+}
+function rewardBackThumbStyle(){
+  return state.img.backUrl ? `background-image:url("${state.img.backUrl}")` : "";
+}
+function rewardCloseChoice(){
+  hideModal("choiceM");
+  if(el.choiceTitle) el.choiceTitle.textContent = "";
+  if(el.choiceBody) el.choiceBody.innerHTML = "";
+}
+function rewardOpenPickModal(){
+  const rw = rewardEnsurePending();
+  if(!el.choiceTitle || !el.choiceBody) return;
+
+  el.choiceTitle.textContent = "報酬カード選択";
+  el.choiceBody.innerHTML = "";
+
+  const msg = document.createElement("div");
+  msg.className = "choiceMsg";
+  msg.textContent = "裏向きのカードを1枚選んでください";
+  el.choiceBody.appendChild(msg);
+
+  const row = document.createElement("div");
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
+  row.style.gap = "12px";
+  row.style.marginTop = "10px";
+
+  rw.choices.forEach((no, idx)=>{
+    const cardBtn = document.createElement("button");
+    cardBtn.type = "button";
+    cardBtn.style.height = "160px";
+    cardBtn.style.borderRadius = "14px";
+    cardBtn.style.border = "1px solid rgba(255,255,255,.18)";
+    cardBtn.style.background = "rgba(0,0,0,.35)";
+    cardBtn.style.backgroundSize = "cover";
+    cardBtn.style.backgroundPosition = "center";
+    cardBtn.style.boxShadow = "0 4px 16px rgba(0,0,0,.28)";
+    const backStyle = rewardBackThumbStyle();
+    if(backStyle) cardBtn.setAttribute("style", cardBtn.getAttribute("style") + ";" + backStyle);
+
+    cardBtn.addEventListener("click", async ()=>{
+      rw.chosenNo = no;
+      rw.claimed = true;
+      rewardGrantCardTriplet(no);
+      rewardCloseChoice();
+      await rewardOpenRevealModal(no);
+    }, {passive:true});
+
+    row.appendChild(cardBtn);
+  });
+
+  el.choiceBody.appendChild(row);
+  showModal("choiceM");
+}
+async function rewardOpenRevealModal(no){
+  const def = getCardDef(no);
+  if(!def || !el.choiceTitle || !el.choiceBody) return;
+
+  el.choiceTitle.textContent = "報酬獲得";
+  el.choiceBody.innerHTML = "";
+
+  const msg = document.createElement("div");
+  msg.className = "choiceMsg";
+  msg.textContent = `${def.name} を3枚獲得しました`;
+  el.choiceBody.appendChild(msg);
+
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex";
+  wrap.style.justifyContent = "center";
+  wrap.style.marginTop = "10px";
+
+  const card = document.createElement("div");
+  card.style.width = "120px";
+  card.style.height = "168px";
+  card.style.borderRadius = "14px";
+  card.style.border = "1px solid rgba(255,255,255,.18)";
+  card.style.background = "rgba(0,0,0,.35)";
+  card.style.backgroundSize = "cover";
+  card.style.backgroundPosition = "center";
+  const faceStyle = rewardCardThumbStyle(no);
+  if(faceStyle) card.setAttribute("style", card.getAttribute("style") + ";" + faceStyle);
+  wrap.appendChild(card);
+
+  const x3 = document.createElement("div");
+  x3.style.marginTop = "8px";
+  x3.style.textAlign = "center";
+  x3.style.fontWeight = "800";
+  x3.style.fontSize = "18px";
+  x3.textContent = "×3";
+
+  el.choiceBody.appendChild(wrap);
+  el.choiceBody.appendChild(x3);
+
+  const btnRow = document.createElement("div");
+  btnRow.style.display = "flex";
+  btnRow.style.gap = "8px";
+  btnRow.style.justifyContent = "center";
+  btnRow.style.flexWrap = "wrap";
+  btnRow.style.marginTop = "14px";
+
+  const mkBtn = (label, onClick)=>{
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.style.padding = "10px 14px";
+    b.style.borderRadius = "10px";
+    b.style.border = "1px solid rgba(255,255,255,.18)";
+    b.style.background = "rgba(0,0,0,.35)";
+    b.style.color = "white";
+    b.style.fontWeight = "800";
+    b.addEventListener("click", onClick, {passive:true});
+    return b;
   };
+
+  btnRow.appendChild(mkBtn("次のゲームへ", ()=>{
+    rewardCloseChoice();
+    hideModal("resultM");
+    rewardReset();
+    startGame();
+  }));
+  btnRow.appendChild(mkBtn("タイトルへ", ()=>{
+    rewardCloseChoice();
+    hideModal("resultM");
+    rewardReset();
+    state.started=false;
+    state.gameOver=false;
+    if(el.game) el.game.classList.remove("active");
+    if(el.title) el.title.classList.add("active");
+    if(el.boot) el.boot.textContent="JS: OK（準備完了）";
+  }));
+
+  el.choiceBody.appendChild(btnRow);
+  showModal("choiceM");
 }
 
-function mw34HasRachelInHandForSeshia(side){
-  return state[side].hand.some(c=>c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル"));
-}
+/* ---------------- Win / Result override ---------------- */
+const __mw28_finishGame = finishGame;
+finishGame = async function(winnerSide){
+  state.gameOver = true;
+  renderAll();
 
-const __mw34_onEnterTriggers = onEnterTriggers;
-onEnterTriggers = async function(side, ctx){
-  const card = ctx && ctx.card ? ctx.card : null;
-  if(!card) return await __mw34_onEnterTriggers(side, ctx);
-
-  if(isRachelSealActiveAgainst(side, card)){
-    log(`${card.name}：退魔師レイチェルの効果により発動できません`, "warn");
-    return;
+  const isWin = (winnerSide === "P1");
+  if(isWin){
+    rewardEnsurePending();
+  }else{
+    rewardReset();
   }
 
-  /* タータの登場時2ドローを任意化 */
-  if(card.no===5){
-    const act = mw34MakeActivatedLink(side, card, async ()=>{
-      if(side==="P1"){
-        const ok = await askYesNo("効果確認", "統括AI タータの登場時効果を発動しますか？\nデッキから2枚ドローします。\n（発動しない事も選べます）");
-        if(!ok){
-          log("タータ：登場時効果を発動しませんでした");
-          return;
-        }
-      }
-      draw(side, 2);
-      log(`${sideName(side)}：タータ登場→2ドロー`);
-      renderAll();
-    }, "登場時効果");
-    await processActivatedEffect(act);
-    return;
+  if(el.resultText){
+    el.resultText.textContent = isWin ? "YOU WIN！" : "YOU LOSE…";
   }
-
-  /* ルビー / サファイアの登場時サーチを任意化 */
-  if(card.no===26 || card.no===27){
-    const act = mw34MakeActivatedLink(side, card, async ()=>{
-      if(side==="P1"){
-        const ok = await askYesNo(
-          "効果確認",
-          `${card.name} の登場時効果を発動しますか？\n手札を1枚ウイングに送り、デッキ・ウイングからタグ「アニメ」カード1枚を手札に加えます。\n（発動しない事も選べます）`
-        );
-        if(!ok){
-          log(`${card.name}：登場時効果を発動しませんでした`);
-          return;
-        }
-      }
-      await resolveRubySapphireEnter(side, card, ctx);
-    }, "登場時効果");
-    await processActivatedEffect(act);
-    return;
+  if(el.btnNextGame){
+    el.btnNextGame.textContent = isWin ? "報酬を見る" : "次のゲームへ";
   }
-
-  /* セシア＆アリサの登場時サーチを任意化 */
-  if(card.no===28){
-    const act = mw34MakeActivatedLink(side, card, async ()=>{
-      if(side==="P1"){
-        const ok = await askYesNo(
-          "効果確認",
-          "セシア＆アリサの登場時効果を発動しますか？\nデッキからタイトルタグ「怨霊撲滅屋GB」アイテムカード1枚を手札に加えます。\n（発動しない事も選べます）"
-        );
-        if(!ok){
-          log("セシア＆アリサ：登場時効果を発動しませんでした");
-          return;
-        }
-      }
-      await searchDeckByTitleTagItem(side, "怨霊撲滅屋GB", 1, {aiAuto: side==="AI"});
-    }, "登場時効果");
-    await processActivatedEffect(act);
-    return;
-  }
-
-  return await __mw34_onEnterTriggers(side, ctx);
+  showModal("resultM");
 };
 
-/* セシア＆アリサの場の起動効果は「発動できる」なので、
-   P1では従来どおりボタンを押した時点で任意選択とみなす。
-   ただし発動前の確認を明示的に追加しておく。 */
-const __mw34_activateFieldCardAbility = activateFieldCardAbility;
-activateFieldCardAbility = async function(side, zone, pos, card){
-  if(side==="P1" && card){
-    if(card.no===28){
-      const ok = await askYesNo(
-        "効果確認",
-        "セシア＆アリサの効果を発動しますか？\nこのカードが自分ステージに存在する時、手札のrank5以下の「レイチェル」キャラクター1体を条件無視で見参させます。"
-      );
-      if(!ok){
-        log("セシア＆アリサ：効果を発動しませんでした");
+/* ---------------- bindResult override ---------------- */
+bindResult = function(){
+  if(el.btnNextGame){
+    el.btnNextGame.onclick = null;
+    el.btnNextGame.addEventListener("click", ()=>{
+      if(rewardState.pending && rewardState.pending.claimed === false){
+        hideModal("resultM");
+        rewardOpenPickModal();
         return;
       }
-    }
-    if(card.no===9){
-      const ok = await askYesNo(
-        "効果確認",
-        "小太郎・孫悟空Lv17 の効果を発動しますか？\n手札の「小次郎」カードを見参させます。"
-      );
-      if(!ok){
-        log("小太郎・孫悟空Lv17：効果を発動しませんでした");
-        return;
-      }
-    }
-    if(card.no===10){
-      const ok = await askYesNo(
-        "効果確認",
-        "小次郎・孫悟空Lv17 の効果を発動しますか？\n手札の「小太郎」カードを見参させます。"
-      );
-      if(!ok){
-        log("小次郎・孫悟空Lv17：効果を発動しませんでした");
-        return;
-      }
-    }
+      hideModal("resultM");
+      rewardReset();
+      startGame();
+    }, {passive:true});
   }
-  return await __mw34_activateFieldCardAbility(side, zone, pos, card);
+
+  if(el.btnBackTitle){
+    el.btnBackTitle.onclick = null;
+    el.btnBackTitle.addEventListener("click", ()=>{
+      rewardCloseChoice();
+      hideModal("resultM");
+      rewardReset();
+      state.started=false;
+      state.gameOver=false;
+      if(el.game) el.game.classList.remove("active");
+      if(el.title) el.title.classList.add("active");
+      if(el.boot) el.boot.textContent="JS: OK（準備完了）";
+    }, {passive:true});
+  }
 };
 
-log("PATCH 34 適用：登場時/見参時の任意発動確認を追加");
+log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
