@@ -11481,3 +11481,233 @@ log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ
     mwBootBindPlayerDeckFix();
   }
 })();
+/* =========================================================
+  PATCH PLAYER-DECK-03
+  1) プレイヤーデッキ編集ボタンを確実に開く
+  2) ボタン位置を少し上へ
+  3) 最後に保存した側のデッキを startGame に反映
+========================================================= */
+(function(){
+  "use strict";
+
+  const LS_PLAYER_COLLECTION = "mw_player_collection_v1";
+  const LS_PLAYER_DECK = "mw_player_deck_v1";
+  const LS_ACTIVE_DECK_MODE = "mw_active_deck_mode_v1"; // "creator" or "player"
+
+  /* ---------------- 基本 ---------------- */
+  function mwPlayerSafeJSONParse(s, fallback){
+    try{ return JSON.parse(s); }catch{ return fallback; }
+  }
+
+  function mwSetActiveDeckMode(mode){
+    localStorage.setItem(LS_ACTIVE_DECK_MODE, mode);
+  }
+  function mwGetActiveDeckMode(){
+    return localStorage.getItem(LS_ACTIVE_DECK_MODE) || "creator";
+  }
+
+  /* ---------------- プレイヤー用初期化 ---------------- */
+  function ensurePlayerCollectionAndDeck(){
+    let col = mwPlayerSafeJSONParse(localStorage.getItem(LS_PLAYER_COLLECTION) || "", null);
+    let changed = false;
+
+    if(!col || typeof col !== "object"){
+      col = {};
+      changed = true;
+    }
+
+    // 全カードは0で初期化
+    for(const no of CARD_NOS){
+      const k = pad2(no);
+      if(typeof col[k] !== "number"){
+        col[k] = 0;
+        changed = true;
+      }
+    }
+
+    // 初期所持：No.1〜20 を各2枚
+    for(const no of INITIAL_DECK_NOS){
+      const k = pad2(no);
+      if((col[k] || 0) < 2){
+        col[k] = 2;
+        changed = true;
+      }
+    }
+
+    if(changed){
+      localStorage.setItem(LS_PLAYER_COLLECTION, JSON.stringify(col));
+      log("プレイヤー用所持カードを初期化");
+    }
+
+    let deck = mwPlayerSafeJSONParse(localStorage.getItem(LS_PLAYER_DECK) || "", null);
+    if(!Array.isArray(deck) || deck.length !== 40){
+      deck = [];
+      for(const no of INITIAL_DECK_NOS){
+        deck.push(no);
+        deck.push(no);
+      }
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck));
+      log("プレイヤー用初期デッキを作成");
+    }
+  }
+
+  const __mw_creator_readCollection = readCollection;
+  const __mw_creator_readDeck = readDeck;
+  const __mw_creator_writeDeck = writeDeck;
+  const __mw_creator_ensureInitialCollectionAndDeck = ensureInitialCollectionAndDeck;
+  const __mw_creator_openDeckEditor = openDeckEditor;
+  const __mw_creator_startGame = startGame;
+
+  ensureInitialCollectionAndDeck = function(){
+    __mw_creator_ensureInitialCollectionAndDeck();
+    ensurePlayerCollectionAndDeck();
+  };
+
+  /* ---------------- mode連動で既存関数を切り替え ---------------- */
+  readCollection = function(){
+    ensurePlayerCollectionAndDeck();
+
+    if(mwGetActiveDeckMode() === "player"){
+      const col = mwPlayerSafeJSONParse(localStorage.getItem(LS_PLAYER_COLLECTION) || "", {});
+      for(const no of CARD_NOS){
+        const k = pad2(no);
+        if(typeof col[k] !== "number") col[k] = 0;
+      }
+      return col;
+    }
+
+    return __mw_creator_readCollection();
+  };
+
+  readDeck = function(){
+    ensurePlayerCollectionAndDeck();
+
+    if(mwGetActiveDeckMode() === "player"){
+      const d = mwPlayerSafeJSONParse(localStorage.getItem(LS_PLAYER_DECK) || "", []);
+      return Array.isArray(d) ? d.slice() : [];
+    }
+
+    return __mw_creator_readDeck();
+  };
+
+  writeDeck = function(deck){
+    ensurePlayerCollectionAndDeck();
+
+    if(mwGetActiveDeckMode() === "player"){
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck.slice()));
+      return;
+    }
+
+    return __mw_creator_writeDeck(deck);
+  };
+
+  /* ---------------- クリエイター用導線は現状維持 ---------------- */
+  openDeckEditor = function(){
+    mwSetActiveDeckMode("creator");
+    __mw_creator_openDeckEditor();
+  };
+
+  /* ---------------- プレイヤー用デッキ編集 ---------------- */
+  function openPlayerDeckEditor(){
+    ensureInitialCollectionAndDeck();
+    mwSetActiveDeckMode("player");
+    renderDeckEditor();
+    showModal("zoneM");
+    log("プレイヤー用デッキ編集：表示（保存後、このデッキでスタート）");
+  }
+  window.openPlayerDeckEditor = openPlayerDeckEditor;
+
+  /* ---------------- startGame は最後に保存した側を使う ---------------- */
+  startGame = function(){
+    ensureInitialCollectionAndDeck();
+    log(`開始デッキ：${mwGetActiveDeckMode() === "player" ? "プレイヤー用" : "クリエイター用"}`);
+    return __mw_creator_startGame();
+  };
+
+  /* ---------------- 保存ボタン押下後に active mode を固定 ----------------
+     renderDeckEditor は既存の共通UIをそのまま使うため、
+     「保存して戻る」クリック時に現在モードが残ればOK
+  ---------------- */
+  const __mw_hideModal = hideModal;
+  hideModal = function(id){
+    return __mw_hideModal(id);
+  };
+
+  /* ---------------- プレイヤーデッキ編集ボタンを確実に分離 ---------------- */
+  function findPlayerDeckButton(){
+    return Array.from(document.querySelectorAll("button")).find(btn => {
+      const t = (btn.textContent || "").replace(/\s+/g, "");
+      return t.includes("プレイヤーデッキ編集");
+    }) || null;
+  }
+
+  function swallow(e){
+    if(!e) return;
+    if(typeof e.preventDefault === "function") e.preventDefault();
+    if(typeof e.stopPropagation === "function") e.stopPropagation();
+    if(typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+  }
+
+  function stylePlayerDeckButton(btn){
+    if(!btn) return;
+    btn.style.position = "relative";
+    btn.style.bottom = "56px";   // 今より上へ
+    btn.style.zIndex = "20";
+    btn.style.marginTop = "0";
+  }
+
+  function bindPlayerDeckButton(){
+    const btn = findPlayerDeckButton();
+    if(!btn) return false;
+    stylePlayerDeckButton(btn);
+
+    if(btn.__mwPlayerDeck03Bound) return true;
+
+    const blockTypes = [
+      "pointerdown","pointerup","pointercancel",
+      "mousedown","mouseup",
+      "touchstart","touchend","touchcancel"
+    ];
+
+    blockTypes.forEach(type => {
+      btn.addEventListener(type, (e)=>{
+        swallow(e);
+      }, {capture:true, passive:false});
+    });
+
+    btn.addEventListener("click", (e)=>{
+      swallow(e);
+      if(state){
+        state.titleLongPressed = true;
+        setTimeout(()=>{ state.titleLongPressed = false; }, 300);
+      }
+      openPlayerDeckEditor();
+      return false;
+    }, {capture:true, passive:false});
+
+    btn.__mwPlayerDeck03Bound = true;
+    log("プレイヤーデッキ編集ボタン：修正済み");
+    return true;
+  }
+
+  function bootPlayerDeckButtonFix(){
+    bindPlayerDeckButton();
+
+    let retry = 0;
+    const timer = setInterval(()=>{
+      retry++;
+      bindPlayerDeckButton();
+      if(retry >= 50){
+        clearInterval(timer);
+      }
+    }, 200);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootPlayerDeckButtonFix, {once:true});
+  }else{
+    bootPlayerDeckButtonFix();
+  }
+
+  log("PATCH PLAYER-DECK-03 読み込み完了");
+})();
