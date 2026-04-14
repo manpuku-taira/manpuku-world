@@ -11359,3 +11359,125 @@ log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ
   rebindResultButtons();
   log("PATCH 40 読み込み完了：プレイヤー用デッキ編集 / レア度報酬");
 })();
+/* =========================================================
+  PATCH PLAYER-DECK-BUTTON-FIX
+  - タイトル画面の「プレイヤーデッキ編集」ボタンが
+    親の START / 長押し判定へ伝播しないようにする
+  - 短押しでプレイヤー用デッキ編集を開く
+  - 長押ししても開発用デッキ編集へ行かない
+========================================================= */
+(function(){
+  "use strict";
+
+  let mwPlayerDeckBtnLock = false;
+
+  function mwFindPlayerDeckButton(){
+    const buttons = Array.from(document.querySelectorAll("button"));
+    return buttons.find(btn => {
+      const t = (btn.textContent || "").replace(/\s+/g, "");
+      return t.includes("プレイヤーデッキ編集");
+    }) || null;
+  }
+
+  function mwFindPlayerDeckOpenFn(){
+    const candidates = [
+      "openPlayerDeckEditor",
+      "openPlayerDeckEdit",
+      "openPlayerDeckEditorModal",
+      "showPlayerDeckEditor",
+      "openDeckEditorPlayer",
+      "openPlayerModeDeckEditor"
+    ];
+    for(const name of candidates){
+      if(typeof window[name] === "function") return window[name];
+    }
+    return null;
+  }
+
+  function mwSwallowEvent(e){
+    if(!e) return;
+    if(typeof e.preventDefault === "function") e.preventDefault();
+    if(typeof e.stopPropagation === "function") e.stopPropagation();
+    if(typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+  }
+
+  function mwOpenPlayerDeckEditorSafe(e){
+    mwSwallowEvent(e);
+
+    if(mwPlayerDeckBtnLock) return false;
+    mwPlayerDeckBtnLock = true;
+    setTimeout(()=>{ mwPlayerDeckBtnLock = false; }, 300);
+
+    // タイトル側の長押し開始フラグを立てて親 go() を止める
+    if(window.state){
+      state.titleLongPressed = true;
+      setTimeout(()=>{ state.titleLongPressed = false; }, 420);
+    }
+
+    const fn = mwFindPlayerDeckOpenFn();
+    if(fn){
+      fn();
+      return false;
+    }
+
+    log("プレイヤー用デッキ編集を開く関数が見つかりません", "warn");
+    return false;
+  }
+
+  function mwBindPlayerDeckButton(){
+    const btn = mwFindPlayerDeckButton();
+    if(!btn) return false;
+    if(btn.__mwPlayerDeckFixed) return true;
+
+    // 親タイトル/STARTへの伝播を完全停止
+    const swallowTypes = [
+      "pointerdown", "pointerup", "pointercancel",
+      "touchstart", "touchend", "touchcancel",
+      "mousedown", "mouseup",
+      "click"
+    ];
+
+    swallowTypes.forEach(type => {
+      btn.addEventListener(type, (e)=>{
+        // click だけは専用処理へ
+        if(type === "click"){
+          mwOpenPlayerDeckEditorSafe(e);
+          return;
+        }
+        mwSwallowEvent(e);
+      }, { capture:true, passive:false });
+    });
+
+    // キーボード操作保険
+    btn.addEventListener("keydown", (e)=>{
+      const k = e.key || "";
+      if(k === "Enter" || k === " "){
+        mwOpenPlayerDeckEditorSafe(e);
+      }
+    }, { capture:true, passive:false });
+
+    btn.__mwPlayerDeckFixed = true;
+    log("PATCH PLAYER-DECK-BUTTON-FIX 適用：プレイヤーデッキ編集ボタンを分離");
+    return true;
+  }
+
+  function mwBootBindPlayerDeckFix(){
+    mwBindPlayerDeckButton();
+
+    // タイトル画面の後からボタンが生成される場合に備えて数回監視
+    let retry = 0;
+    const timer = setInterval(()=>{
+      retry++;
+      mwBindPlayerDeckButton();
+      if(retry >= 40 || mwFindPlayerDeckButton()){
+        clearInterval(timer);
+      }
+    }, 250);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", mwBootBindPlayerDeckFix, { once:true });
+  }else{
+    mwBootBindPlayerDeckFix();
+  }
+})();
