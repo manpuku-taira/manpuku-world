@@ -11711,3 +11711,151 @@ log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ
 
   log("PATCH PLAYER-DECK-03 読み込み完了");
 })();
+/* =========================================================
+  FINAL PATCH PLAYER-DECK
+========================================================= */
+(function(){
+  "use strict";
+
+  const LS_MODE = "mw_active_mode"; // "creator" or "player"
+  const LS_PLAYER_DECK = "mw_player_deck_v1";
+  const LS_PLAYER_COLLECTION = "mw_player_collection_v1";
+
+  /* =========================
+    モード管理
+  ========================= */
+  function setMode(m){
+    localStorage.setItem(LS_MODE, m);
+  }
+  function getMode(){
+    return localStorage.getItem(LS_MODE) || "creator";
+  }
+
+  /* =========================
+    プレイヤー初期化
+  ========================= */
+  function ensurePlayer(){
+    let col = JSON.parse(localStorage.getItem(LS_PLAYER_COLLECTION) || "{}");
+
+    for(const no of CARD_NOS){
+      const k = pad2(no);
+      if(typeof col[k] !== "number") col[k] = 0;
+    }
+
+    // 初期2枚
+    for(let i=1;i<=20;i++){
+      const k = pad2(i);
+      if(col[k] < 2) col[k] = 2;
+    }
+
+    localStorage.setItem(LS_PLAYER_COLLECTION, JSON.stringify(col));
+
+    let deck = JSON.parse(localStorage.getItem(LS_PLAYER_DECK) || "null");
+
+    if(!Array.isArray(deck)){
+      deck = [];
+      for(let i=1;i<=20;i++){
+        deck.push(i);
+        deck.push(i);
+      }
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck));
+    }
+  }
+
+  /* =========================
+    デッキ切り替え
+  ========================= */
+  const _readDeck = readDeck;
+  readDeck = function(){
+    if(getMode() === "player"){
+      ensurePlayer();
+      return JSON.parse(localStorage.getItem(LS_PLAYER_DECK));
+    }
+    return _readDeck();
+  };
+
+  const _writeDeck = writeDeck;
+  writeDeck = function(d){
+    if(getMode() === "player"){
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(d));
+      return;
+    }
+    _writeDeck(d);
+  };
+
+  const _readCollection = readCollection;
+  readCollection = function(){
+    if(getMode() === "player"){
+      ensurePlayer();
+      return JSON.parse(localStorage.getItem(LS_PLAYER_COLLECTION));
+    }
+    return _readCollection();
+  };
+
+  /* =========================
+    startGame修正
+  ========================= */
+  const _startGame = startGame;
+  startGame = function(){
+    log("開始モード：" + getMode());
+    return _startGame();
+  };
+
+  /* =========================
+    プレイヤーデッキ編集
+  ========================= */
+  function openPlayerDeck(){
+    setMode("player");
+    ensurePlayer();
+    renderDeckEditor();
+    showModal("zoneM");
+  }
+  window.openPlayerDeck = openPlayerDeck;
+
+  /* =========================
+    クリエイター側はそのまま
+  ========================= */
+  const _openDeckEditor = openDeckEditor;
+  openDeckEditor = function(){
+    setMode("creator");
+    _openDeckEditor();
+  };
+
+  /* =========================
+    ボタン修正（最重要）
+  ========================= */
+  function fixButton(){
+
+    const btn = Array.from(document.querySelectorAll("button"))
+      .find(b => (b.textContent || "").includes("プレイヤーデッキ編集"));
+
+    if(!btn) return;
+
+    // 位置を強制調整
+    btn.style.position = "relative";
+    btn.style.top = "-60px";
+    btn.style.zIndex = "999";
+
+    // イベント完全上書き
+    btn.onclick = function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      openPlayerDeck();
+      return false;
+    };
+
+    btn.onmousedown = btn.ontouchstart = function(e){
+      e.stopPropagation();
+    };
+
+    log("ボタン完全修正済み");
+  }
+
+  /* =========================
+    起動
+  ========================= */
+  setTimeout(fixButton, 300);
+  setTimeout(fixButton, 800);
+  setTimeout(fixButton, 1500);
+
+})();
