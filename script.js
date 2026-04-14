@@ -11095,3 +11095,278 @@ bindResult = function(){
 };
 
 log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
+/* =========================================================
+  PATCH REWARD-02
+  勝利報酬を
+  「裏面3択 → 選んだ束の中身がランダム3枚（重複なし）」
+  に変更
+========================================================= */
+
+(function(){
+  "use strict";
+
+  const MW_REWARD_DELAY_MS = 650;
+
+  function mwRewardWriteCollection(col){
+    localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
+  }
+
+  function mwRewardAddCards(nos){
+    const col = readCollection();
+    for(const no of nos){
+      const k = pad2(no);
+      col[k] = (col[k] || 0) + 1;
+    }
+    mwRewardWriteCollection(col);
+  }
+
+  function mwRewardSampleDistinct(arr, count){
+    const pool = arr.slice();
+    shuffle(pool);
+    return pool.slice(0, Math.min(count, pool.length));
+  }
+
+  function mwRewardBuildThreePacks(){
+    const allNos = CARD_NOS.filter(no => !!getCardDef(no));
+    const totalNeed = 9;
+
+    // 9枚以上ある前提だが、足りない時も安全に処理
+    let picked = mwRewardSampleDistinct(allNos, Math.min(totalNeed, allNos.length));
+
+    // 念のため足りない場合は残りから補充（重複なし優先）
+    if(picked.length < totalNeed){
+      const rest = allNos.filter(no => !picked.includes(no));
+      picked = picked.concat(mwRewardSampleDistinct(rest, totalNeed - picked.length));
+    }
+
+    // それでも足りない特殊ケースだけは再利用
+    while(picked.length < totalNeed && allNos.length){
+      const no = allNos[Math.floor(Math.random() * allNos.length)];
+      if(!picked.includes(no) || allNos.length < totalNeed){
+        picked.push(no);
+      }
+    }
+
+    return [
+      picked.slice(0, 3),
+      picked.slice(3, 6),
+      picked.slice(6, 9),
+    ];
+  }
+
+  function mwRewardHideAllCoreModals(){
+    hideModal("resultM");
+    hideModal("choiceM");
+    hideModal("zoneM");
+  }
+
+  function mwRewardBackThumbNode(){
+    const th = document.createElement("div");
+    th.className = "choiceThumb";
+    if(state.img.backUrl){
+      th.style.backgroundImage = `url("${state.img.backUrl}")`;
+      th.style.backgroundSize = "cover";
+      th.style.backgroundPosition = "center";
+    }
+    return th;
+  }
+
+  function mwRewardCardThumbNode(card){
+    const th = document.createElement("div");
+    th.className = "choiceThumb";
+    const url = state.img.cardUrlByNo[pad2(card.no)];
+    if(url){
+      th.style.backgroundImage = `url("${url}")`;
+      th.style.backgroundSize = "cover";
+      th.style.backgroundPosition = "center";
+    }
+    return th;
+  }
+
+  function mwRewardGoNextGame(){
+    mwRewardHideAllCoreModals();
+
+    state.started = true;
+    if(el.title) el.title.classList.remove("active");
+    if(el.game) el.game.classList.add("active");
+
+    startGame();
+  }
+
+  function mwRewardGoTitle(){
+    mwRewardHideAllCoreModals();
+
+    state.started = false;
+    state.gameOver = false;
+
+    if(el.game) el.game.classList.remove("active");
+    if(el.title) el.title.classList.add("active");
+  }
+
+  async function mwRewardRevealPack(packNos){
+    const cards = packNos.map(no => makeInstance(getCardDef(no))).filter(Boolean);
+
+    mwRewardAddCards(packNos);
+
+    if(!el.zoneTitle || !el.zoneBody){
+      log(`報酬獲得：${cards.map(c=>c.name).join(" / ")}`);
+      mwRewardGoNextGame();
+      return;
+    }
+
+    el.zoneTitle.textContent = "REWARD GET";
+    el.zoneBody.innerHTML = "";
+
+    const msg = document.createElement("div");
+    msg.className = "choiceMsg";
+    msg.style.whiteSpace = "pre-line";
+    msg.textContent =
+      "報酬カードを獲得しました。\n" +
+      "以下の3枚がデッキプールへ追加されます。";
+    el.zoneBody.appendChild(msg);
+
+    const list = document.createElement("div");
+    list.className = "choiceList";
+
+    for(const card of cards){
+      const row = document.createElement("div");
+      row.className = "choiceItem";
+
+      const th = mwRewardCardThumbNode(card);
+
+      const meta = document.createElement("div");
+      meta.className = "choiceMeta";
+
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = card.name;
+
+      const s = document.createElement("div");
+      s.className = "s";
+      s.textContent = `No.${pad2(card.no)} / 1枚獲得`;
+
+      meta.appendChild(t);
+      meta.appendChild(s);
+
+      row.appendChild(th);
+      row.appendChild(meta);
+
+      bindLongPress(row, ()=> openViewer(card, {side:"P1", zone:"REWARD", pos:null}), 620);
+
+      list.appendChild(row);
+    }
+
+    el.zoneBody.appendChild(list);
+
+    const btnRow = document.createElement("div");
+    btnRow.style.display = "flex";
+    btnRow.style.gap = "8px";
+    btnRow.style.marginTop = "12px";
+    btnRow.style.flexWrap = "wrap";
+
+    const mkBtn = (label, onClick)=>{
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.style.padding = "10px 14px";
+      b.style.borderRadius = "10px";
+      b.style.border = "1px solid rgba(255,255,255,.18)";
+      b.style.background = "rgba(0,0,0,.35)";
+      b.style.color = "white";
+      b.style.fontWeight = "800";
+      b.addEventListener("click", onClick, {passive:true});
+      return b;
+    };
+
+    btnRow.appendChild(mkBtn("次のゲームへ", mwRewardGoNextGame));
+    btnRow.appendChild(mkBtn("タイトルへ", mwRewardGoTitle));
+
+    el.zoneBody.appendChild(btnRow);
+    showModal("zoneM");
+
+    log(`報酬獲得：${cards.map(c=>c.name).join(" / ")}`);
+  }
+
+  async function mwRewardOpenSelect(){
+    const packs = mwRewardBuildThreePacks();
+
+    if(!el.choiceTitle || !el.choiceBody){
+      // 万一モーダルが無い場合でも最低限進行
+      await mwRewardRevealPack(packs[0]);
+      return;
+    }
+
+    el.choiceTitle.textContent = "REWARD SELECT";
+    el.choiceBody.innerHTML = "";
+
+    const msg = document.createElement("div");
+    msg.className = "choiceMsg";
+    msg.style.whiteSpace = "pre-line";
+    msg.textContent =
+      "裏向きの報酬を1つ選んでください。\n" +
+      "選んだ束から、ランダムな3枚のカードを獲得します。";
+    el.choiceBody.appendChild(msg);
+
+    const list = document.createElement("div");
+    list.className = "choiceList";
+
+    packs.forEach((pack, idx) => {
+      const row = document.createElement("div");
+      row.className = "choiceItem";
+
+      const th = mwRewardBackThumbNode();
+
+      const meta = document.createElement("div");
+      meta.className = "choiceMeta";
+
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = `REWARD ${idx + 1}`;
+
+      const s = document.createElement("div");
+      s.className = "s";
+      s.textContent = "カード3枚入り";
+
+      meta.appendChild(t);
+      meta.appendChild(s);
+
+      row.appendChild(th);
+      row.appendChild(meta);
+
+      row.addEventListener("click", async ()=>{
+        hideModal("choiceM");
+        await mwRewardRevealPack(pack);
+      }, {passive:true});
+
+      list.appendChild(row);
+    });
+
+    el.choiceBody.appendChild(list);
+    showModal("choiceM");
+  }
+
+  /* ------------------------------
+     勝利時フロー上書き
+  ------------------------------ */
+  const __mwReward_finishGame = finishGame;
+  finishGame = async function(winnerSide){
+    state.gameOver = true;
+    renderAll();
+
+    if(winnerSide !== "P1"){
+      const text = "YOU LOSE…";
+      if(el.resultText) el.resultText.textContent = text;
+      showModal("resultM");
+      return;
+    }
+
+    // 勝利画面を一度見せてから報酬へ
+    if(el.resultText) el.resultText.textContent = "YOU WIN！";
+    showModal("resultM");
+
+    await sleep(MW_REWARD_DELAY_MS);
+    hideModal("resultM");
+    await mwRewardOpenSelect();
+  };
+
+  log("PATCH REWARD-02 読み込み完了");
+})();
