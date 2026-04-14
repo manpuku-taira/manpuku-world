@@ -11859,3 +11859,206 @@ log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ
   setTimeout(fixButton, 1500);
 
 })();
+/* =========================================================
+  PATCH PLAYER-DECK-FINAL-04
+  - プレイヤーデッキ編集ボタンを確実に開く
+  - ボタン位置を上へ
+  - creator / player の保存先切替
+  - startGame が最後に保存した側のデッキを使う
+========================================================= */
+(function(){
+  "use strict";
+
+  const LS_PLAYER_COLLECTION = "mw_player_collection_v1";
+  const LS_PLAYER_DECK = "mw_player_deck_v1";
+  const LS_ACTIVE_DECK_MODE = "mw_active_deck_mode_v1"; // "creator" | "player"
+
+  function pdSafeParse(s, fallback){
+    try{ return JSON.parse(s); }catch{ return fallback; }
+  }
+
+  function pdSetMode(mode){
+    localStorage.setItem(LS_ACTIVE_DECK_MODE, mode);
+  }
+  function pdGetMode(){
+    return localStorage.getItem(LS_ACTIVE_DECK_MODE) || "creator";
+  }
+
+  function ensurePlayerCollectionAndDeck(){
+    let col = pdSafeParse(localStorage.getItem(LS_PLAYER_COLLECTION) || "", null);
+    let changed = false;
+
+    if(!col || typeof col !== "object"){
+      col = {};
+      changed = true;
+    }
+
+    // 全カード0初期化
+    for(const no of CARD_NOS){
+      const k = pad2(no);
+      if(typeof col[k] !== "number"){
+        col[k] = 0;
+        changed = true;
+      }
+    }
+
+    // プレイヤー初期所持：1〜20を各2枚
+    for(const no of INITIAL_DECK_NOS){
+      const k = pad2(no);
+      if((col[k] || 0) < 2){
+        col[k] = 2;
+        changed = true;
+      }
+    }
+
+    if(changed){
+      localStorage.setItem(LS_PLAYER_COLLECTION, JSON.stringify(col));
+      log("プレイヤー用所持カードを初期化");
+    }
+
+    let deck = pdSafeParse(localStorage.getItem(LS_PLAYER_DECK) || "", null);
+    if(!Array.isArray(deck) || deck.length !== 40){
+      deck = [];
+      for(const no of INITIAL_DECK_NOS){
+        deck.push(no);
+        deck.push(no);
+      }
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck));
+      log("プレイヤー用初期デッキを作成");
+    }
+  }
+
+  /* ---------------- 元関数退避 ---------------- */
+  const __creator_readCollection = readCollection;
+  const __creator_readDeck = readDeck;
+  const __creator_writeDeck = writeDeck;
+  const __creator_openDeckEditor = openDeckEditor;
+  const __creator_startGame = startGame;
+  const __creator_ensure = ensureInitialCollectionAndDeck;
+
+  /* ---------------- 初期化を統合 ---------------- */
+  ensureInitialCollectionAndDeck = function(){
+    __creator_ensure();
+    ensurePlayerCollectionAndDeck();
+  };
+
+  /* ---------------- 読み書き切替 ---------------- */
+  readCollection = function(){
+    ensurePlayerCollectionAndDeck();
+    if(pdGetMode() === "player"){
+      const col = pdSafeParse(localStorage.getItem(LS_PLAYER_COLLECTION) || "", {});
+      for(const no of CARD_NOS){
+        const k = pad2(no);
+        if(typeof col[k] !== "number") col[k] = 0;
+      }
+      return col;
+    }
+    return __creator_readCollection();
+  };
+
+  readDeck = function(){
+    ensurePlayerCollectionAndDeck();
+    if(pdGetMode() === "player"){
+      const d = pdSafeParse(localStorage.getItem(LS_PLAYER_DECK) || "", []);
+      return Array.isArray(d) ? d.slice() : [];
+    }
+    return __creator_readDeck();
+  };
+
+  writeDeck = function(deck){
+    ensurePlayerCollectionAndDeck();
+    if(pdGetMode() === "player"){
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck.slice()));
+      return;
+    }
+    return __creator_writeDeck(deck);
+  };
+
+  /* ---------------- 開発用は長押しのまま ---------------- */
+  openDeckEditor = function(){
+    pdSetMode("creator");
+    return __creator_openDeckEditor();
+  };
+
+  /* ---------------- プレイヤー用デッキ編集 ---------------- */
+  function openPlayerDeckEditor(){
+    ensureInitialCollectionAndDeck();
+    pdSetMode("player");
+    renderDeckEditor();
+    showModal("zoneM");
+    log("プレイヤー用デッキ編集：表示（保存後、このデッキでスタート）");
+  }
+  window.openPlayerDeckEditor = openPlayerDeckEditor;
+
+  /* ---------------- startGame は最後に保存したモードを使う ---------------- */
+  startGame = function(){
+    ensureInitialCollectionAndDeck();
+    log(`開始デッキモード：${pdGetMode() === "player" ? "プレイヤー用" : "クリエイター用"}`);
+    return __creator_startGame();
+  };
+
+  /* ---------------- タイトルボタン修正 ---------------- */
+  function swallow(e){
+    if(!e) return;
+    if(typeof e.preventDefault === "function") e.preventDefault();
+    if(typeof e.stopPropagation === "function") e.stopPropagation();
+    if(typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+  }
+
+  function findPlayerDeckButton(){
+    return Array.from(document.querySelectorAll("button")).find(btn => {
+      const t = (btn.textContent || "").replace(/\s+/g, "");
+      return t.includes("プレイヤーデッキ編集");
+    }) || null;
+  }
+
+  function bindPlayerDeckButton(){
+    const btn = findPlayerDeckButton();
+    if(!btn) return false;
+    if(btn.__mwPlayerDeckBoundFinal04) return true;
+
+    // 位置を今より上に
+    btn.style.position = "relative";
+    btn.style.top = "-48px";
+    btn.style.zIndex = "999";
+
+    // 親イベントを完全遮断
+    ["pointerdown","pointerup","pointercancel","touchstart","touchend","touchcancel","mousedown","mouseup","click"].forEach(type => {
+      btn.addEventListener(type, (e)=>{
+        if(type === "click"){
+          swallow(e);
+          if(window.state){
+            state.titleLongPressed = true;
+            setTimeout(()=>{ state.titleLongPressed = false; }, 250);
+          }
+          openPlayerDeckEditor();
+          return false;
+        }
+        swallow(e);
+      }, {capture:true, passive:false});
+    });
+
+    btn.__mwPlayerDeckBoundFinal04 = true;
+    log("プレイヤーデッキ編集ボタン：最終修正適用");
+    return true;
+  }
+
+  function bootBindPlayerDeckButton(){
+    bindPlayerDeckButton();
+
+    let count = 0;
+    const timer = setInterval(()=>{
+      count++;
+      bindPlayerDeckButton();
+      if(count >= 60) clearInterval(timer);
+    }, 200);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootBindPlayerDeckButton, {once:true});
+  }else{
+    bootBindPlayerDeckButton();
+  }
+
+  log("PATCH PLAYER-DECK-FINAL-04 読み込み完了");
+})();
