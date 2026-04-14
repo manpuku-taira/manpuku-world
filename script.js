@@ -10731,4 +10731,264 @@ function mw27IsMikoKensanLink(link){
   if(!link) return false;
   if(link.noCounter === true) return true;
   if(link.counterable === false) return true;
-  if(link.activationKind === "nonActivated") ret
+  if(link.activationKind === "nonActivated") return true;
+  if(link.activationType === "nonActivated") return true;
+  if(link.reason === "MIKO_DIRECT_GUARD") return true;
+  if(link.sourceCard && link.sourceCard.no === 21){
+    const txt = `${link.label || ""}\n${link.reason || ""}\n${link.kind || ""}`;
+    if(txt.includes("見参") || txt.includes("直接攻撃") || txt.includes("バトル終了") || txt.includes("ミーコ")){
+      return true;
+    }
+  }
+  return false;
+}
+
+function mw27IsCounterableLink(link){
+  if(!link) return false;
+  if(mw27IsMikoKensanLink(link)) return false;
+  return true;
+}
+
+/* ---------------- 記憶抹消成功時の移動先を強化 ---------------- */
+const __mw27_processActivatedEffect = processActivatedEffect;
+processActivatedEffect = async function(link){
+  const result = await __mw27_processActivatedEffect(link);
+
+  if(
+    result &&
+    result.ok === false &&
+    result.detail &&
+    result.detail.negatorKind === "MEMORY"
+  ){
+    const sourceSide = link ? link.activatorSide : null;
+    if(!sourceSide) return result;
+
+    let sourceCard = null;
+
+    if(link && link.sourceCard){
+      sourceCard = link.sourceCard;
+    }else if(link && link.sourceUid){
+      sourceCard = mw27FindStageCardByUid(sourceSide, link.sourceUid);
+    }
+
+    /* 手形は sourceCard/sourceUid が抜けても盤面から拾って確実に送る */
+    if(!sourceCard && link && link.kind === "HANDGATA"){
+      sourceCard = mw27FindHandgataOnStage(sourceSide);
+    }
+
+    if(sourceCard){
+      if(sourceCard.type === "character"){
+        await sendCharacterToWing(sourceSide, sourceCard.uid);
+        log(`記憶抹消：${sideName(sourceSide)}の「${sourceCard.name}」をウイングへ`);
+      }else if(sourceCard.type === "item" || sourceCard.type === "effect"){
+        const p = state[sourceSide];
+        let moved = false;
+
+        const cIdx = p.C.findIndex(c => c && c.uid === sourceCard.uid);
+        if(cIdx >= 0){
+          const card = p.C[cIdx];
+          p.C[cIdx] = null;
+          moveToWing(sourceSide, card);
+          moved = true;
+        }
+
+        const eIdx = p.E.findIndex(c => c && c.uid === sourceCard.uid);
+        if(eIdx >= 0){
+          const card = p.E[eIdx];
+          p.E[eIdx] = null;
+          moveToWing(sourceSide, card);
+          moved = true;
+        }
+
+        if(moved){
+          log(`記憶抹消：${sideName(sourceSide)}の「${sourceCard.name}」をウイングへ`);
+        }
+      }
+
+      renderAll();
+    }
+  }
+
+  return result;
+};
+
+/* ---------------- 手形 / 記憶抹消の反応対象を限定 ---------------- */
+const __mw27_chooseCounterForSide = chooseCounterForSide;
+chooseCounterForSide = async function(side, prevLink){
+  if(!mw27IsCounterableLink(prevLink)){
+    return "PASS";
+  }
+  return await __mw27_chooseCounterForSide(side, prevLink);
+};
+
+const __mw27_runCounterChain = runCounterChain;
+runCounterChain = async function(initialLink){
+  if(!mw27IsCounterableLink(initialLink)){
+    return {
+      negated: false,
+      negatorKind: null,
+      chain: [initialLink],
+      active: [true]
+    };
+  }
+  return await __mw27_runCounterChain(initialLink);
+};
+
+/* ---------------- ミーコ見参専用の起動効果フラグ付け補助 ----------------
+   既存処理側で link を作る時に sourceCard=no.21 だけでも拾えるようにしているが、
+   もし見参処理で専用 link を作っている場合は、下の形に合わせれば確実に無効化対象外になる。
+
+   例:
+   {
+     kind: "MIKO_KENSAN",
+     label: "ミーコの見参",
+     activatorSide: side,
+     sourceCard: mikoCard,
+     sourceUid: mikoCard.uid,
+     reason: "MIKO_DIRECT_GUARD",
+     noCounter: true,
+     activationKind: "nonActivated"
+   }
+---------------------------------------------------------------- */
+
+log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ見参は無効化対象外");
+/* =========================================================
+  PATCH 34
+  - P1側の登場時/見参時の自動発動を任意化
+  - 対象：タータ / ルビー / サファイア / セシア＆アリサ
+  - 既に任意確認済みの聖ラウス / 司令は既存処理を維持
+  - ミーコ / 手形 / 記憶抹消まわりの既存PATCH 25-27はそのまま維持
+========================================================= */
+
+function mw34MakeActivatedLink(side, card, resolveFn, labelSuffix="効果"){
+  return {
+    kind:"ACT",
+    label: `${card.name}${labelSuffix ? ` ${labelSuffix}` : ""}`.trim(),
+    activatorSide: side,
+    sourceCard: card,
+    sourceUid: card.uid,
+    resolve: resolveFn,
+    onNegated: async (r)=>{
+      if(r && r.negatorKind === "MEMORY"){
+        await sendCharacterToWing(side, card.uid);
+      }
+      log(`${card.name} の効果は無効`);
+      renderAll();
+    }
+  };
+}
+
+function mw34HasRachelInHandForSeshia(side){
+  return state[side].hand.some(c=>c && c.type==="character" && c.rank<=5 && c.name.includes("レイチェル"));
+}
+
+const __mw34_onEnterTriggers = onEnterTriggers;
+onEnterTriggers = async function(side, ctx){
+  const card = ctx && ctx.card ? ctx.card : null;
+  if(!card) return await __mw34_onEnterTriggers(side, ctx);
+
+  if(isRachelSealActiveAgainst(side, card)){
+    log(`${card.name}：退魔師レイチェルの効果により発動できません`, "warn");
+    return;
+  }
+
+  /* タータの登場時2ドローを任意化 */
+  if(card.no===5){
+    const act = mw34MakeActivatedLink(side, card, async ()=>{
+      if(side==="P1"){
+        const ok = await askYesNo("効果確認", "統括AI タータの登場時効果を発動しますか？\nデッキから2枚ドローします。\n（発動しない事も選べます）");
+        if(!ok){
+          log("タータ：登場時効果を発動しませんでした");
+          return;
+        }
+      }
+      draw(side, 2);
+      log(`${sideName(side)}：タータ登場→2ドロー`);
+      renderAll();
+    }, "登場時効果");
+    await processActivatedEffect(act);
+    return;
+  }
+
+  /* ルビー / サファイアの登場時サーチを任意化 */
+  if(card.no===26 || card.no===27){
+    const act = mw34MakeActivatedLink(side, card, async ()=>{
+      if(side==="P1"){
+        const ok = await askYesNo(
+          "効果確認",
+          `${card.name} の登場時効果を発動しますか？\n手札を1枚ウイングに送り、デッキ・ウイングからタグ「アニメ」カード1枚を手札に加えます。\n（発動しない事も選べます）`
+        );
+        if(!ok){
+          log(`${card.name}：登場時効果を発動しませんでした`);
+          return;
+        }
+      }
+      await resolveRubySapphireEnter(side, card, ctx);
+    }, "登場時効果");
+    await processActivatedEffect(act);
+    return;
+  }
+
+  /* セシア＆アリサの登場時サーチを任意化 */
+  if(card.no===28){
+    const act = mw34MakeActivatedLink(side, card, async ()=>{
+      if(side==="P1"){
+        const ok = await askYesNo(
+          "効果確認",
+          "セシア＆アリサの登場時効果を発動しますか？\nデッキからタイトルタグ「怨霊撲滅屋GB」アイテムカード1枚を手札に加えます。\n（発動しない事も選べます）"
+        );
+        if(!ok){
+          log("セシア＆アリサ：登場時効果を発動しませんでした");
+          return;
+        }
+      }
+      await searchDeckByTitleTagItem(side, "怨霊撲滅屋GB", 1, {aiAuto: side==="AI"});
+    }, "登場時効果");
+    await processActivatedEffect(act);
+    return;
+  }
+
+  return await __mw34_onEnterTriggers(side, ctx);
+};
+
+/* セシア＆アリサの場の起動効果は「発動できる」なので、
+   P1では従来どおりボタンを押した時点で任意選択とみなす。
+   ただし発動前の確認を明示的に追加しておく。 */
+const __mw34_activateFieldCardAbility = activateFieldCardAbility;
+activateFieldCardAbility = async function(side, zone, pos, card){
+  if(side==="P1" && card){
+    if(card.no===28){
+      const ok = await askYesNo(
+        "効果確認",
+        "セシア＆アリサの効果を発動しますか？\nこのカードが自分ステージに存在する時、手札のrank5以下の「レイチェル」キャラクター1体を条件無視で見参させます。"
+      );
+      if(!ok){
+        log("セシア＆アリサ：効果を発動しませんでした");
+        return;
+      }
+    }
+    if(card.no===9){
+      const ok = await askYesNo(
+        "効果確認",
+        "小太郎・孫悟空Lv17 の効果を発動しますか？\n手札の「小次郎」カードを見参させます。"
+      );
+      if(!ok){
+        log("小太郎・孫悟空Lv17：効果を発動しませんでした");
+        return;
+      }
+    }
+    if(card.no===10){
+      const ok = await askYesNo(
+        "効果確認",
+        "小次郎・孫悟空Lv17 の効果を発動しますか？\n手札の「小太郎」カードを見参させます。"
+      );
+      if(!ok){
+        log("小次郎・孫悟空Lv17：効果を発動しませんでした");
+        return;
+      }
+    }
+  }
+  return await __mw34_activateFieldCardAbility(side, zone, pos, card);
+};
+
+log("PATCH 34 適用：登場時/見参時の任意発動確認を追加");
