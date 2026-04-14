@@ -10854,313 +10854,317 @@ runCounterChain = async function(initialLink){
 log("PATCH 27 適用：手形→記憶抹消時のウイング送り / ミーコ見参は無効化対象外");
 
 /* =========================================================
-  PATCH 28
-  勝利報酬システム
-  - YOU WIN 後に裏向き3枚から1枚選択
-  - 選んだカードを3枚獲得
-  - 獲得カードを表向き1枚 + ×3 で確認
-  - デッキプール（LS_COLLECTION）へ反映
+  PATCH 40
+  - プレイヤー用デッキ編集導線追加
+  - 通常スタートはプレイヤー用デッキを使用
+  - 勝利時の報酬をレア度抽選付き3択に変更
+  - クリエイター用デッキ編集はスタート長押しのまま維持
 ========================================================= */
-
-const MW_REWARD_PATCH_VERSION = "REWARD_PATCH_V1";
-
-const rewardState = {
-  pending: null,   // { choices:[no,no,no], chosenNo:null, claimed:false }
-};
-
-function rewardReadCollection(){
-  const col = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", {});
-  for(const no of CARD_NOS){
-    const k = pad2(no);
-    if(typeof col[k] !== "number") col[k] = 0;
-  }
-  return col;
-}
-function rewardWriteCollection(col){
-  localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
-}
-function rewardGrantCardTriplet(no){
-  const col = rewardReadCollection();
-  const k = pad2(no);
-  col[k] = (col[k] || 0) + 3;
-  rewardWriteCollection(col);
-}
-function rewardPick3RandomNos(){
-  const pool = CARD_NOS.slice();
-  shuffle(pool);
-  return pool.slice(0, 3);
-}
-function rewardReset(){
-  rewardState.pending = null;
-}
-function rewardEnsurePending(){
-  if(!rewardState.pending){
-    rewardState.pending = {
-      choices: rewardPick3RandomNos(),
-      chosenNo: null,
-      claimed: false,
-    };
-  }
-  return rewardState.pending;
-}
-function rewardCardThumbStyle(no){
-  const url = state.img.cardUrlByNo[pad2(no)] || "";
-  return url ? `background-image:url("${url}")` : "";
-}
-function rewardBackThumbStyle(){
-  return state.img.backUrl ? `background-image:url("${state.img.backUrl}")` : "";
-}
-function rewardCloseChoice(){
-  hideModal("choiceM");
-  if(el.choiceTitle) el.choiceTitle.textContent = "";
-  if(el.choiceBody) el.choiceBody.innerHTML = "";
-}
-function rewardOpenPickModal(){
-  const rw = rewardEnsurePending();
-  if(!el.choiceTitle || !el.choiceBody) return;
-
-  el.choiceTitle.textContent = "報酬カード選択";
-  el.choiceBody.innerHTML = "";
-
-  const msg = document.createElement("div");
-  msg.className = "choiceMsg";
-  msg.textContent = "裏向きのカードを1枚選んでください";
-  el.choiceBody.appendChild(msg);
-
-  const row = document.createElement("div");
-  row.style.display = "grid";
-  row.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
-  row.style.gap = "12px";
-  row.style.marginTop = "10px";
-
-  rw.choices.forEach((no, idx)=>{
-    const cardBtn = document.createElement("button");
-    cardBtn.type = "button";
-    cardBtn.style.height = "160px";
-    cardBtn.style.borderRadius = "14px";
-    cardBtn.style.border = "1px solid rgba(255,255,255,.18)";
-    cardBtn.style.background = "rgba(0,0,0,.35)";
-    cardBtn.style.backgroundSize = "cover";
-    cardBtn.style.backgroundPosition = "center";
-    cardBtn.style.boxShadow = "0 4px 16px rgba(0,0,0,.28)";
-    const backStyle = rewardBackThumbStyle();
-    if(backStyle) cardBtn.setAttribute("style", cardBtn.getAttribute("style") + ";" + backStyle);
-
-    cardBtn.addEventListener("click", async ()=>{
-      rw.chosenNo = no;
-      rw.claimed = true;
-      rewardGrantCardTriplet(no);
-      rewardCloseChoice();
-      await rewardOpenRevealModal(no);
-    }, {passive:true});
-
-    row.appendChild(cardBtn);
-  });
-
-  el.choiceBody.appendChild(row);
-  showModal("choiceM");
-}
-async function rewardOpenRevealModal(no){
-  const def = getCardDef(no);
-  if(!def || !el.choiceTitle || !el.choiceBody) return;
-
-  el.choiceTitle.textContent = "報酬獲得";
-  el.choiceBody.innerHTML = "";
-
-  const msg = document.createElement("div");
-  msg.className = "choiceMsg";
-  msg.textContent = `${def.name} を3枚獲得しました`;
-  el.choiceBody.appendChild(msg);
-
-  const wrap = document.createElement("div");
-  wrap.style.display = "flex";
-  wrap.style.justifyContent = "center";
-  wrap.style.marginTop = "10px";
-
-  const card = document.createElement("div");
-  card.style.width = "120px";
-  card.style.height = "168px";
-  card.style.borderRadius = "14px";
-  card.style.border = "1px solid rgba(255,255,255,.18)";
-  card.style.background = "rgba(0,0,0,.35)";
-  card.style.backgroundSize = "cover";
-  card.style.backgroundPosition = "center";
-  const faceStyle = rewardCardThumbStyle(no);
-  if(faceStyle) card.setAttribute("style", card.getAttribute("style") + ";" + faceStyle);
-  wrap.appendChild(card);
-
-  const x3 = document.createElement("div");
-  x3.style.marginTop = "8px";
-  x3.style.textAlign = "center";
-  x3.style.fontWeight = "800";
-  x3.style.fontSize = "18px";
-  x3.textContent = "×3";
-
-  el.choiceBody.appendChild(wrap);
-  el.choiceBody.appendChild(x3);
-
-  const btnRow = document.createElement("div");
-  btnRow.style.display = "flex";
-  btnRow.style.gap = "8px";
-  btnRow.style.justifyContent = "center";
-  btnRow.style.flexWrap = "wrap";
-  btnRow.style.marginTop = "14px";
-
-  const mkBtn = (label, onClick)=>{
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    b.style.padding = "10px 14px";
-    b.style.borderRadius = "10px";
-    b.style.border = "1px solid rgba(255,255,255,.18)";
-    b.style.background = "rgba(0,0,0,.35)";
-    b.style.color = "white";
-    b.style.fontWeight = "800";
-    b.addEventListener("click", onClick, {passive:true});
-    return b;
-  };
-
-  btnRow.appendChild(mkBtn("次のゲームへ", ()=>{
-    rewardCloseChoice();
-    hideModal("resultM");
-    rewardReset();
-    startGame();
-  }));
-  btnRow.appendChild(mkBtn("タイトルへ", ()=>{
-    rewardCloseChoice();
-    hideModal("resultM");
-    rewardReset();
-    state.started=false;
-    state.gameOver=false;
-    if(el.game) el.game.classList.remove("active");
-    if(el.title) el.title.classList.add("active");
-    if(el.boot) el.boot.textContent="JS: OK（準備完了）";
-  }));
-
-  el.choiceBody.appendChild(btnRow);
-  showModal("choiceM");
-}
-
-/* ---------------- Win / Result override ---------------- */
-const __mw28_finishGame = finishGame;
-finishGame = async function(winnerSide){
-  state.gameOver = true;
-  renderAll();
-
-  const isWin = (winnerSide === "P1");
-  if(isWin){
-    rewardEnsurePending();
-  }else{
-    rewardReset();
-  }
-
-  if(el.resultText){
-    el.resultText.textContent = isWin ? "YOU WIN！" : "YOU LOSE…";
-  }
-  if(el.btnNextGame){
-    el.btnNextGame.textContent = isWin ? "報酬を見る" : "次のゲームへ";
-  }
-  showModal("resultM");
-};
-
-/* ---------------- bindResult override ---------------- */
-bindResult = function(){
-  if(el.btnNextGame){
-    el.btnNextGame.onclick = null;
-    el.btnNextGame.addEventListener("click", ()=>{
-      if(rewardState.pending && rewardState.pending.claimed === false){
-        hideModal("resultM");
-        rewardOpenPickModal();
-        return;
-      }
-      hideModal("resultM");
-      rewardReset();
-      startGame();
-    }, {passive:true});
-  }
-
-  if(el.btnBackTitle){
-    el.btnBackTitle.onclick = null;
-    el.btnBackTitle.addEventListener("click", ()=>{
-      rewardCloseChoice();
-      hideModal("resultM");
-      rewardReset();
-      state.started=false;
-      state.gameOver=false;
-      if(el.game) el.game.classList.remove("active");
-      if(el.title) el.title.classList.add("active");
-      if(el.boot) el.boot.textContent="JS: OK（準備完了）";
-    }, {passive:true});
-  }
-};
-
-log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
-/* =========================================================
-  PATCH REWARD-02
-  勝利報酬を
-  「裏面3択 → 選んだ束の中身がランダム3枚（重複なし）」
-  に変更
-========================================================= */
-
 (function(){
   "use strict";
 
-  const MW_REWARD_DELAY_MS = 650;
+  const LS_PLAYER_COLLECTION = "mw_player_collection_v1";
+  const LS_PLAYER_DECK = "mw_player_deck_v1";
+  const PLAYER_START_NOS = Array.from({length:20}, (_,i)=> i+1);
+  const REWARD_RARITY_BY_NO = {
+    1:"UR",2:"UR",3:"UR",4:"SR",5:"UR",6:"SR",7:"SR",8:"SR",9:"R",10:"R",
+    11:"N",12:"N",13:"N",14:"UR",15:"R",16:"SR",17:"R",18:"R",19:"N",20:"N",
+    21:"UR",22:"UR",23:"UR",24:"SR",25:"SR",26:"R",27:"R",28:"SR",29:"UR",30:"SR"
+  };
+  const REWARD_RARITY_RATE = [
+    ["N", 62],
+    ["R", 25],
+    ["SR",10],
+    ["UR", 3],
+  ];
 
-  function mwRewardWriteCollection(col){
-    localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
+  function ensurePlayerProfile(){
+    let col = safeJSONParse(localStorage.getItem(LS_PLAYER_COLLECTION) || "", null);
+    let changed = false;
+    if(!col || typeof col !== "object"){
+      col = {};
+      changed = true;
+    }
+    for(const no of CARD_NOS){
+      const k = pad2(no);
+      if(typeof col[k] !== "number"){
+        col[k] = PLAYER_START_NOS.includes(no) ? 2 : 0;
+        changed = true;
+      }
+    }
+    if(changed){
+      localStorage.setItem(LS_PLAYER_COLLECTION, JSON.stringify(col));
+    }
+
+    let deck = safeJSONParse(localStorage.getItem(LS_PLAYER_DECK) || "", null);
+    if(!Array.isArray(deck) || deck.length !== 40){
+      deck = [];
+      for(const no of PLAYER_START_NOS){ deck.push(no); deck.push(no); }
+      localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck));
+    }
+  }
+  function readPlayerCollection(){
+    ensurePlayerProfile();
+    const col = safeJSONParse(localStorage.getItem(LS_PLAYER_COLLECTION) || "", {});
+    for(const no of CARD_NOS){
+      const k = pad2(no);
+      if(typeof col[k] !== "number") col[k] = 0;
+    }
+    return col;
+  }
+  function writePlayerCollection(col){
+    localStorage.setItem(LS_PLAYER_COLLECTION, JSON.stringify(col));
+  }
+  function readPlayerDeck(){
+    ensurePlayerProfile();
+    const d = safeJSONParse(localStorage.getItem(LS_PLAYER_DECK) || "", []);
+    return Array.isArray(d) ? d.slice() : [];
+  }
+  function writePlayerDeck(deck){
+    localStorage.setItem(LS_PLAYER_DECK, JSON.stringify(deck.slice()));
   }
 
-  function mwRewardAddCards(nos){
-    const col = readCollection();
-    for(const no of nos){
+  function openPlayerDeckEditor(){
+    ensurePlayerProfile();
+    const col = readPlayerCollection();
+    const deck = readPlayerDeck();
+    const counts = countDeckByNo(deck);
+
+    if(!el.zoneTitle || !el.zoneBody) return;
+    el.zoneTitle.textContent = "PLAYER DECK EDIT";
+    el.zoneBody.innerHTML = "";
+
+    const head = document.createElement("div");
+    head.className = "choiceMsg";
+    head.textContent =
+      "プレイヤー用デッキ編集です。\n" +
+      "操作：＋で追加 / －で削除（同名最大3枚・所持枚数以内）\n" +
+      "保存は40枚ちょうどの時のみ可能";
+    el.zoneBody.appendChild(head);
+
+    const stat = document.createElement("div");
+    stat.className = "choiceMsg";
+    stat.style.whiteSpace = "pre-line";
+    stat.textContent = `現在デッキ：${deck.length}枚\n${deckEditorSummaryLine(deck)}`;
+    el.zoneBody.appendChild(stat);
+
+    const btnRow = document.createElement("div");
+    btnRow.style.display = "flex";
+    btnRow.style.gap = "8px";
+    btnRow.style.flexWrap = "wrap";
+    btnRow.style.margin = "10px 0 6px 0";
+
+    const mkBtn = (label, onClick)=>{
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.style.padding = "8px 10px";
+      b.style.borderRadius = "10px";
+      b.style.border = "1px solid rgba(255,255,255,.18)";
+      b.style.background = "rgba(0,0,0,.35)";
+      b.style.color = "white";
+      b.style.fontWeight = "800";
+      b.addEventListener("click", onClick, {passive:true});
+      return b;
+    };
+
+    btnRow.appendChild(mkBtn("保存して戻る", ()=>{
+      const d = readPlayerDeck();
+      if(d.length !== 40){
+        log(`プレイヤーデッキ：保存不可（${d.length}枚）`, "warn");
+        openPlayerDeckEditor();
+        return;
+      }
+      writePlayerDeck(d);
+      log("プレイヤーデッキ：保存しました");
+      hideModal("zoneM");
+    }));
+
+    btnRow.appendChild(mkBtn("初期デッキへ戻す", ()=>{
+      const d = [];
+      for(const no of PLAYER_START_NOS){ d.push(no); d.push(no); }
+      writePlayerDeck(d);
+      log("プレイヤーデッキ：初期デッキへ戻しました");
+      openPlayerDeckEditor();
+    }));
+
+    el.zoneBody.appendChild(btnRow);
+
+    const list = document.createElement("div");
+    list.className = "choiceList";
+
+    for(const no of CARD_NOS){
+      const def = getCardDef(no);
+      if(!def) continue;
+      const k = pad2(no);
+      const owned = col[k] || 0;
+      const inDeck = counts[k] || 0;
+
+      const row = document.createElement("div");
+      row.className = "choiceItem";
+      row.style.display = "grid";
+      row.style.gridTemplateColumns = "56px 1fr auto";
+      row.style.alignItems = "center";
+      row.style.gap = "10px";
+
+      const th = document.createElement("div");
+      th.className = "choiceThumb";
+      const url = state.img.cardUrlByNo[k];
+      if(url) th.style.backgroundImage = `url("${url}")`;
+
+      const meta = document.createElement("div");
+      meta.className = "choiceMeta";
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = `No.${k}  ${def.name}`;
+      const s = document.createElement("div");
+      s.className = "s";
+      const rarity = REWARD_RARITY_BY_NO[no] || "-";
+      s.textContent = `${def.type.toUpperCase()} / R${def.rank||0} / 所持${owned} / デッキ${inDeck} / レア${rarity}`;
+      meta.appendChild(t);
+      meta.appendChild(s);
+
+      const ops = document.createElement("div");
+      ops.style.display = "flex";
+      ops.style.gap = "6px";
+      ops.style.alignItems = "center";
+
+      const mkMini = (label)=>{
+        const b = document.createElement("button");
+        b.textContent = label;
+        b.style.width = "40px";
+        b.style.height = "36px";
+        b.style.borderRadius = "10px";
+        b.style.border = "1px solid rgba(255,255,255,.18)";
+        b.style.background = "rgba(0,0,0,.35)";
+        b.style.color = "white";
+        b.style.fontWeight = "900";
+        return b;
+      };
+
+      const btnMinus = mkMini("－");
+      btnMinus.addEventListener("click", ()=>{
+        const deckNow = readPlayerDeck();
+        const can = canRemoveFromDeck(deckNow, no);
+        if(!can.ok){
+          log(`プレイヤーデッキ削除不可：${can.reason}`, "warn");
+          return;
+        }
+        for(let i=deckNow.length-1;i>=0;i--){
+          if(deckNow[i]===no){ deckNow.splice(i,1); break; }
+        }
+        writePlayerDeck(deckNow);
+        openPlayerDeckEditor();
+      }, {passive:true});
+
+      const btnPlus = mkMini("＋");
+      btnPlus.addEventListener("click", ()=>{
+        const deckNow = readPlayerDeck();
+        const colNow = readPlayerCollection();
+        const can = canAddToDeck(colNow, deckNow, no);
+        if(!can.ok){
+          log(`プレイヤーデッキ追加不可：${can.reason}`, "warn");
+          return;
+        }
+        deckNow.push(no);
+        writePlayerDeck(deckNow);
+        openPlayerDeckEditor();
+      }, {passive:true});
+
+      ops.appendChild(btnMinus);
+      ops.appendChild(btnPlus);
+
+      row.appendChild(th);
+      row.appendChild(meta);
+      row.appendChild(ops);
+      bindLongPress(row, ()=> openViewer(makeInstance(def), {side:"P1", zone:"PLAYER_DECK", pos:null}), 620);
+      list.appendChild(row);
+    }
+
+    el.zoneBody.appendChild(list);
+    showModal("zoneM");
+    log("プレイヤー用デッキ編集を表示");
+  }
+
+  function addPlayerDeckButton(){
+    if(!el.title || document.getElementById("btnPlayerDeck")) return;
+    const btn = document.createElement("button");
+    btn.id = "btnPlayerDeck";
+    btn.textContent = "プレイヤーデッキ編集";
+    btn.style.display = "block";
+    btn.style.margin = "12px auto 0 auto";
+    btn.style.padding = "10px 16px";
+    btn.style.borderRadius = "12px";
+    btn.style.border = "1px solid rgba(255,255,255,.18)";
+    btn.style.background = "rgba(0,0,0,.38)";
+    btn.style.color = "white";
+    btn.style.fontWeight = "800";
+    btn.style.backdropFilter = "blur(4px)";
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openPlayerDeckEditor();
+    }, {passive:false});
+    el.title.appendChild(btn);
+  }
+
+  const __mw40_startGame = startGame;
+  startGame = function(){
+    ensurePlayerProfile();
+    const _ensure = ensureInitialCollectionAndDeck;
+    const _readDeck = readDeck;
+    ensureInitialCollectionAndDeck = function(){ ensurePlayerProfile(); _ensure(); };
+    readDeck = function(){ return readPlayerDeck(); };
+    try{
+      return __mw40_startGame();
+    }finally{
+      ensureInitialCollectionAndDeck = _ensure;
+      readDeck = _readDeck;
+    }
+  };
+
+  function weightedPickRarity(allowedRarities){
+    const table = REWARD_RARITY_RATE.filter(([r]) => allowedRarities.has(r));
+    let total = 0;
+    for(const [,w] of table) total += w;
+    if(total <= 0) return null;
+    let roll = Math.random() * total;
+    for(const [rarity, weight] of table){
+      roll -= weight;
+      if(roll < 0) return rarity;
+    }
+    return table[table.length-1][0];
+  }
+
+  function rewardDrawDistinctCards(count){
+    const remaining = CARD_NOS.filter(no => !!getCardDef(no));
+    const picked = [];
+    while(picked.length < count && remaining.length > 0){
+      const raritySet = new Set(remaining.map(no => REWARD_RARITY_BY_NO[no] || "N"));
+      const rarity = weightedPickRarity(raritySet);
+      let pool = remaining.filter(no => (REWARD_RARITY_BY_NO[no] || "N") === rarity);
+      if(pool.length <= 0) pool = remaining.slice();
+      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      picked.push(chosen);
+      const idx = remaining.indexOf(chosen);
+      if(idx >= 0) remaining.splice(idx, 1);
+    }
+    return picked;
+  }
+
+  function rewardBuildThreePacks(){
+    const nums = rewardDrawDistinctCards(9);
+    return [nums.slice(0,3), nums.slice(3,6), nums.slice(6,9)];
+  }
+
+  function rewardAddPackToPlayerCollection(packNos){
+    const col = readPlayerCollection();
+    for(const no of packNos){
       const k = pad2(no);
       col[k] = (col[k] || 0) + 1;
     }
-    mwRewardWriteCollection(col);
+    writePlayerCollection(col);
   }
 
-  function mwRewardSampleDistinct(arr, count){
-    const pool = arr.slice();
-    shuffle(pool);
-    return pool.slice(0, Math.min(count, pool.length));
-  }
-
-  function mwRewardBuildThreePacks(){
-    const allNos = CARD_NOS.filter(no => !!getCardDef(no));
-    const totalNeed = 9;
-
-    // 9枚以上ある前提だが、足りない時も安全に処理
-    let picked = mwRewardSampleDistinct(allNos, Math.min(totalNeed, allNos.length));
-
-    // 念のため足りない場合は残りから補充（重複なし優先）
-    if(picked.length < totalNeed){
-      const rest = allNos.filter(no => !picked.includes(no));
-      picked = picked.concat(mwRewardSampleDistinct(rest, totalNeed - picked.length));
-    }
-
-    // それでも足りない特殊ケースだけは再利用
-    while(picked.length < totalNeed && allNos.length){
-      const no = allNos[Math.floor(Math.random() * allNos.length)];
-      if(!picked.includes(no) || allNos.length < totalNeed){
-        picked.push(no);
-      }
-    }
-
-    return [
-      picked.slice(0, 3),
-      picked.slice(3, 6),
-      picked.slice(6, 9),
-    ];
-  }
-
-  function mwRewardHideAllCoreModals(){
-    hideModal("resultM");
-    hideModal("choiceM");
-    hideModal("zoneM");
-  }
-
-  function mwRewardBackThumbNode(){
+  function rewardMakeBackThumb(){
     const th = document.createElement("div");
     th.className = "choiceThumb";
     if(state.img.backUrl){
@@ -11171,7 +11175,7 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
     return th;
   }
 
-  function mwRewardCardThumbNode(card){
+  function rewardMakeCardThumb(card){
     const th = document.createElement("div");
     th.className = "choiceThumb";
     const url = state.img.cardUrlByNo[pad2(card.no)];
@@ -11183,34 +11187,30 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
     return th;
   }
 
-  function mwRewardGoNextGame(){
-    mwRewardHideAllCoreModals();
+  function goTitleSafe(){
+    hideModal("choiceM");
+    hideModal("zoneM");
+    hideModal("resultM");
+    state.started = false;
+    state.gameOver = false;
+    if(el.game) el.game.classList.remove("active");
+    if(el.title) el.title.classList.add("active");
+    if(el.boot) el.boot.textContent = "JS: OK（準備完了）";
+  }
 
-    state.started = true;
-    if(el.title) el.title.classList.remove("active");
-    if(el.game) el.game.classList.add("active");
-
+  function goNextGameSafe(){
+    hideModal("choiceM");
+    hideModal("zoneM");
+    hideModal("resultM");
     startGame();
   }
 
-  function mwRewardGoTitle(){
-    mwRewardHideAllCoreModals();
-
-    state.started = false;
-    state.gameOver = false;
-
-    if(el.game) el.game.classList.remove("active");
-    if(el.title) el.title.classList.add("active");
-  }
-
-  async function mwRewardRevealPack(packNos){
+  async function rewardRevealPack(packNos){
+    rewardAddPackToPlayerCollection(packNos);
     const cards = packNos.map(no => makeInstance(getCardDef(no))).filter(Boolean);
-
-    mwRewardAddCards(packNos);
-
     if(!el.zoneTitle || !el.zoneBody){
       log(`報酬獲得：${cards.map(c=>c.name).join(" / ")}`);
-      mwRewardGoNextGame();
+      goNextGameSafe();
       return;
     }
 
@@ -11220,42 +11220,30 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
     const msg = document.createElement("div");
     msg.className = "choiceMsg";
     msg.style.whiteSpace = "pre-line";
-    msg.textContent =
-      "報酬カードを獲得しました。\n" +
-      "以下の3枚がデッキプールへ追加されます。";
+    msg.textContent = "選んだ報酬から、以下の3枚を獲得しました。";
     el.zoneBody.appendChild(msg);
 
     const list = document.createElement("div");
     list.className = "choiceList";
-
     for(const card of cards){
       const row = document.createElement("div");
       row.className = "choiceItem";
-
-      const th = mwRewardCardThumbNode(card);
-
+      const th = rewardMakeCardThumb(card);
       const meta = document.createElement("div");
       meta.className = "choiceMeta";
-
       const t = document.createElement("div");
       t.className = "t";
       t.textContent = card.name;
-
       const s = document.createElement("div");
       s.className = "s";
-      s.textContent = `No.${pad2(card.no)} / 1枚獲得`;
-
+      s.textContent = `No.${pad2(card.no)} / ${REWARD_RARITY_BY_NO[card.no] || "N"} / 1枚獲得`;
       meta.appendChild(t);
       meta.appendChild(s);
-
       row.appendChild(th);
       row.appendChild(meta);
-
       bindLongPress(row, ()=> openViewer(card, {side:"P1", zone:"REWARD", pos:null}), 620);
-
       list.appendChild(row);
     }
-
     el.zoneBody.appendChild(list);
 
     const btnRow = document.createElement("div");
@@ -11263,7 +11251,6 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
     btnRow.style.gap = "8px";
     btnRow.style.marginTop = "12px";
     btnRow.style.flexWrap = "wrap";
-
     const mkBtn = (label, onClick)=>{
       const b = document.createElement("button");
       b.textContent = label;
@@ -11276,25 +11263,20 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
       b.addEventListener("click", onClick, {passive:true});
       return b;
     };
-
-    btnRow.appendChild(mkBtn("次のゲームへ", mwRewardGoNextGame));
-    btnRow.appendChild(mkBtn("タイトルへ", mwRewardGoTitle));
-
+    btnRow.appendChild(mkBtn("次のゲームへ", goNextGameSafe));
+    btnRow.appendChild(mkBtn("タイトルへ", goTitleSafe));
     el.zoneBody.appendChild(btnRow);
-    showModal("zoneM");
 
+    showModal("zoneM");
     log(`報酬獲得：${cards.map(c=>c.name).join(" / ")}`);
   }
 
-  async function mwRewardOpenSelect(){
-    const packs = mwRewardBuildThreePacks();
-
+  async function rewardOpenSelect(){
+    const packs = rewardBuildThreePacks();
     if(!el.choiceTitle || !el.choiceBody){
-      // 万一モーダルが無い場合でも最低限進行
-      await mwRewardRevealPack(packs[0]);
+      await rewardRevealPack(packs[0]);
       return;
     }
-
     el.choiceTitle.textContent = "REWARD SELECT";
     el.choiceBody.innerHTML = "";
 
@@ -11303,70 +11285,77 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
     msg.style.whiteSpace = "pre-line";
     msg.textContent =
       "裏向きの報酬を1つ選んでください。\n" +
-      "選んだ束から、ランダムな3枚のカードを獲得します。";
+      "選んだ報酬から、重複しない3枚のカードを獲得します。";
     el.choiceBody.appendChild(msg);
 
     const list = document.createElement("div");
     list.className = "choiceList";
-
-    packs.forEach((pack, idx) => {
+    packs.forEach((pack, idx)=>{
       const row = document.createElement("div");
       row.className = "choiceItem";
-
-      const th = mwRewardBackThumbNode();
-
+      const th = rewardMakeBackThumb();
       const meta = document.createElement("div");
       meta.className = "choiceMeta";
-
       const t = document.createElement("div");
       t.className = "t";
-      t.textContent = `REWARD ${idx + 1}`;
-
+      t.textContent = `REWARD ${idx+1}`;
       const s = document.createElement("div");
       s.className = "s";
       s.textContent = "カード3枚入り";
-
       meta.appendChild(t);
       meta.appendChild(s);
-
       row.appendChild(th);
       row.appendChild(meta);
-
       row.addEventListener("click", async ()=>{
         hideModal("choiceM");
-        await mwRewardRevealPack(pack);
+        await rewardRevealPack(pack);
       }, {passive:true});
-
       list.appendChild(row);
     });
-
     el.choiceBody.appendChild(list);
     showModal("choiceM");
   }
 
-  /* ------------------------------
-     勝利時フロー上書き
-  ------------------------------ */
-  const __mwReward_finishGame = finishGame;
+  const __mw40_finishGame = finishGame;
   finishGame = async function(winnerSide){
     state.gameOver = true;
     renderAll();
-
-    if(winnerSide !== "P1"){
-      const text = "YOU LOSE…";
-      if(el.resultText) el.resultText.textContent = text;
-      showModal("resultM");
-      return;
-    }
-
-    // 勝利画面を一度見せてから報酬へ
-    if(el.resultText) el.resultText.textContent = "YOU WIN！";
+    const text = (winnerSide === "P1") ? "YOU WIN！" : "YOU LOSE…";
+    if(el.resultText) el.resultText.textContent = text;
     showModal("resultM");
 
-    await sleep(MW_REWARD_DELAY_MS);
-    hideModal("resultM");
-    await mwRewardOpenSelect();
+    if(winnerSide === "P1"){
+      await sleep(650);
+      hideModal("resultM");
+      await rewardOpenSelect();
+      return;
+    }
   };
 
-  log("PATCH REWARD-02 読み込み完了");
+  function rebindResultButtons(){
+    const replaceBtn = (prop)=>{
+      const oldBtn = el[prop];
+      if(!oldBtn || !oldBtn.parentNode) return oldBtn;
+      const newBtn = oldBtn.cloneNode(true);
+      oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+      el[prop] = newBtn;
+      return newBtn;
+    };
+    replaceBtn("btnNextGame");
+    replaceBtn("btnBackTitle");
+    if(el.btnNextGame) el.btnNextGame.addEventListener("click", ()=>{
+      if(state.gameOver && el.resultText && el.resultText.textContent === "YOU LOSE…"){
+        hideModal("resultM");
+        goNextGameSafe();
+      }
+    }, {passive:true});
+    if(el.btnBackTitle) el.btnBackTitle.addEventListener("click", ()=>{
+      goTitleSafe();
+    }, {passive:true});
+  }
+
+  ensurePlayerProfile();
+  addPlayerDeckButton();
+  rebindResultButtons();
+  log("PATCH 40 読み込み完了：プレイヤー用デッキ編集 / レア度報酬");
 })();
