@@ -11370,3 +11370,309 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH REWARD-02 読み込み完了");
 })();
+/* =========================================================
+  PATCH REWARD-03
+  - 報酬をガチャ寄りに変更
+  - 裏面3択 → 1つ選ぶ
+  - 選んだ束の中身は「レアリティ抽選された3枚」
+  - 3枚は同一束内で重複なし
+  - 排出率：
+      N  62%
+      R  25%
+      SR 10%
+      UR 3%
+========================================================= */
+(function(){
+  "use strict";
+
+  /* ---------------- レアリティ定義 ---------------- */
+  const MW_RARITY_BY_NO = {
+    1:"UR", 2:"UR", 3:"UR", 4:"SR", 5:"UR", 6:"SR", 7:"SR", 8:"SR", 9:"R", 10:"R",
+    11:"N", 12:"N", 13:"N", 14:"UR", 15:"R", 16:"SR", 17:"R", 18:"R", 19:"N", 20:"N",
+    21:"UR", 22:"UR", 23:"UR", 24:"SR", 25:"SR", 26:"R", 27:"R", 28:"SR", 29:"UR", 30:"SR"
+  };
+
+  const MW_RARITY_RATE = {
+    N: 62,
+    R: 25,
+    SR: 10,
+    UR: 3
+  };
+
+  function mwRarityOfNo(no){
+    return MW_RARITY_BY_NO[Number(no)] || "N";
+  }
+
+  function mwPoolByRarity(rarity){
+    return CARD_NOS.filter(no => {
+      const def = getCardDef(no);
+      return !!def && mwRarityOfNo(no) === rarity;
+    });
+  }
+
+  function mwRollRarity(){
+    const r = Math.random() * 100;
+    if(r < MW_RARITY_RATE.UR) return "UR";                    // 0 - 2.999...
+    if(r < MW_RARITY_RATE.UR + MW_RARITY_RATE.SR) return "SR"; // 3 - 12.999...
+    if(r < MW_RARITY_RATE.UR + MW_RARITY_RATE.SR + MW_RARITY_RATE.R) return "R"; // 13 - 37.999...
+    return "N";
+  }
+
+  function mwSampleOne(arr){
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  /* 3枚生成：同一束の中では重複なし */
+  function mwGenerateDistinctRewardPack(){
+    const result = [];
+    let guard = 0;
+
+    while(result.length < 3 && guard < 300){
+      guard++;
+
+      const rarity = mwRollRarity();
+      const pool = mwPoolByRarity(rarity).filter(no => !result.includes(no));
+
+      if(pool.length <= 0){
+        // そのレアリティで未取得候補が無いなら全体から補完
+        const fallback = CARD_NOS.filter(no => !!getCardDef(no) && !result.includes(no));
+        if(fallback.length <= 0) break;
+        result.push(mwSampleOne(fallback));
+        continue;
+      }
+
+      result.push(mwSampleOne(pool));
+    }
+
+    return result;
+  }
+
+  function mwBuildRewardThreeChoices(){
+    return [
+      mwGenerateDistinctRewardPack(),
+      mwGenerateDistinctRewardPack(),
+      mwGenerateDistinctRewardPack()
+    ];
+  }
+
+  /* ---------------- 所持追加 ---------------- */
+  function mwRewardAddPackToCollection(packNos){
+    const col = readCollection();
+    for(const no of packNos){
+      const k = pad2(no);
+      col[k] = (col[k] || 0) + 1;
+    }
+    localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
+  }
+
+  /* ---------------- サムネイル ---------------- */
+  function mwRewardBackThumb(){
+    const th = document.createElement("div");
+    th.className = "choiceThumb";
+    if(state.img.backUrl){
+      th.style.backgroundImage = `url("${state.img.backUrl}")`;
+      th.style.backgroundSize = "cover";
+      th.style.backgroundPosition = "center";
+    }
+    return th;
+  }
+
+  function mwRewardFaceThumb(no){
+    const th = document.createElement("div");
+    th.className = "choiceThumb";
+    const url = state.img.cardUrlByNo[pad2(no)];
+    if(url){
+      th.style.backgroundImage = `url("${url}")`;
+      th.style.backgroundSize = "cover";
+      th.style.backgroundPosition = "center";
+    }
+    return th;
+  }
+
+  function mwRewardRarityLabel(no){
+    return mwRarityOfNo(no);
+  }
+
+  /* ---------------- 遷移 ---------------- */
+  function mwRewardCloseAll(){
+    hideModal("resultM");
+    hideModal("choiceM");
+    hideModal("zoneM");
+  }
+
+  function mwRewardToNextGame(){
+    mwRewardCloseAll();
+    startGame();
+  }
+
+  function mwRewardToTitle(){
+    mwRewardCloseAll();
+    state.started = false;
+    state.gameOver = false;
+    if(el.game) el.game.classList.remove("active");
+    if(el.title) el.title.classList.add("active");
+  }
+
+  /* ---------------- 選択後の公開 ---------------- */
+  async function mwRewardRevealSelectedPack(packNos){
+    mwRewardAddPackToCollection(packNos);
+
+    if(!el.zoneTitle || !el.zoneBody){
+      log(`報酬獲得：${packNos.map(no => getCardDef(no)?.name || `No.${pad2(no)}`).join(" / ")}`);
+      mwRewardToNextGame();
+      return;
+    }
+
+    el.zoneTitle.textContent = "REWARD GET";
+    el.zoneBody.innerHTML = "";
+
+    const msg = document.createElement("div");
+    msg.className = "choiceMsg";
+    msg.style.whiteSpace = "pre-line";
+    msg.textContent = "報酬カードを獲得しました。\n以下の3枚がデッキプールへ追加されます。";
+    el.zoneBody.appendChild(msg);
+
+    const list = document.createElement("div");
+    list.className = "choiceList";
+
+    for(const no of packNos){
+      const def = getCardDef(no);
+      if(!def) continue;
+
+      const row = document.createElement("div");
+      row.className = "choiceItem";
+
+      const th = mwRewardFaceThumb(no);
+
+      const meta = document.createElement("div");
+      meta.className = "choiceMeta";
+
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = def.name;
+
+      const s = document.createElement("div");
+      s.className = "s";
+      s.textContent = `${mwRewardRarityLabel(no)} / No.${pad2(no)} / 1枚獲得`;
+
+      meta.appendChild(t);
+      meta.appendChild(s);
+      row.appendChild(th);
+      row.appendChild(meta);
+
+      bindLongPress(row, ()=> openViewer(makeInstance(def), {side:"P1", zone:"REWARD", pos:null}), 620);
+
+      list.appendChild(row);
+    }
+
+    el.zoneBody.appendChild(list);
+
+    const btnRow = document.createElement("div");
+    btnRow.style.display = "flex";
+    btnRow.style.gap = "8px";
+    btnRow.style.flexWrap = "wrap";
+    btnRow.style.marginTop = "12px";
+
+    const mkBtn = (label, onClick)=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.style.padding = "10px 14px";
+      b.style.borderRadius = "10px";
+      b.style.border = "1px solid rgba(255,255,255,.18)";
+      b.style.background = "rgba(0,0,0,.35)";
+      b.style.color = "white";
+      b.style.fontWeight = "800";
+      b.addEventListener("click", onClick, {passive:true});
+      return b;
+    };
+
+    btnRow.appendChild(mkBtn("次のゲームへ", mwRewardToNextGame));
+    btnRow.appendChild(mkBtn("タイトルへ", mwRewardToTitle));
+    el.zoneBody.appendChild(btnRow);
+
+    showModal("zoneM");
+
+    log(`報酬獲得：${packNos.map(no => `${getCardDef(no)?.name || no}[${mwRewardRarityLabel(no)}]`).join(" / ")}`);
+  }
+
+  /* ---------------- 裏面3択 ---------------- */
+  async function mwRewardOpenThreeChoices(){
+    const packs = mwBuildRewardThreeChoices();
+
+    if(!el.choiceTitle || !el.choiceBody){
+      await mwRewardRevealSelectedPack(packs[0]);
+      return;
+    }
+
+    el.choiceTitle.textContent = "REWARD SELECT";
+    el.choiceBody.innerHTML = "";
+
+    const msg = document.createElement("div");
+    msg.className = "choiceMsg";
+    msg.style.whiteSpace = "pre-line";
+    msg.textContent = "裏向きの報酬を1つ選んでください。\n選んだ束から、レアリティ抽選された3枚のカードを獲得します。";
+    el.choiceBody.appendChild(msg);
+
+    const list = document.createElement("div");
+    list.className = "choiceList";
+
+    packs.forEach((pack, idx) => {
+      const row = document.createElement("div");
+      row.className = "choiceItem";
+
+      const th = mwRewardBackThumb();
+
+      const meta = document.createElement("div");
+      meta.className = "choiceMeta";
+
+      const t = document.createElement("div");
+      t.className = "t";
+      t.textContent = `REWARD ${idx + 1}`;
+
+      const s = document.createElement("div");
+      s.className = "s";
+      s.textContent = "カード3枚入り";
+
+      meta.appendChild(t);
+      meta.appendChild(s);
+
+      row.appendChild(th);
+      row.appendChild(meta);
+
+      row.addEventListener("click", async ()=>{
+        hideModal("choiceM");
+        await mwRewardRevealSelectedPack(pack);
+      }, {passive:true});
+
+      list.appendChild(row);
+    });
+
+    el.choiceBody.appendChild(list);
+    showModal("choiceM");
+  }
+
+  /* ---------------- 勝利画面から報酬へ ----------------
+     既存の finishGame を上書きし、P1勝利時だけ報酬へ進める
+  --------------------------------------------------- */
+  const __mw_reward03_finishGame = finishGame;
+  finishGame = async function(winnerSide){
+    state.gameOver = true;
+    renderAll();
+
+    if(winnerSide !== "P1"){
+      if(el.resultText) el.resultText.textContent = "YOU LOSE…";
+      showModal("resultM");
+      return;
+    }
+
+    if(el.resultText) el.resultText.textContent = "YOU WIN！";
+    showModal("resultM");
+
+    await sleep(650);
+    hideModal("resultM");
+    await mwRewardOpenThreeChoices();
+  };
+
+  log("PATCH REWARD-03 適用：レアリティ排出率つき3枚報酬");
+})();
