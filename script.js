@@ -11676,3 +11676,105 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH REWARD-03 適用：レアリティ排出率つき3枚報酬");
 })();
+/* =========================================================
+  PATCH STARTER + AI SCALING
+========================================================= */
+(function(){
+  "use strict";
+
+  /* ---------------- 初期デッキ ---------------- */
+  const LS_FIRST_INIT_DONE = "MW_FIRST_INIT_DONE";
+
+  function mwBuildStarterCollection(){
+    const col = {};
+    for(const no of CARD_NOS){
+      col[pad2(no)] = 0;
+    }
+    for(let no=1; no<=20; no++){
+      col[pad2(no)] = 2;
+    }
+    return col;
+  }
+
+  function mwBuildStarterDeck(){
+    const deck = [];
+    for(let no=1; no<=20; no++){
+      deck.push(no, no);
+    }
+    return deck;
+  }
+
+  function mwInitStarterIfNeeded(){
+
+    const already = localStorage.getItem(LS_FIRST_INIT_DONE);
+    if(already === "1") return;
+
+    const existingCol = safeJSONParse(localStorage.getItem(LS_COLLECTION) || "", null);
+    if(existingCol && Object.keys(existingCol).length > 0){
+      localStorage.setItem(LS_FIRST_INIT_DONE, "1");
+      return;
+    }
+
+    const col = mwBuildStarterCollection();
+    const deck = mwBuildStarterDeck();
+
+    localStorage.setItem(LS_COLLECTION, JSON.stringify(col));
+    localStorage.setItem(LS_DECK, JSON.stringify(deck));
+    localStorage.setItem(LS_FIRST_INIT_DONE, "1");
+
+    log("初期デッキ配布完了");
+  }
+
+  /* ---------------- AIデッキ構築 ---------------- */
+
+  function mwBuildAIDeckFromCollection(){
+
+    const col = readCollection();
+
+    const pool = [];
+
+    for(const no of CARD_NOS){
+      const count = col[pad2(no)] || 0;
+      for(let i=0; i<count; i++){
+        pool.push(no);
+      }
+    }
+
+    // 安全：カードが少なすぎる場合
+    if(pool.length < 40){
+      // fallback：1〜20で補完
+      for(let no=1; no<=20; no++){
+        pool.push(no, no);
+      }
+    }
+
+    shuffle(pool);
+
+    return pool.slice(0, 40);
+  }
+
+  function mwApplyAIDeck(){
+    const aiDeck = mwBuildAIDeckFromCollection();
+
+    state.AI.deck = aiDeck.map(no => makeInstance(getCardDef(no)));
+    shuffle(state.AI.deck);
+
+    log("AIデッキを所持カードベースで生成");
+  }
+
+  /* ---------------- startGameフック ---------------- */
+
+  const __mw_startGame = startGame;
+  startGame = function(){
+
+    // 初期デッキ
+    mwInitStarterIfNeeded();
+
+    // 通常開始
+    __mw_startGame();
+
+    // AIデッキ差し替え
+    mwApplyAIDeck();
+  };
+
+})();
