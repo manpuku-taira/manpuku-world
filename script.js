@@ -11778,3 +11778,256 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
   };
 
 })();
+/* =========================================================
+  PATCH ANNOUNCE-02
+  - 無効化アナウンス
+  - 除去カード発動アナウンス
+  - キャラがウイングへ送られる前のアナウンス
+  - 装備/ATK変動アナウンス
+========================================================= */
+(function(){
+  "use strict";
+
+  /* ------------------------------
+    アナウンスUI
+  ------------------------------ */
+  function mwEnsureAnnounceUI(){
+    if(document.getElementById("mwAnnounceOverlay")) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "mwAnnounceOverlay";
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.background = "rgba(0,0,0,.62)";
+    overlay.style.display = "none";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "99999";
+
+    const box = document.createElement("div");
+    box.style.width = "min(86vw, 420px)";
+    box.style.background = "rgba(10,10,16,.96)";
+    box.style.border = "1px solid rgba(255,255,255,.14)";
+    box.style.borderRadius = "14px";
+    box.style.padding = "18px 16px 14px";
+    box.style.boxShadow = "0 10px 30px rgba(0,0,0,.35)";
+    box.style.color = "#fff";
+    box.style.textAlign = "center";
+
+    const title = document.createElement("div");
+    title.id = "mwAnnounceTitle";
+    title.style.fontWeight = "900";
+    title.style.fontSize = "16px";
+    title.style.marginBottom = "10px";
+    title.textContent = "アナウンス";
+
+    const body = document.createElement("div");
+    body.id = "mwAnnounceBody";
+    body.style.whiteSpace = "pre-line";
+    body.style.lineHeight = "1.6";
+    body.style.fontSize = "14px";
+    body.style.marginBottom = "14px";
+
+    const ok = document.createElement("button");
+    ok.textContent = "OK";
+    ok.style.padding = "10px 18px";
+    ok.style.borderRadius = "10px";
+    ok.style.border = "1px solid rgba(255,255,255,.18)";
+    ok.style.background = "rgba(255,255,255,.08)";
+    ok.style.color = "#fff";
+    ok.style.fontWeight = "800";
+
+    ok.addEventListener("click", (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      mwHideAnnounce();
+    }, {passive:false});
+
+    box.addEventListener("click", (e)=>{
+      e.stopPropagation();
+    });
+
+    overlay.addEventListener("click", ()=>{
+      mwHideAnnounce();
+    });
+
+    box.appendChild(title);
+    box.appendChild(body);
+    box.appendChild(ok);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+
+  let mwAnnounceQueue = [];
+  let mwAnnounceBusy = false;
+
+  function mwPushAnnounce(title, text){
+    mwEnsureAnnounceUI();
+    mwAnnounceQueue.push({title, text});
+    mwFlushAnnounceQueue();
+  }
+
+  function mwFlushAnnounceQueue(){
+    if(mwAnnounceBusy) return;
+    const next = mwAnnounceQueue.shift();
+    if(!next) return;
+
+    mwAnnounceBusy = true;
+
+    const overlay = document.getElementById("mwAnnounceOverlay");
+    const title = document.getElementById("mwAnnounceTitle");
+    const body = document.getElementById("mwAnnounceBody");
+    if(!overlay || !title || !body){
+      mwAnnounceBusy = false;
+      return;
+    }
+
+    title.textContent = next.title || "アナウンス";
+    body.textContent = next.text || "";
+    overlay.style.display = "flex";
+  }
+
+  function mwHideAnnounce(){
+    const overlay = document.getElementById("mwAnnounceOverlay");
+    if(overlay) overlay.style.display = "none";
+    mwAnnounceBusy = false;
+    setTimeout(mwFlushAnnounceQueue, 0);
+  }
+
+  function mwCardName(card){
+    return card?.name || "不明なカード";
+  }
+
+  /* ------------------------------
+    1) 無効化アナウンス
+  ------------------------------ */
+  const __mwAnnounce_processActivatedEffect = processActivatedEffect;
+  processActivatedEffect = async function(link){
+    const result = await __mwAnnounce_processActivatedEffect(link);
+
+    if(result && result.ok === false && result.detail){
+      const src = link?.sourceCard?.name || link?.label || "効果";
+      let by = "無効効果";
+
+      if(result.detail.negatorKind === "HANDGATA") by = "手形";
+      if(result.detail.negatorKind === "MEMORY") by = "記憶抹消";
+
+      mwPushAnnounce(
+        "効果が無効化されました",
+        `${src}\nは\n${by}\nによって無効化されました。`
+      );
+    }
+
+    return result;
+  };
+
+  /* ------------------------------
+    2) 除去系エフェクト発動アナウンス
+       「ウイングに送る」を含む効果を発動した時に表示
+  ------------------------------ */
+  const __mwAnnounce_activateHandCard = (typeof activateHandCard === "function") ? activateHandCard : null;
+  if(__mwAnnounce_activateHandCard){
+    activateHandCard = async function(side, handIndex, card, targetZone, targetPos){
+      if(card && /ウイングに送る/.test(card.text || "")){
+        mwPushAnnounce(
+          "除去効果が発動しました",
+          `${sideName(side)}が\n${card.name}\nを発動しました。`
+        );
+      }
+      return await __mwAnnounce_activateHandCard(side, handIndex, card, targetZone, targetPos);
+    };
+  }
+
+  /* ------------------------------
+    3) こちら/相手のキャラがウイングへ送られる時のアナウンス
+  ------------------------------ */
+  const __mwAnnounce_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c=>c && c.uid===uid);
+    const card = (pos >= 0) ? p.C[pos] : null;
+
+    if(card){
+      mwPushAnnounce(
+        "キャラクターが除去されました",
+        `${sideName(side)}の\n${card.name}\nはウイングへ送られます。`
+      );
+    }
+
+    return await __mwAnnounce_sendCharacterToWing(side, uid);
+  };
+
+  /* ------------------------------
+    4) 装備/ATK変動アナウンス用ヘルパ
+  ------------------------------ */
+  function mwAnnounceAtkChange(side, card, beforeAtk, afterAtk, reason){
+    if(!card) return;
+    if(beforeAtk === afterAtk) return;
+    mwPushAnnounce(
+      "ATKが変化しました",
+      `${card.name}\n${reason || ""}\nATK ${beforeAtk} → ${afterAtk}`
+    );
+  }
+
+  /* ------------------------------
+    5) アイテム装備時のアナウンス
+       equipToCharacter がある前提で差し込む
+  ------------------------------ */
+  const __mwAnnounce_equipToCharacter = (typeof equipToCharacter === "function") ? equipToCharacter : null;
+  if(__mwAnnounce_equipToCharacter){
+    equipToCharacter = async function(side, itemCard, hostCard){
+      const beforeAtk = hostCard ? calcCurrentAtk(side, hostCard) : 0;
+      const result = await __mwAnnounce_equipToCharacter(side, itemCard, hostCard);
+      const afterAtk = hostCard ? calcCurrentAtk(side, hostCard) : 0;
+
+      if(itemCard && hostCard){
+        mwPushAnnounce(
+          "装備しました",
+          `${hostCard.name} に\n${itemCard.name}\nを装備しました。`
+        );
+        mwAnnounceAtkChange(side, hostCard, beforeAtk, afterAtk, "装備により");
+      }
+
+      return result;
+    };
+  }
+
+  /* ------------------------------
+    6) 一部の代表的な一時ATK変動を通知
+       activateFieldCardAbility を経由する任意効果向け
+  ------------------------------ */
+  const __mwAnnounce_activateFieldCardAbility = activateFieldCardAbility;
+  activateFieldCardAbility = async function(side, zone, pos, card){
+    let beforeMap = new Map();
+    for(const c of state[side].C){
+      if(c) beforeMap.set(c.uid, calcCurrentAtk(side, c));
+    }
+    const opp = opponent(side);
+    for(const c of state[opp].C){
+      if(c) beforeMap.set(c.uid, calcCurrentAtk(opp, c));
+    }
+
+    const result = await __mwAnnounce_activateFieldCardAbility(side, zone, pos, card);
+
+    for(const c of state[side].C){
+      if(!c) continue;
+      const beforeAtk = beforeMap.has(c.uid) ? beforeMap.get(c.uid) : calcCurrentAtk(side, c);
+      const afterAtk = calcCurrentAtk(side, c);
+      if(beforeAtk !== afterAtk){
+        mwAnnounceAtkChange(side, c, beforeAtk, afterAtk, `${mwCardName(card)} の効果で`);
+      }
+    }
+    for(const c of state[opp].C){
+      if(!c) continue;
+      const beforeAtk = beforeMap.has(c.uid) ? beforeMap.get(c.uid) : calcCurrentAtk(opp, c);
+      const afterAtk = calcCurrentAtk(opp, c);
+      if(beforeAtk !== afterAtk){
+        mwAnnounceAtkChange(opp, c, beforeAtk, afterAtk, `${mwCardName(card)} の効果で`);
+      }
+    }
+
+    return result;
+  };
+
+  log("PATCH ANNOUNCE-02 読み込み完了");
+})();
