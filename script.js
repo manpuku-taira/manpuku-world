@@ -12136,3 +12136,169 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH ANNOUNCE-03 適用完了");
 })();
+/* =========================================================
+  PATCH ENTER-OPTIONAL-01
+  - 登場時効果を任意化
+  - P1側は必ず「発動しますか？」確認
+  - 対象：
+    No.04 聖ラウス
+    No.05 統括AI タータ
+    No.11 司令
+    No.26 ジュエリー・ルビー
+    No.27 ジュエリー・サファイア
+    No.28 セシア＆アリサ
+========================================================= */
+(function(){
+  "use strict";
+
+  function mwEnterItemSearchFn(){
+    if(typeof searchDeckOrWingByTitleTagItem === "function") return searchDeckOrWingByTitleTagItem;
+    if(typeof searchDeckByTitleTagItem === "function") return searchDeckByTitleTagItem;
+    return null;
+  }
+
+  async function mwEnterProcessOptionalEffect(side, card, resolveFn){
+    const act = {
+      kind: "ACT",
+      label: card.name,
+      activatorSide: side,
+      sourceCard: card,
+      sourceUid: card.uid,
+      resolve: resolveFn,
+      onNegated: async (r)=>{
+        if(r && r.negatorKind === "MEMORY"){
+          await sendCharacterToWing(side, card.uid);
+        }
+        log(`${card.name} の登場時効果は無効`);
+        renderAll();
+      }
+    };
+    return await processActivatedEffect(act);
+  }
+
+  const __mw_onEnterTriggers_optional_patch = onEnterTriggers;
+  onEnterTriggers = async function(side, ctx){
+    const { card, pos } = ctx || {};
+    if(!card) return;
+
+    /* 既存の封印条件は先に尊重 */
+    if(typeof mwIsCardMutedThisTurn === "function" && mwIsCardMutedThisTurn(card)){
+      log(`${card.name}：このターン効果を発動できません`, "warn");
+      return;
+    }
+    if(typeof isRachelSealActiveAgainst === "function" && isRachelSealActiveAgainst(side, card)){
+      log(`${card.name}：退魔師レイチェルの効果により発動できません`, "warn");
+      return;
+    }
+
+    /* ---------- No.04 聖ラウス ---------- */
+    if(card.no === 4){
+      const shouldUse = (side === "AI")
+        ? true
+        : await askYesNo("効果確認", "聖ラウスの登場時効果を発動しますか？（クランプスをサーチ）");
+
+      if(!shouldUse){
+        log("聖ラウス：登場時効果を使用しませんでした");
+        return;
+      }
+
+      await mwEnterProcessOptionalEffect(side, card, async ()=>{
+        await searchFromDeckOrWingByTag(side, "クランプス", 1, { aiAuto: side==="AI" });
+      });
+      return;
+    }
+
+    /* ---------- No.05 統括AI タータ ---------- */
+    if(card.no === 5){
+      const shouldUse = (side === "AI")
+        ? true
+        : await askYesNo("効果確認", "統括AI タータの登場時効果を発動しますか？（2ドロー）");
+
+      if(!shouldUse){
+        log("統括AI タータ：登場時効果を使用しませんでした");
+        return;
+      }
+
+      await mwEnterProcessOptionalEffect(side, card, async ()=>{
+        draw(side, 2);
+        log(`${sideName(side)}：タータ登場 → 2ドロー`);
+        renderAll();
+      });
+      return;
+    }
+
+    /* ---------- No.11 司令 ---------- */
+    if(card.no === 11){
+      const p = state[side];
+      const others = p.C.filter(x=>x && x.uid !== card.uid);
+      if(!others.length){
+        log("司令：他の自分キャラがいないため効果は発動できません", "warn");
+        return;
+      }
+
+      const shouldUse = (side === "AI")
+        ? true
+        : await askYesNo("効果確認", "司令の登場時効果を発動しますか？（装備化してATK+500）");
+
+      if(!shouldUse){
+        log("司令：登場時効果を使用しませんでした");
+        return;
+      }
+
+      await mwEnterProcessOptionalEffect(side, card, async ()=>{
+        if(side === "AI"){
+          if(typeof aiTryShireiEquip === "function"){
+            await aiTryShireiEquip("AI", pos);
+          }
+          return;
+        }
+        await activateShireiEquip(side, pos, card);
+      });
+      return;
+    }
+
+    /* ---------- No.26 / 27 ルビー・サファイア ---------- */
+    if(card.no === 26 || card.no === 27){
+      const shouldUse = (side === "AI")
+        ? true
+        : await askYesNo("効果確認", `${card.name}の登場時効果を発動しますか？`);
+
+      if(!shouldUse){
+        log(`${card.name}：登場時効果を使用しませんでした`);
+        return;
+      }
+
+      await mwEnterProcessOptionalEffect(side, card, async ()=>{
+        await resolveRubySapphireEnter(side, card, ctx);
+      });
+      return;
+    }
+
+    /* ---------- No.28 セシア＆アリサ ---------- */
+    if(card.no === 28){
+      const shouldUse = (side === "AI")
+        ? true
+        : await askYesNo("効果確認", "セシア＆アリサの登場時効果を発動しますか？（怨霊撲滅屋GBのアイテムをサーチ）");
+
+      if(!shouldUse){
+        log("セシア＆アリサ：登場時効果を使用しませんでした");
+        return;
+      }
+
+      await mwEnterProcessOptionalEffect(side, card, async ()=>{
+        const fn = mwEnterItemSearchFn();
+        if(!fn){
+          log("セシア＆アリサ：アイテムサーチ関数が見つかりません", "warn");
+          return;
+        }
+        await fn(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+      });
+      return;
+    }
+
+    /* それ以外は既存処理へ */
+    return await __mw_onEnterTriggers_optional_patch(side, ctx);
+  };
+
+  log("PATCH ENTER-OPTIONAL-01 読み込み完了");
+})();
