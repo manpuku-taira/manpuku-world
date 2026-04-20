@@ -12302,3 +12302,95 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH ENTER-OPTIONAL-01 読み込み完了");
 })();
+/* =========================================================
+  PATCH ANNOUNCE-BATTLE-FIX-01
+  - バトル時の「〇〇 VS 〇〇」を確実に表示
+  - 効果除去時は「〇〇の効果で 〇〇はウイングに送られます」
+========================================================= */
+(function(){
+  "use strict";
+
+  let mwBattleAnnounceContext = null;
+
+  function mwAnnText(title, body){
+    if(typeof mwPushAnnounce === "function"){
+      mwPushAnnounce(title, body);
+      return;
+    }
+    if(typeof showAnnounce === "function"){
+      showAnnounce(`${title}\n${body}`);
+      return;
+    }
+    log(`${title}\n${body}`);
+  }
+
+  /* ------------------------------
+    resolveBattle に直接フック
+  ------------------------------ */
+  const __mwBattleFix_resolveBattle = resolveBattle;
+  resolveBattle = async function(attacker, defenderUid){
+    const atkCard = attacker || null;
+    const defCard =
+      state.AI.C.find(c => c && c.uid === defenderUid) ||
+      state.P1.C.find(c => c && c.uid === defenderUid) ||
+      null;
+
+    mwBattleAnnounceContext = null;
+    if(atkCard && defCard){
+      mwBattleAnnounceContext = {
+        type: "battle",
+        attackerName: atkCard.name,
+        defenderName: defCard.name
+      };
+    }
+
+    return await __mwBattleFix_resolveBattle(attacker, defenderUid);
+  };
+
+  /* ------------------------------
+    activateHandCard がある場合だけ効果除去を記録
+  ------------------------------ */
+  if(typeof activateHandCard === "function"){
+    const __mwBattleFix_activateHandCard = activateHandCard;
+    activateHandCard = async function(side, handIndex, card, targetZone, targetPos){
+      if(card && /ウイングに送る/.test(card.text || "")){
+        mwBattleAnnounceContext = {
+          type: "effect",
+          effectName: card.name
+        };
+      } else {
+        mwBattleAnnounceContext = null;
+      }
+      return await __mwBattleFix_activateHandCard(side, handIndex, card, targetZone, targetPos);
+    };
+  }
+
+  /* ------------------------------
+    実際にウイングへ送られる瞬間に表示
+  ------------------------------ */
+  const __mwBattleFix_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c => c && c.uid === uid);
+    const target = pos >= 0 ? p.C[pos] : null;
+
+    if(target && mwBattleAnnounceContext){
+      if(mwBattleAnnounceContext.type === "battle"){
+        mwAnnText(
+          "バトル結果",
+          `${mwBattleAnnounceContext.attackerName} VS ${mwBattleAnnounceContext.defenderName}\n${target.name}はウイングに送られます。`
+        );
+      }else if(mwBattleAnnounceContext.type === "effect"){
+        mwAnnText(
+          "効果による除去",
+          `${mwBattleAnnounceContext.effectName}の効果で\n${target.name}はウイングに送られます。`
+        );
+      }
+    }
+
+    mwBattleAnnounceContext = null;
+    return await __mwBattleFix_sendCharacterToWing(side, uid);
+  };
+
+  log("PATCH ANNOUNCE-BATTLE-FIX-01 読み込み完了");
+})();
