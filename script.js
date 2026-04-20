@@ -12031,3 +12031,108 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH ANNOUNCE-02 読み込み完了");
 })();
+/* =========================================================
+  PATCH ANNOUNCE-03（文章修正版）
+========================================================= */
+(function(){
+  "use strict";
+
+  let lastRemoveContext = null;
+
+  function mwPushAnnounce(title, text){
+    if(typeof window.mwPushAnnounce === "function"){
+      window.mwPushAnnounce(title, text);
+    }
+  }
+
+  /* ------------------------------
+    バトル検知
+  ------------------------------ */
+  const _battle = battle;
+  battle = async function(attackerSide, attackerPos, targetSide, targetPos){
+
+    const atkCard = state[attackerSide].C[attackerPos];
+    const defCard = state[targetSide].C[targetPos];
+
+    const result = await _battle(attackerSide, attackerPos, targetSide, targetPos);
+
+    if(atkCard && defCard){
+      const atkAtk = calcCurrentAtk(attackerSide, atkCard);
+      const defAtk = calcCurrentAtk(targetSide, defCard);
+
+      let loser = null;
+
+      if(atkAtk > defAtk){
+        loser = defCard;
+      }else if(defAtk > atkAtk){
+        loser = atkCard;
+      }
+
+      if(loser){
+        lastRemoveContext = {
+          type: "battle",
+          attacker: atkCard,
+          defender: defCard,
+          loser: loser
+        };
+      }
+    }
+
+    return result;
+  };
+
+  /* ------------------------------
+    除去効果検知
+  ------------------------------ */
+  const _activateHandCard = activateHandCard;
+  activateHandCard = async function(side, index, card){
+
+    if(card && /ウイングに送る/.test(card.text || "")){
+      lastRemoveContext = {
+        type: "effect",
+        card: card
+      };
+    }
+
+    return await _activateHandCard(side, index, card);
+  };
+
+  /* ------------------------------
+    実際にウイングへ送られる瞬間
+  ------------------------------ */
+  const _send = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+
+    const p = state[side];
+    const pos = p.C.findIndex(c=>c && c.uid===uid);
+    const target = (pos>=0)? p.C[pos] : null;
+
+    if(target && lastRemoveContext){
+
+      if(lastRemoveContext.type === "battle"){
+        const atk = lastRemoveContext.attacker;
+        const def = lastRemoveContext.defender;
+
+        mwPushAnnounce(
+          "バトル結果",
+          `${atk.name} VS ${def.name}\n${target.name}はウイングに送られます。`
+        );
+      }
+
+      if(lastRemoveContext.type === "effect"){
+        const card = lastRemoveContext.card;
+
+        mwPushAnnounce(
+          "効果による除去",
+          `${card.name}の効果で\n${target.name}はウイングに送られます。`
+        );
+      }
+    }
+
+    lastRemoveContext = null;
+
+    return await _send(side, uid);
+  };
+
+  log("PATCH ANNOUNCE-03 適用完了");
+})();
