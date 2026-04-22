@@ -13257,3 +13257,96 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log('PATCH FINAL-20260422 読み込み完了');
 })();
+/* =========================================================
+  PATCH RULE-FIX-01
+  - 記憶抹消で無効化された手形を必ずウイングへ送る
+  - E枠が埋まっている時はAIが通常エフェクトを発動できないよう強制
+========================================================= */
+(function(){
+  "use strict";
+
+  /* --------------------------------------------------
+     1) 記憶抹消で無効化された手形を、最終的に必ずウイングへ送る
+  -------------------------------------------------- */
+  async function mwRuleFixSendAnyHandgataToWing(side){
+    const p = state[side];
+    if(!p || !p.C) return false;
+
+    const idx = p.C.findIndex(c => c && c.no === 8);
+    if(idx < 0) return false;
+
+    const card = p.C[idx];
+    await sendCharacterToWing(side, card.uid);
+    log(`記憶抹消：${sideName(side)}の「${card.name}」をウイングへ`);
+    renderAll();
+    return true;
+  }
+
+  const __mwRuleFix_processActivatedEffect = processActivatedEffect;
+  processActivatedEffect = async function(link){
+    const result = await __mwRuleFix_processActivatedEffect(link);
+
+    if(
+      result &&
+      result.ok === false &&
+      result.detail &&
+      result.detail.negatorKind === "MEMORY"
+    ){
+      const srcSide = link ? link.activatorSide : null;
+      const srcCard = link?.sourceCard || null;
+      const isHandgata =
+        (link && link.kind === "HANDGATA") ||
+        (srcCard && srcCard.no === 8) ||
+        (String(link?.label || "").includes("手形"));
+
+      if(srcSide && isHandgata){
+        await mwRuleFixSendAnyHandgataToWing(srcSide);
+      }
+    }
+
+    return result;
+  };
+
+  /* --------------------------------------------------
+     2) AI通常エフェクトは「Eに置ける時だけ」発動可能にする
+        - 既存 aiTryPlayEffect を最終上書き
+        - E枠が3枚埋まっていれば絶対に発動しない
+  -------------------------------------------------- */
+  if(typeof aiTryPlayEffect === "function"){
+    const __mwRuleFix_aiTryPlayEffect = aiTryPlayEffect;
+    aiTryPlayEffect = async function(effectNo){
+      const p = state.AI;
+      const ePos = findEmptyIndex(p.E);
+
+      if(ePos < 0){
+        log(`AI：E枠が埋まっているためエフェクト発動不可`, "warn");
+        return false;
+      }
+
+      return await __mwRuleFix_aiTryPlayEffect(effectNo);
+    };
+  }
+
+  /* --------------------------------------------------
+     3) 念のため、効果解決前にも「盤面に置かれているか」を確認
+        - AI通常エフェクトだけを対象
+        - 記憶抹消などチェーン用の手札発動は壊さない
+  -------------------------------------------------- */
+  if(typeof resolveEffect === "function"){
+    const __mwRuleFix_resolveEffect = resolveEffect;
+    resolveEffect = async function(side, eff){
+      if(side === "AI" && eff && isEffect(eff)){
+        const onE = state.AI.E.some(c => c && c.uid === eff.uid);
+
+        /* AIの通常エフェクトは、Eに置かれていないなら解決禁止 */
+        if(!onE){
+          log(`AI：${eff.name} はE枠に置けていないため解決しません`, "warn");
+          return false;
+        }
+      }
+      return await __mwRuleFix_resolveEffect(side, eff);
+    };
+  }
+
+  log("PATCH RULE-FIX-01 読み込み完了");
+})();
