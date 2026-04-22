@@ -12656,3 +12656,217 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH BATTLE+ENTER-FIX-01 読み込み完了");
 })();
+/* =========================================================
+  PATCH BATTLE+OURAN-FIX-02
+  - バトル時の「〇〇 VS 〇〇」を確実表示
+  - 桜蘭の陰陽術 - 闘 - を processActivatedEffect 経由にし、
+    手形 / 記憶抹消 のチェーン対象にする
+========================================================= */
+(function(){
+  "use strict";
+
+  function mwAnnounce(title, body){
+    if(typeof mwPushAnnounce === "function"){
+      mwPushAnnounce(title, body);
+      return;
+    }
+    if(typeof showAnnounce === "function"){
+      showAnnounce(`${title}\n${body}`);
+      return;
+    }
+    log(`${title}\n${body}`);
+  }
+
+  /* ------------------------------
+    バトルの対戦カード保持
+  ------------------------------ */
+  let mwBattlePairCtx = null;
+
+  const __mw_fix02_resolveBattle = resolveBattle;
+  resolveBattle = async function(attacker, defenderUid){
+    const enemySide = "AI";
+    const defender = state[enemySide]?.C?.find(c => c && c.uid === defenderUid) || null;
+
+    mwBattlePairCtx = null;
+    if(attacker && defender){
+      mwBattlePairCtx = {
+        attackerUid: attacker.uid,
+        defenderUid: defender.uid,
+        attackerName: attacker.name,
+        defenderName: defender.name
+      };
+    }
+
+    try{
+      return await __mw_fix02_resolveBattle(attacker, defenderUid);
+    } finally {
+      /* ここでは消さない。
+         sendCharacterToWing 側で1回使ってから消す */
+      setTimeout(()=>{
+        mwBattlePairCtx = null;
+      }, 0);
+    }
+  };
+
+  /* ------------------------------
+    効果除去の原因保持
+  ------------------------------ */
+  let mwEffectRemoveCtx = null;
+
+  if(typeof activateHandCard === "function"){
+    const __mw_fix02_activateHandCard = activateHandCard;
+    activateHandCard = async function(side, handIndex, card, targetZone, targetPos){
+      if(card && /ウイングに送る/.test(card.text || "")){
+        mwEffectRemoveCtx = { effectName: card.name };
+      }else{
+        mwEffectRemoveCtx = null;
+      }
+      return await __mw_fix02_activateHandCard(side, handIndex, card, targetZone, targetPos);
+    };
+  }
+
+  if(typeof resolveEffectCard === "function"){
+    const __mw_fix02_resolveEffectCard = resolveEffectCard;
+    resolveEffectCard = async function(side, eff){
+      if(eff && /ウイングに送る/.test(eff.text || "")){
+        mwEffectRemoveCtx = { effectName: eff.name };
+      }else{
+        mwEffectRemoveCtx = null;
+      }
+      return await __mw_fix02_resolveEffectCard(side, eff);
+    };
+  }
+
+  /* ------------------------------
+    実際にウイングへ送られる瞬間の表示
+  ------------------------------ */
+  const __mw_fix02_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c => c && c.uid === uid);
+    const target = pos >= 0 ? p.C[pos] : null;
+
+    if(target){
+      if(
+        mwBattlePairCtx &&
+        (uid === mwBattlePairCtx.attackerUid || uid === mwBattlePairCtx.defenderUid)
+      ){
+        mwAnnounce(
+          "バトル結果",
+          `${mwBattlePairCtx.attackerName} VS ${mwBattlePairCtx.defenderName}\n${target.name}はウイングに送られます。`
+        );
+      }else if(mwEffectRemoveCtx){
+        mwAnnounce(
+          "効果による除去",
+          `${mwEffectRemoveCtx.effectName}の効果で\n${target.name}はウイングに送られます。`
+        );
+      }
+    }
+
+    const result = await __mw_fix02_sendCharacterToWing(side, uid);
+
+    if(target){
+      if(mwBattlePairCtx && (uid === mwBattlePairCtx.attackerUid || uid === mwBattlePairCtx.defenderUid)){
+        mwBattlePairCtx = null;
+      }
+      if(mwEffectRemoveCtx){
+        mwEffectRemoveCtx = null;
+      }
+    }
+
+    return result;
+  };
+
+  /* ------------------------------
+    桜蘭の陰陽術 - 闘 - を「発動」扱いへ
+    → 手形 / 記憶抹消 / 無効アナウンス対象にする
+  ------------------------------ */
+  const __mw_fix02_tryUseOuranDuringBattle = tryUseOuranDuringBattle;
+  tryUseOuranDuringBattle = async function(side, ownBattler, enemyBattler){
+    if(!hasOuranInHand(side)) return false;
+    if(!ownBattler || !enemyBattler) return false;
+
+    /* P1側 */
+    if(side === "P1"){
+      const enemySide = state.AI.C.includes(enemyBattler) ? "AI" : "P1";
+      const previewMsg =
+        "バトル中です。桜蘭の陰陽術 - 闘 - を発動しますか？" +
+        (typeof mw32BuildBattlePreview === "function"
+          ? mw32BuildBattlePreview(
+              enemySide,
+              enemyBattler,
+              ownBattler,
+              [`自分側の選択キャラ ATK +1000`]
+            )
+          : "");
+
+      const ok = await askYesNo("桜蘭の陰陽術 - 闘 -", previewMsg);
+      if(!ok) return false;
+
+      const target = await pickOwnCharacterForOuran(side);
+      if(!target) return false;
+
+      const card = takeOuranFromHand(side);
+      if(!card) return false;
+
+      /* 発動したのでウイングへ */
+      moveToWing(side, card);
+
+      const act = {
+        kind: "ACT",
+        label: card.name,
+        activatorSide: side,
+        sourceCard: card,
+        sourceUid: card.uid,
+        resolve: async ()=>{
+          target.tempAtk += 1000;
+          log(`桜蘭の陰陽術 - 闘 -：${target.name} ATK+1000（ターン終了まで）`);
+          renderAll();
+        },
+        onNegated: async ()=>{
+          log(`桜蘭の陰陽術 - 闘 -：無効にされました`, "warn");
+          renderAll();
+        }
+      };
+
+      const r = await processActivatedEffect(act);
+      return !!r?.ok;
+    }
+
+    /* AI側 */
+    if(side === "AI"){
+      const myAtk = calcCurrentAtk(side, ownBattler);
+      const enAtk = calcCurrentAtk(opponent(side), enemyBattler);
+      if(!(myAtk <= enAtk && myAtk + 1000 > enAtk)) return false;
+
+      const card = takeOuranFromHand(side);
+      if(!card) return false;
+
+      moveToWing(side, card);
+
+      const act = {
+        kind: "ACT",
+        label: card.name,
+        activatorSide: side,
+        sourceCard: card,
+        sourceUid: card.uid,
+        resolve: async ()=>{
+          ownBattler.tempAtk += 1000;
+          log(`AI：桜蘭の陰陽術 - 闘 - → ${ownBattler.name} ATK+1000`);
+          renderAll();
+        },
+        onNegated: async ()=>{
+          log(`AI：桜蘭の陰陽術 - 闘 - は無効にされました`, "warn");
+          renderAll();
+        }
+      };
+
+      const r = await processActivatedEffect(act);
+      return !!r?.ok;
+    }
+
+    return await __mw_fix02_tryUseOuranDuringBattle(side, ownBattler, enemyBattler);
+  };
+
+  log("PATCH BATTLE+OURAN-FIX-02 読み込み完了");
+})();
