@@ -4327,7 +4327,8 @@ async function runCounterChain(initialLink){
   const negatorKind = negated && chain[1] ? chain[1].kind : null;
   return { negated, negatorKind, chain, active };
 }
-/* =========================================================
+/* 
+=========================================================
   PATCH 03
   選択ウィンドウ閉じで停止する不具合修正
   + AIのクルエラサーチをAI内完結化
@@ -5628,7 +5629,8 @@ aiBattleBest = async function(){
 
 log("PATCH 05_06_07_08 FIX 読み込み完了");
 
-/* =========================================================
+/* 
+=========================================================
   PATCH 11
   - 見参コストと見参先を分離
   - 場に空きがあっても場キャラをコストに選択可能
@@ -12588,4 +12590,670 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
       await mwRunOptionalEnterEffect(
         side,
         card,
-        "統括AI タータの登場時効果を発動
+        "統括AI タータの登場時効果を発動しますか？（2ドロー）",
+        async ()=>{
+          draw(side, 2);
+          log(`${sideName(side)}：タータ登場 → 2ドロー`);
+          renderAll();
+        }
+      );
+      return;
+    }
+
+    /* No.11 司令 */
+    if(card.no === 11){
+      const p = state[side];
+      const others = p.C.filter(x => x && x.uid !== card.uid);
+      if(!others.length){
+        log("司令：他の自分キャラがいないため効果は発動できません", "warn");
+        return;
+      }
+
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        "司令の登場時効果を発動しますか？（装備化してATK+500）",
+        async ()=>{
+          await activateShireiEquip(side, pos, card);
+        }
+      );
+      return;
+    }
+
+    /* No.26 / 27 ルビー / サファイア */
+    if(card.no === 26 || card.no === 27){
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        `${card.name}の登場時効果を発動しますか？`,
+        async ()=>{
+          await resolveRubySapphireEnter(side, card, ctx);
+        }
+      );
+      return;
+    }
+
+    /* No.28 セシア＆アリサ */
+    if(card.no === 28){
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        "セシア＆アリサの登場時効果を発動しますか？（怨霊撲滅屋GBのアイテムをサーチ）",
+        async ()=>{
+          if(typeof searchDeckOrWingByTitleTagItem === "function"){
+            await searchDeckOrWingByTitleTagItem(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+            return;
+          }
+          if(typeof searchDeckOrWingByTitleTagItem === "undefined" && typeof searchDeckOrWingByTag === "function"){
+            // 保険：titleTag item 専用関数が無ければ既存関数へ逃がす
+            await searchDeckOrWingByTag(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+          }
+        }
+      );
+      return;
+    }
+
+    return await __mw_fix_onEnterTriggers(side, ctx);
+  };
+
+  log("PATCH BATTLE+ENTER-FIX-01 読み込み完了");
+})();
+/* =========================================================
+  PATCH BATTLE+OURAN-FIX-02
+  - バトル時の「〇〇 VS 〇〇」を確実表示
+  - 桜蘭の陰陽術 - 闘 - を processActivatedEffect 経由にし、
+    手形 / 記憶抹消 のチェーン対象にする
+========================================================= */
+(function(){
+  "use strict";
+
+  function mwAnnounce(title, body){
+    if(typeof mwPushAnnounce === "function"){
+      mwPushAnnounce(title, body);
+      return;
+    }
+    if(typeof showAnnounce === "function"){
+      showAnnounce(`${title}\n${body}`);
+      return;
+    }
+    log(`${title}\n${body}`);
+  }
+
+  /* ------------------------------
+    バトルの対戦カード保持
+  ------------------------------ */
+  let mwBattlePairCtx = null;
+
+  const __mw_fix02_resolveBattle = resolveBattle;
+  resolveBattle = async function(attacker, defenderUid){
+    const enemySide = "AI";
+    const defender = state[enemySide]?.C?.find(c => c && c.uid === defenderUid) || null;
+
+    mwBattlePairCtx = null;
+    if(attacker && defender){
+      mwBattlePairCtx = {
+        attackerUid: attacker.uid,
+        defenderUid: defender.uid,
+        attackerName: attacker.name,
+        defenderName: defender.name
+      };
+    }
+
+    try{
+      return await __mw_fix02_resolveBattle(attacker, defenderUid);
+    } finally {
+      /* ここでは消さない。
+         sendCharacterToWing 側で1回使ってから消す */
+      setTimeout(()=>{
+        mwBattlePairCtx = null;
+      }, 0);
+    }
+  };
+
+  /* ------------------------------
+    効果除去の原因保持
+  ------------------------------ */
+  let mwEffectRemoveCtx = null;
+
+  if(typeof activateHandCard === "function"){
+    const __mw_fix02_activateHandCard = activateHandCard;
+    activateHandCard = async function(side, handIndex, card, targetZone, targetPos){
+      if(card && /ウイングに送る/.test(card.text || "")){
+        mwEffectRemoveCtx = { effectName: card.name };
+      }else{
+        mwEffectRemoveCtx = null;
+      }
+      return await __mw_fix02_activateHandCard(side, handIndex, card, targetZone, targetPos);
+    };
+  }
+
+  if(typeof resolveEffectCard === "function"){
+    const __mw_fix02_resolveEffectCard = resolveEffectCard;
+    resolveEffectCard = async function(side, eff){
+      if(eff && /ウイングに送る/.test(eff.text || "")){
+        mwEffectRemoveCtx = { effectName: eff.name };
+      }else{
+        mwEffectRemoveCtx = null;
+      }
+      return await __mw_fix02_resolveEffectCard(side, eff);
+    };
+  }
+
+  /* ------------------------------
+    実際にウイングへ送られる瞬間の表示
+  ------------------------------ */
+  const __mw_fix02_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c => c && c.uid === uid);
+    const target = pos >= 0 ? p.C[pos] : null;
+
+    if(target){
+      if(
+        mwBattlePairCtx &&
+        (uid === mwBattlePairCtx.attackerUid || uid === mwBattlePairCtx.defenderUid)
+      ){
+        mwAnnounce(
+          "バトル結果",
+          `${mwBattlePairCtx.attackerName} VS ${mwBattlePairCtx.defenderName}\n${target.name}はウイングに送られます。`
+        );
+      }else if(mwEffectRemoveCtx){
+        mwAnnounce(
+          "効果による除去",
+          `${mwEffectRemoveCtx.effectName}の効果で\n${target.name}はウイングに送られます。`
+        );
+      }
+    }
+
+    const result = await __mw_fix02_sendCharacterToWing(side, uid);
+
+    if(target){
+      if(mwBattlePairCtx && (uid === mwBattlePairCtx.attackerUid || uid === mwBattlePairCtx.defenderUid)){
+        mwBattlePairCtx = null;
+      }
+      if(mwEffectRemoveCtx){
+        mwEffectRemoveCtx = null;
+      }
+    }
+
+    return result;
+  };
+
+  /* ------------------------------
+    桜蘭の陰陽術 - 闘 - を「発動」扱いへ
+    → 手形 / 記憶抹消 / 無効アナウンス対象にする
+  ------------------------------ */
+  const __mw_fix02_tryUseOuranDuringBattle = tryUseOuranDuringBattle;
+  tryUseOuranDuringBattle = async function(side, ownBattler, enemyBattler){
+    if(!hasOuranInHand(side)) return false;
+    if(!ownBattler || !enemyBattler) return false;
+
+    /* P1側 */
+    if(side === "P1"){
+      const enemySide = state.AI.C.includes(enemyBattler) ? "AI" : "P1";
+      const previewMsg =
+        "バトル中です。桜蘭の陰陽術 - 闘 - を発動しますか？" +
+        (typeof mw32BuildBattlePreview === "function"
+          ? mw32BuildBattlePreview(
+              enemySide,
+              enemyBattler,
+              ownBattler,
+              [`自分側の選択キャラ ATK +1000`]
+            )
+          : "");
+
+      const ok = await askYesNo("桜蘭の陰陽術 - 闘 -", previewMsg);
+      if(!ok) return false;
+
+      const target = await pickOwnCharacterForOuran(side);
+      if(!target) return false;
+
+      const card = takeOuranFromHand(side);
+      if(!card) return false;
+
+      /* 発動したのでウイングへ */
+      moveToWing(side, card);
+
+      const act = {
+        kind: "ACT",
+        label: card.name,
+        activatorSide: side,
+        sourceCard: card,
+        sourceUid: card.uid,
+        resolve: async ()=>{
+          target.tempAtk += 1000;
+          log(`桜蘭の陰陽術 - 闘 -：${target.name} ATK+1000（ターン終了まで）`);
+          renderAll();
+        },
+        onNegated: async ()=>{
+          log(`桜蘭の陰陽術 - 闘 -：無効にされました`, "warn");
+          renderAll();
+        }
+      };
+
+      const r = await processActivatedEffect(act);
+      return !!r?.ok;
+    }
+
+    /* AI側 */
+    if(side === "AI"){
+      const myAtk = calcCurrentAtk(side, ownBattler);
+      const enAtk = calcCurrentAtk(opponent(side), enemyBattler);
+      if(!(myAtk <= enAtk && myAtk + 1000 > enAtk)) return false;
+
+      const card = takeOuranFromHand(side);
+      if(!card) return false;
+
+      moveToWing(side, card);
+
+      const act = {
+        kind: "ACT",
+        label: card.name,
+        activatorSide: side,
+        sourceCard: card,
+        sourceUid: card.uid,
+        resolve: async ()=>{
+          ownBattler.tempAtk += 1000;
+          log(`AI：桜蘭の陰陽術 - 闘 - → ${ownBattler.name} ATK+1000`);
+          renderAll();
+        },
+        onNegated: async ()=>{
+          log(`AI：桜蘭の陰陽術 - 闘 - は無効にされました`, "warn");
+          renderAll();
+        }
+      };
+
+      const r = await processActivatedEffect(act);
+      return !!r?.ok;
+    }
+
+    return await __mw_fix02_tryUseOuranDuringBattle(side, ownBattler, enemyBattler);
+  };
+
+  log("PATCH BATTLE+OURAN-FIX-02 読み込み完了");
+})();
+
+/* =========================================================
+  PATCH FINAL-20260422
+  - グローバルアナウンス基盤を再定義
+  - バトル時の「〇〇 VS 〇〇」を確実表示
+  - 登場時効果（04/05/11/26/27/28）をP1側で任意化
+========================================================= */
+(function(){
+  "use strict";
+
+  /* ------------------------------
+    グローバルアナウンス
+  ------------------------------ */
+  function mwFinalEnsureAnnounceUI(){
+    if(document.getElementById('mwFinalAnnounceOverlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mwFinalAnnounceOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,.62)';
+    overlay.style.display = 'none';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '100000';
+
+    const box = document.createElement('div');
+    box.style.width = 'min(86vw, 420px)';
+    box.style.background = 'rgba(10,10,16,.96)';
+    box.style.border = '1px solid rgba(255,255,255,.14)';
+    box.style.borderRadius = '14px';
+    box.style.padding = '18px 16px 14px';
+    box.style.boxShadow = '0 10px 30px rgba(0,0,0,.35)';
+    box.style.color = '#fff';
+    box.style.textAlign = 'center';
+
+    const title = document.createElement('div');
+    title.id = 'mwFinalAnnounceTitle';
+    title.style.fontWeight = '900';
+    title.style.fontSize = '16px';
+    title.style.marginBottom = '10px';
+    title.textContent = 'アナウンス';
+
+    const body = document.createElement('div');
+    body.id = 'mwFinalAnnounceBody';
+    body.style.whiteSpace = 'pre-line';
+    body.style.lineHeight = '1.6';
+    body.style.fontSize = '14px';
+    body.style.marginBottom = '14px';
+
+    const ok = document.createElement('button');
+    ok.textContent = 'OK';
+    ok.style.padding = '10px 18px';
+    ok.style.borderRadius = '10px';
+    ok.style.border = '1px solid rgba(255,255,255,.18)';
+    ok.style.background = 'rgba(255,255,255,.08)';
+    ok.style.color = '#fff';
+    ok.style.fontWeight = '800';
+
+    box.addEventListener('click', (e)=>e.stopPropagation());
+    ok.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); mwFinalHideAnnounce(); }, {passive:false});
+    overlay.addEventListener('click', ()=>mwFinalHideAnnounce());
+
+    box.appendChild(title);
+    box.appendChild(body);
+    box.appendChild(ok);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+
+  let mwFinalAnnQueue = [];
+  let mwFinalAnnBusy = false;
+
+  function mwFinalFlushAnnounce(){
+    if(mwFinalAnnBusy) return;
+    const next = mwFinalAnnQueue.shift();
+    if(!next) return;
+    mwFinalAnnBusy = true;
+    mwFinalEnsureAnnounceUI();
+    const ov = document.getElementById('mwFinalAnnounceOverlay');
+    const ti = document.getElementById('mwFinalAnnounceTitle');
+    const bo = document.getElementById('mwFinalAnnounceBody');
+    if(!ov || !ti || !bo){ mwFinalAnnBusy = false; return; }
+    ti.textContent = next.title || 'アナウンス';
+    bo.textContent = next.text || '';
+    ov.style.display = 'flex';
+  }
+
+  function mwFinalHideAnnounce(){
+    const ov = document.getElementById('mwFinalAnnounceOverlay');
+    if(ov) ov.style.display = 'none';
+    mwFinalAnnBusy = false;
+    setTimeout(mwFinalFlushAnnounce, 0);
+  }
+
+  window.mwPushAnnounce = function(title, text){
+    mwFinalAnnQueue.push({title, text});
+    mwFinalFlushAnnounce();
+  };
+  window.showAnnouncement = function(message){
+    window.mwPushAnnounce('アナウンス', message);
+  };
+
+  /* ------------------------------
+    バトル時の表示を確実化
+    送信文脈に頼らず、敗北確定の瞬間に直接出す
+  ------------------------------ */
+  const __mwFinal_resolveBattle = resolveBattle;
+  resolveBattle = async function(attacker, defenderUid){
+    const enemySide = 'AI';
+    const defender = state[enemySide].C.find(c=>c && c.uid===defenderUid);
+    if(!defender){
+      log('対象が無効です', 'warn');
+      return;
+    }
+
+    if(typeof markSevenStarHit === 'function' && attacker && defenderUid){
+      markSevenStarHit(attacker, defenderUid);
+    }
+
+    await tryUseOuranDuringBattle('P1', attacker, defender);
+    await tryUseOuranDuringBattle('AI', defender, attacker);
+
+    const atkA = calcCurrentAtk('P1', attacker);
+    const atkD = calcCurrentAtk('AI', defender);
+    log(`バトル：${attacker.name}(${atkA}) vs ${defender.name}(${atkD})`);
+
+    if(atkA > atkD){
+      const savedD = await tryBattleSurvive('AI', defender);
+      if(!savedD){
+        window.mwPushAnnounce('バトル結果', `${attacker.name} VS ${defender.name}\n${defender.name}はウイングに送られます。`);
+        await sendCharacterToWing('AI', defender.uid);
+        log(`撃破：${defender.name} → AIウイング`);
+        if(attacker.no===23 && typeof mw32HasAnyEquip === 'function' ? mw32HasAnyEquip(attacker) : !!attacker.equipUid){
+          await breakOneShieldByEffect('AI', attacker.name);
+        }
+      }
+    }else if(atkA < atkD){
+      const savedA = await tryBattleSurvive('P1', attacker);
+      if(!savedA){
+        window.mwPushAnnounce('バトル結果', `${attacker.name} VS ${defender.name}\n${attacker.name}はウイングに送られます。`);
+        await sendCharacterToWing('P1', attacker.uid);
+        log(`敗北：${attacker.name} → あなたウイング`);
+        await tryCattleTrigger_P1();
+      }
+    }else{
+      const savedA = await tryBattleSurvive('P1', attacker);
+      const savedD = await tryBattleSurvive('AI', defender);
+      if(!savedA){
+        window.mwPushAnnounce('バトル結果', `${attacker.name} VS ${defender.name}\n${attacker.name}はウイングに送られます。`);
+        await sendCharacterToWing('P1', attacker.uid);
+        await tryCattleTrigger_P1();
+      }
+      if(!savedD){
+        window.mwPushAnnounce('バトル結果', `${attacker.name} VS ${defender.name}\n${defender.name}はウイングに送られます。`);
+        await sendCharacterToWing('AI', defender.uid);
+      }
+      log('相打ち：双方ウイング');
+    }
+
+    attacker.flags.attackedCountThisTurn += 1;
+    state.battle.attackerUid = null;
+    state.battle.attackerPos = null;
+    renderAll();
+  };
+
+  const __mwFinal_aiBattleBest = aiBattleBest;
+  aiBattleBest = async function(){
+    const p = state.AI;
+
+    for(let i=0;i<3;i++){
+      const a = p.C[i];
+      if(!a) continue;
+
+      while(a && state.AI.C[i] && state.AI.C[i].uid===a.uid && a.flags.attackedCountThisTurn < getMaxAttacks('AI', a)){
+        const best = pickBestAIAttackFor(a);
+        if(!best || best.score <= 120) break;
+
+        if(best.type==='C'){
+          const t = state.P1.C.find(c=>c && c.uid===best.uid);
+          if(!t) break;
+
+          if(typeof markSevenStarHit === 'function'){
+            markSevenStarHit(a, t.uid);
+          }
+
+          await tryUseOuranDuringBattle('AI', a, t);
+          await tryUseOuranDuringBattle('P1', t, a);
+
+          const atkA = calcCurrentAtk('AI', a);
+          const atkD = calcCurrentAtk('P1', t);
+          log(`AIバトル：${a.name}(${atkA}) → ${t.name}(${atkD})`);
+
+          if(atkA > atkD){
+            const savedD = await tryBattleSurvive('P1', t);
+            if(!savedD){
+              window.mwPushAnnounce('バトル結果', `${a.name} VS ${t.name}\n${t.name}はウイングに送られます。`);
+              await sendCharacterToWing('P1', t.uid);
+              log(`AI：撃破 ${t.name} → あなたウイング`);
+              await tryCattleTrigger_P1();
+              if(a.no===23 && (typeof mw32HasAnyEquip === 'function' ? mw32HasAnyEquip(a) : !!a.equipUid)){
+                await breakOneShieldByEffect('P1', a.name);
+              }
+            }
+          }else if(atkA < atkD){
+            const savedA = await tryBattleSurvive('AI', a);
+            if(!savedA){
+              window.mwPushAnnounce('バトル結果', `${a.name} VS ${t.name}\n${a.name}はウイングに送られます。`);
+              await sendCharacterToWing('AI', a.uid);
+              log(`AI：敗北 ${a.name} → AIウイング`);
+            }
+          }else{
+            const savedA = await tryBattleSurvive('AI', a);
+            const savedD = await tryBattleSurvive('P1', t);
+            if(!savedA){
+              window.mwPushAnnounce('バトル結果', `${a.name} VS ${t.name}\n${a.name}はウイングに送られます。`);
+              await sendCharacterToWing('AI', a.uid);
+            }
+            if(!savedD){
+              window.mwPushAnnounce('バトル結果', `${a.name} VS ${t.name}\n${t.name}はウイングに送られます。`);
+              await sendCharacterToWing('P1', t.uid);
+              await tryCattleTrigger_P1();
+            }
+            log('AI：相打ち');
+          }
+
+          a.flags.attackedCountThisTurn += 1;
+          renderAll();
+          await sleep(180);
+
+          if(!state.AI.C[i] || state.AI.C[i].uid!==a.uid) break;
+          continue;
+        }
+
+        if(best.type==='S'){
+          const sh = state.P1.shield[best.idx];
+          if(!sh) break;
+          state.P1.shield[best.idx] = null;
+          state.P1.hand.push(sh);
+          log(`AI：シールド破壊（あなた）${best.idx+1} → あなた手札へ`);
+          a.flags.attackedCountThisTurn += 1;
+          renderAll();
+          await sleep(150);
+          break;
+        }
+
+        if(best.type==='D'){
+          const guarded = await tryMiikoDirectGuard('P1');
+          a.flags.attackedCountThisTurn += 1;
+          renderAll();
+          if(guarded) break;
+          await finishGame('AI');
+          return;
+        }
+
+        break;
+      }
+    }
+  };
+
+  /* ------------------------------
+    効果除去の表示はカード名付きに維持
+  ------------------------------ */
+  let mwFinalRemoveEffectName = null;
+  if(typeof activateHandCard === 'function'){
+    const __mwFinal_activateHandCard = activateHandCard;
+    activateHandCard = async function(side, handIndex, card, targetZone, targetPos){
+      mwFinalRemoveEffectName = (card && /ウイングに送る/.test(card.text || '')) ? card.name : null;
+      return await __mwFinal_activateHandCard(side, handIndex, card, targetZone, targetPos);
+    };
+  }
+  if(typeof resolveEffectCard === 'function'){
+    const __mwFinal_resolveEffectCard = resolveEffectCard;
+    resolveEffectCard = async function(side, eff){
+      mwFinalRemoveEffectName = (eff && /ウイングに送る/.test(eff.text || '')) ? eff.name : null;
+      return await __mwFinal_resolveEffectCard(side, eff);
+    };
+  }
+  const __mwFinal_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c => c && c.uid === uid);
+    const target = pos >= 0 ? p.C[pos] : null;
+    if(target && mwFinalRemoveEffectName){
+      window.mwPushAnnounce('効果による除去', `${mwFinalRemoveEffectName}の効果で\n${target.name}はウイングに送られます。`);
+    }
+    const r = await __mwFinal_sendCharacterToWing(side, uid);
+    mwFinalRemoveEffectName = null;
+    return r;
+  };
+
+  /* ------------------------------
+    登場時効果の任意発動（P1）
+  ------------------------------ */
+  async function mwFinalRunOptionalEnter(side, card, message, resolveFn){
+    const shouldUse = (side === 'AI') ? true : await askYesNo('効果確認', message);
+    if(!shouldUse){
+      log(`${card.name}：登場時効果を使用しませんでした`);
+      return;
+    }
+    const act = {
+      kind:'ACT',
+      label: card.name,
+      activatorSide: side,
+      sourceCard: card,
+      sourceUid: card.uid,
+      resolve: resolveFn,
+      onNegated: async (r)=>{
+        if(r && r.negatorKind === 'MEMORY'){
+          await sendCharacterToWing(side, card.uid);
+        }
+        log(`${card.name} の登場時効果は無効`);
+        renderAll();
+      }
+    };
+    await processActivatedEffect(act);
+  }
+
+  const __mwFinal_onEnterTriggers = onEnterTriggers;
+  onEnterTriggers = async function(side, ctx){
+    const { card, pos } = ctx || {};
+    if(!card) return;
+
+    if(typeof mwIsCardMutedThisTurn === 'function' && mwIsCardMutedThisTurn(card)){
+      log(`${card.name}：インフルエンサーまりもによりこのターン効果を発動できない`, 'warn');
+      return;
+    }
+    if(isRachelSealActiveAgainst(side, card)){
+      log(`${card.name}：退魔師レイチェルの効果により発動できません`, 'warn');
+      return;
+    }
+
+    if(card.no === 4){
+      await mwFinalRunOptionalEnter(side, card, '聖ラウスの登場時効果を発動しますか？（クランプスをサーチ）', async ()=>{
+        if(side === 'AI') await searchFromDeckOrWingByTag('AI', 'クランプス', 1, {aiAuto:true});
+        else await searchFromDeckOrWingByTag(side, 'クランプス', 1);
+      });
+      return;
+    }
+
+    if(card.no === 5){
+      await mwFinalRunOptionalEnter(side, card, '統括AI タータの登場時効果を発動しますか？（2ドロー）', async ()=>{
+        draw(side, 2);
+        log(`${sideName(side)}：タータ登場 → 2ドロー`);
+        renderAll();
+      });
+      return;
+    }
+
+    if(card.no === 11){
+      const p = state[side];
+      const others = p.C.filter(x => x && x.uid !== card.uid);
+      if(!others.length){
+        log('司令：他の自分キャラがいないため効果は発動できません', 'warn');
+        return;
+      }
+      await mwFinalRunOptionalEnter(side, card, '司令の登場時効果を発動しますか？（装備化してATK+500）', async ()=>{
+        await activateShireiEquip(side, pos, card);
+      });
+      return;
+    }
+
+    if(card.no === 26 || card.no === 27){
+      await mwFinalRunOptionalEnter(side, card, `${card.name}の登場時効果を発動しますか？`, async ()=>{
+        await resolveRubySapphireEnter(side, card, ctx);
+      });
+      return;
+    }
+
+    if(card.no === 28){
+      await mwFinalRunOptionalEnter(side, card, 'セシア＆アリサの登場時効果を発動しますか？（怨霊撲滅屋GBのアイテムをサーチ）', async ()=>{
+        if(typeof searchDeckOrWingByTitleTagItem === 'function'){
+          await searchDeckOrWingByTitleTagItem(side, '怨霊撲滅屋GB', 1, {aiAuto: side==='AI'});
+        }else if(typeof searchFromDeckOrWingByTag === 'function'){
+          await searchFromDeckOrWingByTag(side, '怨霊撲滅屋GB', 1, {aiAuto: side==='AI'});
+        }
+      });
+      return;
+    }
+
+    return await __mwFinal_onEnterTriggers(side, ctx);
+  };
+
+  log('PATCH FINAL-20260422 読み込み完了');
+})();
