@@ -12394,3 +12394,265 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH ANNOUNCE-BATTLE-FIX-01 読み込み完了");
 })();
+/* =========================================================
+  PATCH BATTLE+ENTER-FIX-01
+  - バトル時の「〇〇 VS 〇〇」を確実表示
+  - 効果除去時の「〇〇の効果で 〇〇はウイングに送られます。」を維持
+  - 登場時に「発動できる」系をP1側で任意化
+  対象：
+    No.04 聖ラウス
+    No.05 統括AI タータ
+    No.11 司令
+    No.26 ジュエリー・ルビー
+    No.27 ジュエリー・サファイア
+    No.28 セシア＆アリサ
+========================================================= */
+(function(){
+  "use strict";
+
+  /* ------------------------------
+    既存アナウンス関数へ接続
+  ------------------------------ */
+  function mwAnn(title, body){
+    if(typeof mwPushAnnounce === "function"){
+      mwPushAnnounce(title, body);
+      return;
+    }
+    if(typeof showAnnounce === "function"){
+      showAnnounce(`${title}\n${body}`);
+      return;
+    }
+    log(`${title}\n${body}`);
+  }
+
+  let mwRemoveReason = null;
+
+  /* ------------------------------
+    1) まず sendCharacterToWing を最終上書き
+       - ここで battle / effect の表示を出す
+  ------------------------------ */
+  const __mw_fix_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c => c && c.uid === uid);
+    const target = pos >= 0 ? p.C[pos] : null;
+
+    if(target && mwRemoveReason){
+      if(mwRemoveReason.type === "battle"){
+        mwAnn(
+          "バトル結果",
+          `${mwRemoveReason.attackerName} VS ${mwRemoveReason.defenderName}\n${target.name}はウイングに送られます。`
+        );
+      }else if(mwRemoveReason.type === "effect"){
+        mwAnn(
+          "効果による除去",
+          `${mwRemoveReason.effectName}の効果で\n${target.name}はウイングに送られます。`
+        );
+      }
+    }
+
+    mwRemoveReason = null;
+    return await __mw_fix_sendCharacterToWing(side, uid);
+  };
+
+  /* ------------------------------
+    2) 現在使われている resolveBattle を最終上書き
+       - ここで直前の battle 文脈を必ず入れる
+  ------------------------------ */
+  const __mw_fix_resolveBattle = resolveBattle;
+  resolveBattle = async function(attacker, defenderUid){
+    const defender =
+      state.AI.C.find(c => c && c.uid === defenderUid) ||
+      state.P1.C.find(c => c && c.uid === defenderUid) ||
+      null;
+
+    if(attacker && defender){
+      mwRemoveReason = {
+        type: "battle",
+        attackerName: attacker.name,
+        defenderName: defender.name
+      };
+    }else{
+      mwRemoveReason = null;
+    }
+
+    return await __mw_fix_resolveBattle(attacker, defenderUid);
+  };
+
+  /* ------------------------------
+    3) 効果除去の文脈を残す
+       - activateHandCard があればそこに差す
+  ------------------------------ */
+  if(typeof activateHandCard === "function"){
+    const __mw_fix_activateHandCard = activateHandCard;
+    activateHandCard = async function(side, handIndex, card, targetZone, targetPos){
+      if(card && /ウイングに送る/.test(card.text || "")){
+        mwRemoveReason = {
+          type: "effect",
+          effectName: card.name
+        };
+      }else{
+        mwRemoveReason = null;
+      }
+      return await __mw_fix_activateHandCard(side, handIndex, card, targetZone, targetPos);
+    };
+  }
+
+  /* ------------------------------
+    4) 力こそパワー！！など、hand経由でない効果除去も拾うため
+       発動効果本体の直前に effect 文脈を差す
+  ------------------------------ */
+  if(typeof resolveEffectCard === "function"){
+    const __mw_fix_resolveEffectCard = resolveEffectCard;
+    resolveEffectCard = async function(side, eff){
+      if(eff && /ウイングに送る/.test(eff.text || "")){
+        mwRemoveReason = {
+          type: "effect",
+          effectName: eff.name
+        };
+      }else{
+        mwRemoveReason = null;
+      }
+      return await __mw_fix_resolveEffectCard(side, eff);
+    };
+  }
+
+  /* ------------------------------
+    5) 登場時効果を任意化する共通
+  ------------------------------ */
+  async function mwRunOptionalEnterEffect(side, card, message, resolveFn){
+    const shouldUse = (side === "AI")
+      ? true
+      : await askYesNo("効果確認", message);
+
+    if(!shouldUse){
+      log(`${card.name}：登場時効果を使用しませんでした`);
+      return;
+    }
+
+    const act = {
+      kind: "ACT",
+      label: card.name,
+      activatorSide: side,
+      sourceCard: card,
+      sourceUid: card.uid,
+      resolve: resolveFn,
+      onNegated: async (r)=>{
+        if(r && r.negatorKind === "MEMORY"){
+          await sendCharacterToWing(side, card.uid);
+        }
+        log(`${card.name} の登場時効果は無効`);
+        renderAll();
+      }
+    };
+    await processActivatedEffect(act);
+  }
+
+  /* ------------------------------
+    6) 最新の onEnterTriggers を最終上書き
+  ------------------------------ */
+  const __mw_fix_onEnterTriggers = onEnterTriggers;
+  onEnterTriggers = async function(side, ctx){
+    const { card, pos } = ctx || {};
+    if(!card) return;
+
+    if(typeof mwIsCardMutedThisTurn === "function" && mwIsCardMutedThisTurn(card)){
+      log(`${card.name}：インフルエンサーまりもによりこのターン効果を発動できない`, "warn");
+      return;
+    }
+
+    if(isRachelSealActiveAgainst(side, card)){
+      log(`${card.name}：退魔師レイチェルの効果により発動できません`, "warn");
+      return;
+    }
+
+    /* No.04 聖ラウス */
+    if(card.no === 4){
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        "聖ラウスの登場時効果を発動しますか？（クランプスをサーチ）",
+        async ()=>{
+          if(side === "AI"){
+            await searchFromDeckOrWingByTag("AI", "クランプス", 1, { aiAuto:true });
+          }else{
+            await searchFromDeckOrWingByTag(side, "クランプス", 1);
+          }
+        }
+      );
+      return;
+    }
+
+    /* No.05 統括AI タータ */
+    if(card.no === 5){
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        "統括AI タータの登場時効果を発動しますか？（2ドロー）",
+        async ()=>{
+          draw(side, 2);
+          log(`${sideName(side)}：タータ登場 → 2ドロー`);
+          renderAll();
+        }
+      );
+      return;
+    }
+
+    /* No.11 司令 */
+    if(card.no === 11){
+      const p = state[side];
+      const others = p.C.filter(x => x && x.uid !== card.uid);
+      if(!others.length){
+        log("司令：他の自分キャラがいないため効果は発動できません", "warn");
+        return;
+      }
+
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        "司令の登場時効果を発動しますか？（装備化してATK+500）",
+        async ()=>{
+          await activateShireiEquip(side, pos, card);
+        }
+      );
+      return;
+    }
+
+    /* No.26 / 27 ルビー / サファイア */
+    if(card.no === 26 || card.no === 27){
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        `${card.name}の登場時効果を発動しますか？`,
+        async ()=>{
+          await resolveRubySapphireEnter(side, card, ctx);
+        }
+      );
+      return;
+    }
+
+    /* No.28 セシア＆アリサ */
+    if(card.no === 28){
+      await mwRunOptionalEnterEffect(
+        side,
+        card,
+        "セシア＆アリサの登場時効果を発動しますか？（怨霊撲滅屋GBのアイテムをサーチ）",
+        async ()=>{
+          if(typeof searchDeckOrWingByTitleTagItem === "function"){
+            await searchDeckOrWingByTitleTagItem(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+            return;
+          }
+          if(typeof searchDeckOrWingByTitleTagItem === "undefined" && typeof searchDeckOrWingByTag === "function"){
+            // 保険：titleTag item 専用関数が無ければ既存関数へ逃がす
+            await searchDeckOrWingByTag(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+          }
+        }
+      );
+      return;
+    }
+
+    return await __mw_fix_onEnterTriggers(side, ctx);
+  };
+
+  log("PATCH BATTLE+ENTER-FIX-01 読み込み完了");
+})();
