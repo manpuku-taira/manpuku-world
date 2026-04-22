@@ -12588,3 +12588,4 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
       await mwRunOptionalEnterEffect(
         side,
         card,
+        "統括AI タータの登場時効果を発動
