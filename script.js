@@ -13605,3 +13605,112 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH FINAL-ANNOUNCE+ENTER-01 読み込み完了");
 })();
+/* =========================================================
+  PATCH OURAN-CHAIN-FORCE-01
+  - 桜蘭の陰陽術 - 闘 - を必ず processActivatedEffect 経由にする
+  - 相手発動時、こちらの記憶抹消 / 手形の確認を必ず出す
+========================================================= */
+(function(){
+  "use strict";
+
+  if(typeof hasOuranInHand !== "function" ||
+     typeof takeOuranFromHand !== "function" ||
+     typeof pickOwnCharacterForOuran !== "function" ||
+     typeof processActivatedEffect !== "function"){
+    log("PATCH OURAN-CHAIN-FORCE-01：必要関数が不足", "warn");
+    return;
+  }
+
+  // 桜蘭の陰陽術の最終版を、末尾で強制上書き
+  tryUseOuranDuringBattle = async function(side, ownBattler, enemyBattler){
+    if(!hasOuranInHand(side)) return false;
+    if(!ownBattler || !enemyBattler) return false;
+
+    /* ---------------- P1 側 ---------------- */
+    if(side === "P1"){
+      const enemySide = state.AI.C.includes(enemyBattler) ? "AI" : "P1";
+
+      const previewMsg =
+        "バトル中です。桜蘭の陰陽術 - 闘 - を発動しますか？" +
+        (typeof mw32BuildBattlePreview === "function"
+          ? mw32BuildBattlePreview(
+              enemySide,
+              enemyBattler,
+              ownBattler,
+              ["自分側の選択キャラ ATK +1000"]
+            )
+          : "");
+
+      const ok = await askYesNo("桜蘭の陰陽術 - 闘 -", previewMsg);
+      if(!ok) return false;
+
+      const target = await pickOwnCharacterForOuran(side);
+      if(!target) return false;
+
+      const card = takeOuranFromHand(side);
+      if(!card) return false;
+
+      // 発動したのでカード自体はウイングへ
+      moveToWing(side, card);
+
+      const act = {
+        kind: "ACT",
+        label: card.name,
+        activatorSide: side,
+        sourceCard: card,
+        sourceUid: card.uid,
+        resolve: async ()=>{
+          target.tempAtk += 1000;
+          log(`桜蘭の陰陽術 - 闘 -：${target.name} ATK+1000（ターン終了まで）`);
+          renderAll();
+        },
+        onNegated: async ()=>{
+          log(`桜蘭の陰陽術 - 闘 -：無効にされました`, "warn");
+          renderAll();
+        }
+      };
+
+      const r = await processActivatedEffect(act);
+      return !!r?.ok;
+    }
+
+    /* ---------------- AI 側 ---------------- */
+    if(side === "AI"){
+      const myAtk = calcCurrentAtk(side, ownBattler);
+      const enAtk = calcCurrentAtk(opponent(side), enemyBattler);
+
+      // 使う意味がある時だけ使う
+      if(!(myAtk <= enAtk && myAtk + 1000 > enAtk)) return false;
+
+      const card = takeOuranFromHand(side);
+      if(!card) return false;
+
+      // 発動したのでカード自体はウイングへ
+      moveToWing(side, card);
+
+      const act = {
+        kind: "ACT",
+        label: card.name,
+        activatorSide: side,
+        sourceCard: card,
+        sourceUid: card.uid,
+        resolve: async ()=>{
+          ownBattler.tempAtk += 1000;
+          log(`AI：桜蘭の陰陽術 - 闘 - → ${ownBattler.name} ATK+1000`);
+          renderAll();
+        },
+        onNegated: async ()=>{
+          log(`AI：桜蘭の陰陽術 - 闘 - は無効にされました`, "warn");
+          renderAll();
+        }
+      };
+
+      const r = await processActivatedEffect(act);
+      return !!r?.ok;
+    }
+
+    return false;
+  };
+
+  log("PATCH OURAN-CHAIN-FORCE-01 読み込み完了");
+})();
