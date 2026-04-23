@@ -13350,3 +13350,258 @@ log(`${MW_REWARD_PATCH_VERSION} 読み込み完了`);
 
   log("PATCH RULE-FIX-01 読み込み完了");
 })();
+/* =========================================================
+  PATCH FINAL-ANNOUNCE+ENTER-01
+  - バトル時の「〇〇 ATK〇〇 VS 〇〇 ATK〇〇」を確実表示
+  - 効果除去時の原因＋結果を1画面表示
+  - ルビー/サファイア/セシア&アリサ/タータ/ラウス/司令の
+    登場時効果をP1側で必ず任意発動にする
+========================================================= */
+(function(){
+  "use strict";
+
+  /* ------------------------------
+    グローバルアナウンス関数
+  ------------------------------ */
+  if(typeof window.mwPushAnnounce !== "function"){
+    window.mwPushAnnounce = function(title, body){
+      if(typeof showAnnounce === "function"){
+        showAnnounce(`${title}\n${body}`);
+        return;
+      }
+      log(`${title}\n${body}`);
+    };
+  }
+
+  /* ------------------------------
+    1) ログから直前のバトル/効果文脈を拾う
+  ------------------------------ */
+  window.__mwFinalBattleCtx = null;
+  window.__mwFinalEffectCtx = null;
+
+  const __mw_final_log = log;
+  log = function(msg, kind="muted"){
+    try{
+      // プレイヤー側バトル
+      let m = String(msg).match(/^バトル：(.+)\((\d+)\)\s+vs\s+(.+)\((\d+)\)$/);
+      if(m){
+        window.__mwFinalBattleCtx = {
+          attackerName: m[1],
+          attackerAtk: Number(m[2]),
+          defenderName: m[3],
+          defenderAtk: Number(m[4])
+        };
+      }
+
+      // AI側バトル
+      m = String(msg).match(/^AIバトル：(.+)\((\d+)\)\s+→\s+(.+)\((\d+)\)$/);
+      if(m){
+        window.__mwFinalBattleCtx = {
+          attackerName: m[1],
+          attackerAtk: Number(m[2]),
+          defenderName: m[3],
+          defenderAtk: Number(m[4])
+        };
+      }
+
+      // 効果発動（E配置発動）
+      m = String(msg).match(/^(AI|あなた)：E配置（発動）\s+(.+)$/);
+      if(m){
+        window.__mwFinalEffectCtx = {
+          activator: m[1],
+          effectName: m[2]
+        };
+      }
+
+      // 手札発動やチェーン
+      m = String(msg).match(/^(AI|あなた)：(.+)発動$/);
+      if(m){
+        window.__mwFinalEffectCtx = {
+          activator: m[1],
+          effectName: m[2]
+        };
+      }
+    }catch(_){}
+
+    return __mw_final_log(msg, kind);
+  };
+
+  /* ------------------------------
+    2) ウイング送り時の統合アナウンス
+  ------------------------------ */
+  const __mw_final_sendCharacterToWing = sendCharacterToWing;
+  sendCharacterToWing = async function(side, uid){
+    const p = state[side];
+    const pos = p.C.findIndex(c => c && c.uid === uid);
+    const target = pos >= 0 ? p.C[pos] : null;
+
+    if(target){
+      if(window.__mwFinalBattleCtx){
+        const c = window.__mwFinalBattleCtx;
+        window.mwPushAnnounce(
+          "バトル結果",
+          `${c.attackerName} ATK${c.attackerAtk} VS ${c.defenderName} ATK${c.defenderAtk}\n` +
+          `バトルの結果、${target.name}は敗北しました。\n` +
+          `${target.name}はウイングに送られます。`
+        );
+        window.__mwFinalBattleCtx = null;
+      }else if(window.__mwFinalEffectCtx){
+        const c = window.__mwFinalEffectCtx;
+        window.mwPushAnnounce(
+          "効果解決",
+          `${c.activator}が「${c.effectName}」を発動しました。\n` +
+          `${target.name}はウイングに送られます。`
+        );
+        window.__mwFinalEffectCtx = null;
+      }
+    }
+
+    return await __mw_final_sendCharacterToWing(side, uid);
+  };
+
+  /* ------------------------------
+    3) 登場時任意発動の共通
+  ------------------------------ */
+  async function mwRunEnterOptional(side, card, message, resolveFn){
+    const shouldUse = (side === "AI")
+      ? true
+      : await askYesNo("効果確認", message);
+
+    if(!shouldUse){
+      log(`${card.name}：登場時効果を使用しませんでした`);
+      return;
+    }
+
+    const act = {
+      kind: "ACT",
+      label: card.name,
+      activatorSide: side,
+      sourceCard: card,
+      sourceUid: card.uid,
+      resolve: resolveFn,
+      onNegated: async (r)=>{
+        if(r && r.negatorKind === "MEMORY"){
+          await sendCharacterToWing(side, card.uid);
+        }
+        log(`${card.name} の登場時効果は無効`);
+        renderAll();
+      }
+    };
+
+    await processActivatedEffect(act);
+  }
+
+  function mwFindItemSearchFn(){
+    if(typeof searchDeckOrWingByTitleTagItem === "function") return searchDeckOrWingByTitleTagItem;
+    if(typeof searchDeckByTitleTagItem === "function") return searchDeckByTitleTagItem;
+    return null;
+  }
+
+  /* ------------------------------
+    4) 最新 onEnterTriggers を末尾で最終上書き
+  ------------------------------ */
+  const __mw_final_onEnterTriggers = onEnterTriggers;
+  onEnterTriggers = async function(side, ctx){
+    const { card, pos } = ctx || {};
+    if(!card) return;
+
+    if(typeof mwIsCardMutedThisTurn === "function" && mwIsCardMutedThisTurn(card)){
+      log(`${card.name}：インフルエンサーまりもによりこのターン効果を発動できない`, "warn");
+      return;
+    }
+
+    if(isRachelSealActiveAgainst(side, card)){
+      log(`${card.name}：退魔師レイチェルの効果により発動できません`, "warn");
+      return;
+    }
+
+    // 聖ラウス
+    if(card.no === 4){
+      await mwRunEnterOptional(
+        side,
+        card,
+        "聖ラウスの登場時効果を発動しますか？（クランプスをサーチ）",
+        async ()=>{
+          if(side === "AI"){
+            await searchFromDeckOrWingByTag("AI", "クランプス", 1, { aiAuto:true });
+          }else{
+            await searchFromDeckOrWingByTag(side, "クランプス", 1);
+          }
+        }
+      );
+      return;
+    }
+
+    // タータ
+    if(card.no === 5){
+      await mwRunEnterOptional(
+        side,
+        card,
+        "統括AI タータの登場時効果を発動しますか？（2ドロー）",
+        async ()=>{
+          draw(side, 2);
+          log(`${sideName(side)}：タータ登場 → 2ドロー`);
+          renderAll();
+        }
+      );
+      return;
+    }
+
+    // 司令
+    if(card.no === 11){
+      const p = state[side];
+      const others = p.C.filter(x => x && x.uid !== card.uid);
+      if(!others.length){
+        log("司令：他の自分キャラがいないため効果は発動できません", "warn");
+        return;
+      }
+
+      await mwRunEnterOptional(
+        side,
+        card,
+        "司令の登場時効果を発動しますか？（装備化してATK+500）",
+        async ()=>{
+          await activateShireiEquip(side, pos, card);
+        }
+      );
+      return;
+    }
+
+    // ルビー / サファイア
+    if(card.no === 26 || card.no === 27){
+      await mwRunEnterOptional(
+        side,
+        card,
+        `${card.name}の登場時効果を発動しますか？`,
+        async ()=>{
+          await resolveRubySapphireEnter(side, card, ctx);
+        }
+      );
+      return;
+    }
+
+    // セシア＆アリサ
+    if(card.no === 28){
+      await mwRunEnterOptional(
+        side,
+        card,
+        "セシア＆アリサの登場時効果を発動しますか？（怨霊撲滅屋GBのアイテムをサーチ）",
+        async ()=>{
+          const fn = mwFindItemSearchFn();
+          if(fn){
+            await fn(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+          }else if(typeof searchDeckOrWingByTag === "function"){
+            await searchDeckOrWingByTag(side, "怨霊撲滅屋GB", 1, { aiAuto: side==="AI" });
+          }else{
+            log("セシア＆アリサ：アイテムサーチ関数が見つかりません", "warn");
+          }
+        }
+      );
+      return;
+    }
+
+    return await __mw_final_onEnterTriggers(side, ctx);
+  };
+
+  log("PATCH FINAL-ANNOUNCE+ENTER-01 読み込み完了");
+})();
